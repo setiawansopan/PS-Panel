@@ -508,6 +508,17 @@ tr:hover td{background:rgba(255,255,255,.015)}
         </div>
       </div>
       </div>
+
+      <!-- Auto Deploy / Webhook -->
+      <div class="card" style="max-width:1040px;margin-top:0">
+        <div class="ct">Auto Deploy
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="ct-badge">GitHub Webhook</span>
+            <button class="btn" style="padding:5px 13px;font-size:11px" onclick="document.getElementById('m-webhook').classList.add('open')">+ Add</button>
+          </div>
+        </div>
+        <div id="webhook-list"><div style="color:var(--muted);font-size:12px;font-family:var(--mono)">Belum ada webhook. Klik + Add untuk setup auto deploy.</div></div>
+      </div>
     </div>
 
   </main>
@@ -525,6 +536,54 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <button class="btn btn-ghost" onclick="document.getElementById('m-vhost').classList.remove('open')">Cancel</button>
       <button class="btn" onclick="addVhost()">Add Domain</button>
     </div>
+  </div>
+</div>
+
+<!-- Modal webhook add -->
+<div class="mbg" id="m-webhook">
+  <div class="modal">
+    <h3>Add Auto Deploy</h3>
+    <div class="fg"><label class="inp-lbl">Application Path</label><input class="inp" id="wh-path" placeholder="/var/www/myapp"></div>
+    <div class="fg"><label class="inp-lbl">Branch</label><input class="inp" id="wh-branch" value="main"></div>
+    <label class="check-lbl" style="margin-bottom:4px"><input type="checkbox" id="wh-laravel"> Laravel App (composer + artisan)</label>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="document.getElementById('m-webhook').classList.remove('open')">Cancel</button>
+      <button class="btn" onclick="addWebhook()">Create Webhook</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal webhook secret -->
+<div class="mbg" id="m-webhook-info">
+  <div class="modal">
+    <h3>Webhook Created</h3>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:14px">Simpan info ini — secret tidak akan ditampilkan lagi.</div>
+    <div class="fg">
+      <label class="inp-lbl">Payload URL</label>
+      <div style="background:var(--ink3);border-radius:9px;padding:10px 13px;position:relative">
+        <div style="font-family:var(--mono);font-size:11px;color:var(--accent);word-break:break-all;padding-right:48px" id="wi-url"></div>
+        <button onclick="copyWI('wi-url',this)" style="position:absolute;top:8px;right:8px;background:var(--ink4);border:1px solid var(--line2);color:var(--muted);border-radius:6px;padding:3px 9px;font-size:10px;cursor:pointer;font-family:var(--mono)">copy</button>
+      </div>
+    </div>
+    <div class="fg">
+      <label class="inp-lbl">Secret</label>
+      <div style="background:var(--ink3);border-radius:9px;padding:10px 13px;position:relative">
+        <div style="font-family:var(--mono);font-size:11px;color:var(--warn);word-break:break-all;padding-right:48px" id="wi-secret"></div>
+        <button onclick="copyWI('wi-secret',this)" style="position:absolute;top:8px;right:8px;background:var(--ink4);border:1px solid var(--line2);color:var(--muted);border-radius:6px;padding:3px 9px;font-size:10px;cursor:pointer;font-family:var(--mono)">copy</button>
+      </div>
+    </div>
+    <div style="background:var(--ink3);border-radius:9px;padding:12px 14px;margin-bottom:4px">
+      <div style="font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Setup di GitHub</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--dim);line-height:2.1">
+        1. Repo → <span style="color:var(--text)">Settings → Webhooks → Add webhook</span><br>
+        2. Payload URL → paste URL di atas<br>
+        3. Content type → <span style="color:var(--accent)">application/json</span><br>
+        4. Secret → paste secret di atas<br>
+        5. Event → <span style="color:var(--accent)">Just the push event</span><br>
+        6. Klik <span style="color:var(--text)">Add webhook</span> → selesai ✓
+      </div>
+    </div>
+    <div class="mf"><button class="btn" onclick="document.getElementById('m-webhook-info').classList.remove('open');loadWebhookList()">OK, Mengerti</button></div>
   </div>
 </div>
 
@@ -578,6 +637,7 @@ function go(name){
   if(name==='redis')     loadRedis();
   if(name==='postgres')  loadPostgres();
   if(name==='phpfpm')    loadFpm();
+  if(name==='deploy')    loadWebhookList();
 }
 
 // ── Helpers ──
@@ -790,6 +850,42 @@ async function addVhost(){
   document.getElementById('m-vhost').classList.remove('open');document.getElementById('v-domain').value='';loadVhosts();
 }
 async function delVhost(domain){if(!confirm(`Remove vhost: ${domain}?`))return;await api('DELETE',`/api/vhosts/${domain}`);loadVhosts();}
+
+// ── Webhooks ──
+async function loadWebhookList(){
+  const d=await api('GET','/api/webhooks');if(!d)return;
+  const el=document.getElementById('webhook-list');
+  if(!d.length){el.innerHTML='<div style="color:var(--muted);font-size:12px;font-family:var(--mono)">Belum ada webhook. Klik + Add untuk setup auto deploy.</div>';return;}
+  el.innerHTML=`<table><thead><tr><th>Path</th><th>Branch</th><th>Mode</th><th>Webhook URL</th><th>Action</th></tr></thead><tbody>`+
+    d.map(h=>`<tr>
+      <td style="font-weight:600;font-family:var(--mono);font-size:11px">${h.path}</td>
+      <td><span class="badge b-blue">${h.branch}</span></td>
+      <td>${h.laravel?'<span class="badge b-green">Laravel</span>':'<span class="badge b-blue">Git only</span>'}</td>
+      <td class="td-mono" style="font-size:10px">/api/webhook/${h.id}</td>
+      <td><button class="btn btn-red" style="padding:4px 11px;font-size:11px" onclick="deleteWebhook('${h.id}')">Remove</button></td>
+    </tr>`).join('')+
+  '</tbody></table>';
+}
+async function addWebhook(){
+  const p=document.getElementById('wh-path').value.trim();if(!p)return;
+  const r=await api('POST','/api/webhooks',{path:p,branch:document.getElementById('wh-branch').value||'main',laravel:document.getElementById('wh-laravel').checked});
+  if(!r?.ok){alert(r?.error||'Failed');return;}
+  document.getElementById('m-webhook').classList.remove('open');
+  document.getElementById('wi-url').textContent=location.origin+'/api/webhook/'+r.id;
+  document.getElementById('wi-secret').textContent=r.secret;
+  document.getElementById('m-webhook-info').classList.add('open');
+  document.getElementById('wh-path').value='';
+}
+async function deleteWebhook(id){
+  if(!confirm('Hapus webhook ini?'))return;
+  await api('DELETE','/api/webhooks/'+id);
+  loadWebhookList();
+}
+function copyWI(elId,btn){
+  navigator.clipboard.writeText(document.getElementById(elId).textContent).then(()=>{
+    const orig=btn.textContent;btn.textContent='copied!';setTimeout(()=>btn.textContent=orig,2000);
+  });
+}
 
 // ── Deploy Key ──
 async function loadDeployKey(){

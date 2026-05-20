@@ -7,6 +7,7 @@ const path = require('path');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const fs = require('fs');
+const crypto = require('crypto');
 const Redis = require('ioredis');
 const { Pool } = require('pg');
 
@@ -18,7 +19,7 @@ const SECRET = process.env.PANEL_SECRET || require('crypto').randomBytes(32).toS
 const PORT = process.env.PANEL_PORT || 8765;
 const CREDS_FILE = '/root/.pspanel_credentials';
 
-app.use(express.json());
+app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Credentials ──
@@ -256,6 +257,62 @@ app.post('/api/databases', auth,(req,res)=>{
     if(err) return res.status(500).json({error:se});
     res.json({ok:true});
   });
+});
+
+// ── Webhooks (Auto Deploy) ──
+const WEBHOOKS_FILE = path.join(__dirname, 'webhooks.json');
+function loadWebhooks() {
+  try { return JSON.parse(fs.readFileSync(WEBHOOKS_FILE, 'utf8')); } catch { return []; }
+}
+function saveWebhooks(hooks) {
+  fs.writeFileSync(WEBHOOKS_FILE, JSON.stringify(hooks, null, 2));
+}
+function runDeploy(hook) {
+  const steps = [
+    { cmd:'git', args:['-C', hook.path, 'pull', 'origin', hook.branch] },
+    ...(hook.laravel ? [
+      { cmd:'composer', args:['install','--optimize-autoloader','--no-dev','--no-interaction'], cwd:hook.path },
+      { cmd:'php', args:['artisan','migrate','--force'],  cwd:hook.path },
+      { cmd:'php', args:['artisan','config:cache'],       cwd:hook.path },
+      { cmd:'php', args:['artisan','route:cache'],        cwd:hook.path },
+      { cmd:'php', args:['artisan','view:cache'],         cwd:hook.path },
+    ] : []),
+  ];
+  let i = 0;
+  function next() {
+    if (i >= steps.length) return;
+    const { cmd, args, cwd } = steps[i++];
+    execFile(cmd, args, { cwd: cwd || hook.path, timeout: 300000 }, (err) => { if (!err) next(); });
+  }
+  next();
+}
+app.get('/api/webhooks', auth, (req, res) => res.json(loadWebhooks().map(h => ({...h, secret: undefined}))));
+app.post('/api/webhooks', auth, (req, res) => {
+  const { path: p, branch, laravel } = req.body;
+  if (!p || !path.isAbsolute(p)) return res.status(400).json({ error:'Absolute path required' });
+  const hooks = loadWebhooks();
+  const id     = crypto.randomBytes(8).toString('hex');
+  const secret = crypto.randomBytes(20).toString('hex');
+  hooks.push({ id, path:p, branch:branch||'main', laravel:!!laravel, secret });
+  saveWebhooks(hooks);
+  res.json({ ok:true, id, secret });
+});
+app.delete('/api/webhooks/:id', auth, (req, res) => {
+  saveWebhooks(loadWebhooks().filter(h => h.id !== req.params.id));
+  res.json({ ok:true });
+});
+// Public endpoint — GitHub calls this
+app.post('/api/webhook/:id', (req, res) => {
+  const hook = loadWebhooks().find(h => h.id === req.params.id);
+  if (!hook) return res.status(404).end();
+  const sig = req.headers['x-hub-signature-256'] || '';
+  const expected = 'sha256=' + crypto.createHmac('sha256', hook.secret).update(req.rawBody||'').digest('hex');
+  if (!crypto.timingSafeEqual(Buffer.from(expected.padEnd(71,'0')), Buffer.from(sig.padEnd(71,'0'))) || expected !== sig)
+    return res.status(401).end();
+  const pushedBranch = (req.body.ref || '').replace('refs/heads/', '');
+  if (pushedBranch !== hook.branch) return res.json({ skipped:true });
+  res.json({ ok:true });
+  runDeploy(hook);
 });
 
 // ── SSH Deploy Key ──
