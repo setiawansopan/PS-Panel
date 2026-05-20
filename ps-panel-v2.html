@@ -463,6 +463,19 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <div class="card" style="max-width:500px">
         <div class="fg"><label class="inp-lbl">Application Path</label><input class="inp" id="dep-path" placeholder="/var/www/myapp"></div>
         <div class="fg"><label class="inp-lbl">Branch</label><input class="inp" id="dep-branch" value="main"></div>
+        <div class="fg" style="margin-bottom:16px">
+          <label class="check-lbl"><input type="checkbox" id="dep-laravel" onchange="toggleLaravelSteps()"> Laravel App</label>
+          <div id="dep-laravel-steps" style="display:none;margin-top:10px;background:var(--ink3);border-radius:9px;padding:12px">
+            <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Post-deploy steps</div>
+            <div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:2.2">
+              composer install --optimize-autoloader --no-dev<br>
+              php artisan migrate --force<br>
+              php artisan config:cache<br>
+              php artisan route:cache<br>
+              php artisan view:cache
+            </div>
+          </div>
+        </div>
         <button class="btn" id="dep-btn" onclick="deploy()">▲ &nbsp;Run Deploy</button>
         <div class="term" id="dep-out"></div>
       </div>
@@ -750,14 +763,22 @@ async function addVhost(){
 async function delVhost(domain){if(!confirm(`Remove vhost: ${domain}?`))return;await api('DELETE',`/api/vhosts/${domain}`);loadVhosts();}
 
 // ── Deploy ──
+function toggleLaravelSteps(){
+  document.getElementById('dep-laravel-steps').style.display=
+    document.getElementById('dep-laravel').checked?'block':'none';
+}
 async function deploy(){
   const p=document.getElementById('dep-path').value.trim();if(!p)return;
   const btn=document.getElementById('dep-btn'),out=document.getElementById('dep-out');
+  const isLaravel=document.getElementById('dep-laravel').checked;
+  const branch=document.getElementById('dep-branch').value||'main';
   btn.textContent='⏳ Deploying...';btn.disabled=true;
-  out.style.display='block';out.textContent='$ git pull origin '+(document.getElementById('dep-branch').value||'main')+'\n';
-  const r=await api('POST','/api/deploy',{path:p,branch:document.getElementById('dep-branch').value||'main'});
+  out.style.display='block';
+  out.style.color='var(--accent)';
+  out.textContent='Running deploy'+(isLaravel?' (Laravel mode)':'')+' ...\n';
+  const r=await api('POST','/api/deploy',{path:p,branch,laravel:isLaravel});
   btn.innerHTML='▲ &nbsp;Run Deploy';btn.disabled=false;
-  out.textContent='$ git pull...\n'+(r?r.output:'error');
+  out.textContent=r?r.output:'[error] No response';
   out.style.color=r?.ok?'var(--accent)':'var(--danger)';
 }
 

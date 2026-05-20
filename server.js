@@ -260,12 +260,31 @@ app.post('/api/databases', auth,(req,res)=>{
 
 // ── Deploy ──
 app.post('/api/deploy', auth,(req,res)=>{
-  const {path:p,branch}=req.body;
+  const {path:p,branch,laravel}=req.body;
   if(!p||!path.isAbsolute(p)) return res.status(400).json({error:'Absolute path required'});
   const safeBranch=(branch||'main').replace(/[^a-zA-Z0-9._\/-]/g,'');
-  execFile('git',['-C',p,'pull','origin',safeBranch],(err,stdout,stderr)=>{
-    res.json({ok:!err, output:stdout||stderr});
-  });
+  const steps=[
+    {cmd:'git',  args:['-C',p,'pull','origin',safeBranch]},
+    ...(laravel?[
+      {cmd:'composer',args:['install','--optimize-autoloader','--no-dev','--no-interaction'],cwd:p},
+      {cmd:'php',     args:['artisan','migrate','--force'],  cwd:p},
+      {cmd:'php',     args:['artisan','config:cache'],       cwd:p},
+      {cmd:'php',     args:['artisan','route:cache'],        cwd:p},
+      {cmd:'php',     args:['artisan','view:cache'],         cwd:p},
+    ]:[]),
+  ];
+  let out=''; let i=0;
+  function next(){
+    if(i>=steps.length) return res.json({ok:true, output:out});
+    const {cmd,args,cwd}=steps[i++];
+    out+=`\n$ ${cmd} ${args.join(' ')}\n`;
+    execFile(cmd,args,{cwd:cwd||p, timeout:300000},(err,stdout,stderr)=>{
+      out+=stdout||stderr||'';
+      if(err){out+='\n[FAILED]\n'; return res.json({ok:false, output:out});}
+      next();
+    });
+  }
+  next();
 });
 
 // ── WebSocket real-time ──
