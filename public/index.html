@@ -460,7 +460,8 @@ tr:hover td{background:rgba(255,255,255,.015)}
     <!-- ── DEPLOY ── -->
     <div class="page" id="page-deploy">
       <div class="ph"><h1>Deploy</h1><p>// git pull to application directory</p></div>
-      <div class="card" style="max-width:500px">
+      <div class="g2" style="max-width:1040px">
+      <div class="card">
         <div class="fg"><label class="inp-lbl">Application Path</label><input class="inp" id="dep-path" placeholder="/var/www/myapp"></div>
         <div class="fg"><label class="inp-lbl">Branch</label><input class="inp" id="dep-branch" value="main"></div>
         <div class="fg" style="margin-bottom:16px">
@@ -478,6 +479,34 @@ tr:hover td{background:rgba(255,255,255,.015)}
         </div>
         <button class="btn" id="dep-btn" onclick="deploy()">▲ &nbsp;Run Deploy</button>
         <div class="term" id="dep-out"></div>
+      </div>
+
+      <!-- Private Repo / SSH Deploy Key -->
+      <div class="card">
+        <div class="ct">Private Repository <span class="ct-badge">SSH Deploy Key</span></div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.9;margin-bottom:16px">
+          Untuk repo <span style="color:var(--warn)">private</span>, tambahkan SSH key server ini ke GitHub repo sebagai Deploy Key agar <code style="color:var(--accent)">git pull</code> bisa berjalan tanpa password.
+        </div>
+        <button class="btn btn-ghost" onclick="loadDeployKey()" id="dk-btn">⚿ &nbsp;Show Deploy Key</button>
+        <div id="dk-out" style="display:none;margin-top:16px">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px">Public Key — copy ke GitHub</div>
+          <div style="background:var(--ink3);border-radius:9px;padding:12px 14px;position:relative">
+            <div style="font-family:var(--mono);font-size:10px;color:var(--accent);word-break:break-all;line-height:1.7;padding-right:52px" id="dk-key"></div>
+            <button onclick="copyDeployKey()" id="dk-copy" style="position:absolute;top:10px;right:10px;background:var(--ink4);border:1px solid var(--line2);color:var(--muted);border-radius:6px;padding:4px 10px;font-size:10px;cursor:pointer;font-family:var(--mono);transition:color .15s">copy</button>
+          </div>
+          <div style="margin-top:14px;background:var(--ink3);border-radius:9px;padding:12px 14px">
+            <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Langkah setup</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--dim);line-height:2.2">
+              1. Copy key di atas<br>
+              2. GitHub repo → <span style="color:var(--text)">Settings → Deploy keys → Add key</span><br>
+              3. Paste key → centang <span style="color:var(--text)">Allow write access</span> (opsional) → Add<br>
+              4. Clone repo via SSH (sekali saja):<br>
+              <span style="color:var(--accent);padding-left:12px">git clone git@github.com:user/repo.git /var/www/app</span><br>
+              5. Deploy berikutnya pakai panel seperti biasa ✓
+            </div>
+          </div>
+        </div>
+      </div>
       </div>
     </div>
 
@@ -761,6 +790,24 @@ async function addVhost(){
   document.getElementById('m-vhost').classList.remove('open');document.getElementById('v-domain').value='';loadVhosts();
 }
 async function delVhost(domain){if(!confirm(`Remove vhost: ${domain}?`))return;await api('DELETE',`/api/vhosts/${domain}`);loadVhosts();}
+
+// ── Deploy Key ──
+async function loadDeployKey(){
+  const btn=document.getElementById('dk-btn');
+  btn.textContent='Generating...';btn.disabled=true;
+  const r=await api('GET','/api/deploy-key');
+  btn.innerHTML='⚿ &nbsp;Regenerate Key';btn.disabled=false;
+  if(!r||!r.key){alert('Failed to generate key');return;}
+  document.getElementById('dk-key').textContent=r.key;
+  document.getElementById('dk-out').style.display='block';
+}
+function copyDeployKey(){
+  navigator.clipboard.writeText(document.getElementById('dk-key').textContent).then(()=>{
+    const btn=document.getElementById('dk-copy');
+    btn.textContent='copied!';btn.style.color='var(--accent)';
+    setTimeout(()=>{btn.textContent='copy';btn.style.color='';},2000);
+  });
+}
 
 // ── Deploy ──
 function toggleLaravelSteps(){

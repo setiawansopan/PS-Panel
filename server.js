@@ -258,6 +258,19 @@ app.post('/api/databases', auth,(req,res)=>{
   });
 });
 
+// ── SSH Deploy Key ──
+const DEPLOY_KEY = '/root/.ssh/ps-panel-deploy';
+app.get('/api/deploy-key', auth, (req, res) => {
+  const pubPath = DEPLOY_KEY + '.pub';
+  if (fs.existsSync(pubPath)) {
+    return res.json({ key: fs.readFileSync(pubPath, 'utf8').trim() });
+  }
+  exec(`ssh-keygen -t ed25519 -C "ps-panel-deploy" -f ${DEPLOY_KEY} -N ""`, (err, _, se) => {
+    if (err) return res.status(500).json({ error: se });
+    res.json({ key: fs.readFileSync(pubPath, 'utf8').trim() });
+  });
+});
+
 // ── Deploy ──
 app.post('/api/deploy', auth,(req,res)=>{
   const {path:p,branch,laravel}=req.body;
