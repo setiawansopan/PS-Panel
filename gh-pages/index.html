@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PS Panel — Modern Server Management for Ubuntu 24.04</title>
+<meta name="description" content="Lightweight server management panel for Ubuntu 24.04. One-command install. FrankenPHP, PHP 8.3, PostgreSQL 16, Redis, Node.js.">
+<meta property="og:title" content="PS Panel — Modern Server Management">
+<meta property="og:description" content="One-command install. FrankenPHP + PHP 8.3 + PostgreSQL + Redis + Node.js stack.">
+<meta property="og:type" content="website">
+
+<!--
+  CNAME: Replace "your-domain.com" in the CNAME file with your actual domain.
+  Example: pspanel.yourdomain.com
+  Then configure DNS as described in the deployment instructions below.
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --ink:    #0a0b0f;
+  --ink2:   #12141a;
+  --ink3:   #1a1d26;
+  --ink4:   #232735;
+  --line:   rgba(255,255,255,.07);
+  --line2:  rgba(255,255,255,.13);
+  --text:   #e8eaf2;
+  --muted:  #5c6278;
+  --dim:    #3a3f54;
+  --accent: #6ee7b7;
+  --accent2:#818cf8;
+  --accent3:#f472b6;
+  --warn:   #fbbf24;
+  --font:   'Syne', sans-serif;
+  --mono:   'JetBrains Mono', monospace;
+}
+
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+html { scroll-behavior:smooth; }
+body { background:var(--ink); color:var(--text); font-family:var(--font); overflow-x:hidden; line-height:1.6; }
+
+/* ── DOT GRID ── */
+body::before {
+  content:'';
+  position:fixed; inset:0;
+  background-image:radial-gradient(rgba(110,231,183,.12) 1px, transparent 1px);
+  background-size:30px 30px;
+  pointer-events:none; z-index:0;
+}
+
+/* ── NAVBAR ── */
+nav {
+  position:fixed; top:0; left:0; right:0; z-index:100;
+  padding:18px 48px;
+  display:flex; align-items:center; justify-content:space-between;
+  transition:all .35s;
+}
+nav.scrolled {
+  background:rgba(10,11,15,.88);
+  backdrop-filter:blur(20px);
+  -webkit-backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--line);
+  padding:14px 48px;
+}
+.nav-logo { font-size:21px; font-weight:800; letter-spacing:-.5px; text-decoration:none; color:var(--text); }
+.nav-logo span { color:var(--accent); }
+.nav-links { display:flex; align-items:center; gap:32px; list-style:none; }
+.nav-links a { color:var(--muted); text-decoration:none; font-size:13px; font-weight:600; transition:color .15s; }
+.nav-links a:hover { color:var(--text); }
+.btn-gh {
+  display:inline-flex; align-items:center; gap:7px;
+  padding:8px 18px; background:var(--ink3); border:1px solid var(--line2);
+  border-radius:9px; color:var(--text); text-decoration:none;
+  font-family:var(--font); font-size:13px; font-weight:700;
+  transition:all .15s;
+}
+.btn-gh:hover { background:var(--ink4); border-color:rgba(110,231,183,.4); color:var(--accent); }
+
+/* ── HERO ── */
+#hero {
+  position:relative; min-height:100vh;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  text-align:center; padding:140px 24px 100px;
+  overflow:hidden; z-index:1;
+}
+.hero-glow {
+  position:absolute; top:15%; left:50%;
+  transform:translateX(-50%);
+  width:700px; height:500px;
+  background:radial-gradient(ellipse, rgba(110,231,183,.13) 0%, rgba(129,140,248,.08) 45%, transparent 70%);
+  pointer-events:none; filter:blur(48px);
+  transition:transform .1s linear;
+}
+.hero-glow2 {
+  position:absolute; bottom:10%; right:10%;
+  width:300px; height:300px;
+  background:radial-gradient(ellipse, rgba(244,114,182,.07) 0%, transparent 70%);
+  pointer-events:none; filter:blur(40px);
+}
+.hero-badge {
+  display:inline-flex; align-items:center; gap:8px;
+  padding:6px 16px;
+  background:rgba(110,231,183,.08); border:1px solid rgba(110,231,183,.22);
+  border-radius:20px; font-family:var(--mono); font-size:11px;
+  color:var(--accent); margin-bottom:30px; letter-spacing:.06em;
+}
+.hb-dot {
+  width:6px; height:6px; border-radius:50%; background:var(--accent);
+  animation:pulse 2s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.3;transform:scale(.75)} }
+
+.hero-title {
+  font-size:clamp(60px,10vw,120px);
+  font-weight:800; letter-spacing:-4px; line-height:.92;
+  margin-bottom:24px;
+}
+.hero-title .ps {
+  color:var(--accent);
+  text-shadow:0 0 60px rgba(110,231,183,.45),0 0 120px rgba(110,231,183,.2);
+}
+.hero-sub {
+  font-family:var(--mono); font-size:clamp(12px,1.4vw,15px);
+  color:var(--muted); max-width:480px; margin-bottom:50px; line-height:1.9;
+}
+
+/* Terminal */
+.terminal {
+  width:100%; max-width:700px;
+  background:#050810; border:1px solid var(--line2); border-radius:14px;
+  overflow:hidden; margin-bottom:42px;
+  box-shadow:0 28px 72px rgba(0,0,0,.65), 0 0 0 1px rgba(110,231,183,.04), inset 0 1px 0 rgba(255,255,255,.03);
+}
+.term-bar {
+  background:var(--ink3); padding:12px 16px;
+  display:flex; align-items:center; gap:12px;
+  border-bottom:1px solid var(--line);
+}
+.term-dots { display:flex; gap:6px; }
+.term-dots span { width:11px; height:11px; border-radius:50%; }
+.td-r{background:#f87171} .td-y{background:#fbbf24} .td-g{background:#6ee7b7}
+.term-title { font-family:var(--mono); font-size:11px; color:var(--muted); margin:0 auto; }
+.term-body {
+  padding:22px 24px; font-family:var(--mono); font-size:13px;
+  color:var(--accent); line-height:2; min-height:88px; text-align:left;
+}
+.term-prompt { color:var(--dim); user-select:none; }
+.term-cursor {
+  display:inline-block; width:8px; height:15px;
+  background:var(--accent); vertical-align:middle; margin-left:1px;
+  animation:blink .85s step-end infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+.hero-btns { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; }
+.btn-primary {
+  padding:14px 30px; background:var(--accent); color:var(--ink);
+  border:none; border-radius:10px; font-family:var(--font);
+  font-size:14px; font-weight:800; cursor:pointer; text-decoration:none;
+  display:inline-flex; align-items:center; gap:8px;
+  transition:all .2s;
+  box-shadow:0 0 28px rgba(110,231,183,.28);
+}
+.btn-primary:hover { opacity:.88; transform:translateY(-2px); box-shadow:0 6px 36px rgba(110,231,183,.38); }
+.btn-secondary {
+  padding:14px 30px; background:transparent; color:var(--text);
+  border:1px solid var(--line2); border-radius:10px; font-family:var(--font);
+  font-size:14px; font-weight:700; cursor:pointer; text-decoration:none;
+  display:inline-flex; align-items:center; gap:8px; transition:all .2s;
+}
+.btn-secondary:hover { background:var(--ink3); border-color:rgba(129,140,248,.5); color:var(--accent2); }
+
+.scroll-hint {
+  position:absolute; bottom:36px; left:50%; transform:translateX(-50%);
+  font-family:var(--mono); font-size:9px; color:var(--dim);
+  letter-spacing:.18em; text-transform:uppercase;
+  display:flex; flex-direction:column; align-items:center; gap:10px;
+}
+.scroll-line {
+  width:1px; height:44px;
+  background:linear-gradient(to bottom, var(--dim), transparent);
+  animation:scrolldown 1.8s ease-in-out infinite;
+}
+@keyframes scrolldown {
+  0%{transform:scaleY(0);transform-origin:top}
+  50%{transform:scaleY(1);transform-origin:top}
+  51%{transform:scaleY(1);transform-origin:bottom}
+  100%{transform:scaleY(0);transform-origin:bottom}
+}
+
+/* ── SECTIONS ── */
+section { position:relative; z-index:1; padding:100px 24px; }
+.container { max-width:1100px; margin:0 auto; }
+.sec-label {
+  font-family:var(--mono); font-size:10px; color:var(--accent);
+  letter-spacing:.22em; text-transform:uppercase; margin-bottom:12px;
+}
+.sec-title { font-size:clamp(28px,4vw,46px); font-weight:800; letter-spacing:-1.5px; margin-bottom:14px; }
+.sec-sub { font-family:var(--mono); font-size:12px; color:var(--muted); max-width:480px; line-height:1.9; margin-bottom:56px; }
+
+/* Animations */
+.fade-up { opacity:0; transform:translateY(28px); transition:opacity .7s ease, transform .7s ease; }
+.fade-up.visible { opacity:1; transform:none; }
+.delay-1{transition-delay:.1s} .delay-2{transition-delay:.2s} .delay-3{transition-delay:.3s}
+.delay-4{transition-delay:.4s} .delay-5{transition-delay:.5s} .delay-6{transition-delay:.6s}
+
+/* ── FEATURES ── */
+#features { background:var(--ink2); }
+#features::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,var(--accent2),transparent);
+}
+.feat-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+.feat-card {
+  background:rgba(255,255,255,.025); border:1px solid var(--line);
+  border-radius:16px; padding:28px;
+  position:relative; overflow:hidden;
+  transition:border-color .2s, transform .25s;
+}
+.feat-card:hover { border-color:var(--line2); transform:translateY(-5px); }
+.feat-card::after {
+  content:''; position:absolute; top:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,var(--c,var(--accent)),transparent);
+  opacity:0; transition:opacity .3s;
+}
+.feat-card:hover::after { opacity:1; }
+.feat-icon { font-size:30px; margin-bottom:16px; display:block; }
+.feat-title { font-size:15px; font-weight:700; margin-bottom:9px; letter-spacing:-.3px; }
+.feat-desc { font-family:var(--mono); font-size:11px; color:var(--muted); line-height:1.85; }
+
+/* ── STACK ── */
+#stack { background:var(--ink); }
+.stack-row { display:flex; gap:14px; flex-wrap:wrap; }
+.stack-card {
+  flex:1; min-width:170px;
+  background:var(--ink2); border:1px solid var(--line); border-radius:14px;
+  padding:24px 20px; text-align:center;
+  transition:border-color .2s, transform .2s; position:relative; overflow:hidden;
+}
+.stack-card::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:2px;
+  background:linear-gradient(90deg,transparent,var(--c,var(--accent)),transparent);
+  opacity:0; transition:opacity .25s;
+}
+.stack-card:hover { border-color:var(--line2); transform:translateY(-4px); }
+.stack-card:hover::before { opacity:1; }
+.stack-em { font-size:34px; margin-bottom:12px; display:block; }
+.stack-name { font-size:14px; font-weight:700; margin-bottom:5px; letter-spacing:-.2px; }
+.stack-ver { font-family:var(--mono); font-size:10px; color:var(--accent); margin-bottom:9px; }
+.stack-desc { font-family:var(--mono); font-size:10px; color:var(--muted); line-height:1.75; }
+
+/* ── DASHBOARD PREVIEW ── */
+#preview { background:var(--ink2); }
+#preview::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,var(--accent3),transparent);
+}
+.browser-wrap {
+  max-width:980px; margin:0 auto;
+  border-radius:16px; overflow:hidden;
+  border:1px solid var(--line2);
+  box-shadow:0 40px 90px rgba(0,0,0,.7), 0 0 0 1px rgba(129,140,248,.06);
+}
+.b-bar {
+  background:var(--ink3); padding:12px 18px;
+  display:flex; align-items:center; gap:14px;
+  border-bottom:1px solid var(--line);
+}
+.b-dots { display:flex; gap:6px; }
+.b-dots span { width:11px; height:11px; border-radius:50%; }
+.b-r{background:#f87171} .b-y{background:#fbbf24} .b-g{background:#6ee7b7}
+.b-url {
+  flex:1; background:var(--ink4); border:1px solid var(--line);
+  border-radius:7px; padding:6px 14px;
+  font-family:var(--mono); font-size:11px; color:var(--muted); text-align:center;
+}
+.b-content { display:flex; background:var(--ink); min-height:430px; }
+
+.mock-sb {
+  width:185px; flex-shrink:0;
+  background:var(--ink2); border-right:1px solid var(--line);
+  padding:16px 10px; display:flex; flex-direction:column;
+}
+.msb-logo { font-size:17px; font-weight:800; padding:8px 10px; margin-bottom:16px; letter-spacing:-.3px; }
+.msb-logo span { color:var(--accent); }
+.msb-lbl {
+  font-family:var(--mono); font-size:8px; color:var(--dim);
+  letter-spacing:.15em; text-transform:uppercase;
+  padding:0 8px; margin:12px 0 4px;
+}
+.msb-item {
+  display:flex; align-items:center; gap:8px;
+  padding:8px 10px; border-radius:7px;
+  font-size:11px; font-weight:600; color:var(--muted); margin-bottom:1px;
+}
+.msb-item.on { background:rgba(110,231,183,.1); color:var(--accent); }
+.msb-item.on::before { content:''; position:absolute; left:0; width:2px; height:20px; background:var(--accent); border-radius:0 2px 2px 0; }
+.mock-sb .msb-item { position:relative; }
+
+.mock-main { flex:1; padding:22px; overflow:hidden; }
+.mock-h { font-size:17px; font-weight:800; margin-bottom:3px; letter-spacing:-.4px; }
+.mock-sub { font-family:var(--mono); font-size:9px; color:var(--muted); margin-bottom:18px; }
+
+.mock-g4 { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px; }
+.mock-mc {
+  background:var(--ink2); border:1px solid var(--line);
+  border-radius:10px; padding:12px;
+  position:relative; overflow:hidden;
+}
+.mock-mc::after {
+  content:''; position:absolute; bottom:0; left:0; right:0; height:2px;
+  background:var(--c,var(--accent2));
+  transform:scaleX(var(--p,0)); transform-origin:left;
+}
+.mock-lbl { font-family:var(--mono); font-size:8px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin-bottom:7px; }
+.mock-val { font-size:23px; font-weight:800; letter-spacing:-1px; line-height:1; }
+.mock-u { font-size:12px; font-weight:400; color:var(--muted); }
+.mock-s { font-family:var(--mono); font-size:9px; color:var(--dim); margin-top:4px; }
+
+.mock-g2 { display:grid; grid-template-columns:1.3fr 1fr; gap:10px; }
+.mock-card { background:var(--ink2); border:1px solid var(--line); border-radius:10px; padding:14px; }
+.mock-ct { font-size:11px; font-weight:700; margin-bottom:10px; display:flex; justify-content:space-between; }
+.mock-ct-b { font-family:var(--mono); font-size:9px; color:var(--muted); font-weight:400; }
+.mock-sr {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:7px 0; border-bottom:1px solid var(--line);
+}
+.mock-sr:last-child { border-bottom:none; }
+.mock-sn { font-size:11px; font-weight:600; }
+.mock-sk { font-family:var(--mono); font-size:8px; color:var(--muted); margin-top:1px; }
+.mock-pill {
+  display:inline-flex; align-items:center; gap:3px;
+  padding:2px 8px; border-radius:20px;
+  font-family:var(--mono); font-size:9px; font-weight:500;
+}
+.mp-on  { background:rgba(110,231,183,.12); color:var(--accent); }
+.mp-unk { background:rgba(255,255,255,.06); color:var(--muted); }
+.mpd { width:4px; height:4px; border-radius:50%; background:currentColor; }
+
+.mock-prog-row { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+.mock-prog-lbl { font-family:var(--mono); font-size:9px; color:var(--muted); width:60px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mock-prog-bar { flex:1; height:4px; background:var(--ink3); border-radius:2px; overflow:hidden; }
+.mock-prog-fill { height:100%; border-radius:2px; background:var(--accent2); }
+.mock-prog-val { font-family:var(--mono); font-size:9px; color:var(--muted); width:32px; text-align:right; flex-shrink:0; }
+
+/* ── INSTALL ── */
+#install { background:var(--ink); }
+.steps { max-width:720px; display:flex; flex-direction:column; gap:30px; }
+.step { display:flex; gap:22px; align-items:flex-start; }
+.step-num {
+  width:40px; height:40px; border-radius:10px;
+  background:var(--ink3); border:1px solid var(--line2);
+  display:flex; align-items:center; justify-content:center;
+  font-weight:800; font-size:13px; color:var(--accent);
+  flex-shrink:0; font-family:var(--mono);
+}
+.step-title { font-size:15px; font-weight:700; margin-bottom:7px; letter-spacing:-.2px; }
+.step-desc { font-family:var(--mono); font-size:11px; color:var(--muted); line-height:1.85; margin-bottom:12px; }
+.code-block {
+  background:#050810; border:1px solid var(--line2); border-radius:10px;
+  padding:14px 16px; font-family:var(--mono); font-size:12px;
+  color:var(--accent); position:relative; word-break:break-all; line-height:1.7;
+}
+.code-block code { display:block; padding-right:52px; }
+.code-copy {
+  position:absolute; top:10px; right:10px;
+  background:var(--ink4); border:1px solid var(--line2); border-radius:6px;
+  padding:4px 11px; font-family:var(--mono); font-size:9px;
+  color:var(--muted); cursor:pointer; transition:color .15s, border-color .15s;
+}
+.code-copy:hover { color:var(--accent); border-color:rgba(110,231,183,.3); }
+
+.note-box {
+  margin-top:44px; background:rgba(110,231,183,.04);
+  border:1px solid rgba(110,231,183,.14); border-radius:12px;
+  padding:18px 22px; font-family:var(--mono); font-size:11px;
+  color:var(--muted); line-height:1.95; max-width:720px;
+}
+.note-box strong { color:var(--accent); font-weight:500; }
+
+/* ── FAQ ── */
+#faq { background:var(--ink2); }
+#faq::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,var(--accent2),transparent);
+}
+.faq-list { max-width:720px; display:flex; flex-direction:column; gap:10px; margin:0 auto; }
+.faq-item {
+  background:var(--ink3); border:1px solid var(--line);
+  border-radius:13px; overflow:hidden; transition:border-color .2s;
+}
+.faq-item.open { border-color:rgba(129,140,248,.3); }
+.faq-q {
+  padding:18px 22px; display:flex; align-items:center;
+  justify-content:space-between; cursor:pointer;
+  font-size:14px; font-weight:700; letter-spacing:-.2px; user-select:none;
+  gap:16px;
+}
+.faq-icon {
+  width:24px; height:24px; border-radius:7px; background:var(--ink4);
+  display:flex; align-items:center; justify-content:center;
+  font-size:16px; color:var(--muted); flex-shrink:0;
+  transition:background .2s, color .2s, transform .35s;
+}
+.faq-item.open .faq-icon { background:rgba(129,140,248,.15); color:var(--accent2); transform:rotate(45deg); }
+.faq-a { max-height:0; overflow:hidden; transition:max-height .4s cubic-bezier(.4,0,.2,1); }
+.faq-item.open .faq-a { max-height:320px; }
+.faq-a-inner {
+  padding:16px 22px 20px;
+  font-family:var(--mono); font-size:12px; color:var(--muted); line-height:1.95;
+  border-top:1px solid var(--line);
+}
+.faq-a-inner code { color:var(--accent); font-size:11px; }
+
+/* ── FOOTER ── */
+footer {
+  position:relative; z-index:1;
+  background:var(--ink); border-top:1px solid var(--line);
+  padding:56px 40px; text-align:center;
+}
+.footer-logo { font-size:24px; font-weight:800; letter-spacing:-.5px; margin-bottom:8px; }
+.footer-logo span { color:var(--accent); }
+.footer-tag { font-family:var(--mono); font-size:11px; color:var(--muted); margin-bottom:28px; line-height:1.8; }
+.footer-links { display:flex; justify-content:center; gap:28px; margin-bottom:36px; flex-wrap:wrap; }
+.footer-links a {
+  font-family:var(--mono); font-size:11px; color:var(--muted);
+  text-decoration:none; transition:color .15s;
+}
+.footer-links a:hover { color:var(--accent); }
+.footer-copy { font-family:var(--mono); font-size:10px; color:var(--dim); line-height:1.8; }
+
+/* ── RESPONSIVE ── */
+@media (max-width:900px) {
+  .feat-grid { grid-template-columns:repeat(2,1fr); }
+  .mock-g4 { grid-template-columns:repeat(2,1fr); }
+  .mock-g2 { grid-template-columns:1fr; }
+}
+@media (max-width:768px) {
+  nav { padding:14px 20px; }
+  nav.scrolled { padding:12px 20px; }
+  .nav-links { display:none; }
+  .mock-sb { display:none; }
+  section { padding:72px 20px; }
+  footer { padding:48px 20px; }
+  .hero-btns { flex-direction:column; align-items:stretch; }
+  .btn-primary,.btn-secondary { justify-content:center; }
+}
+@media (max-width:600px) {
+  .feat-grid { grid-template-columns:1fr; }
+  .stack-row { gap:10px; }
+  .stack-card { min-width:calc(50% - 7px); flex:none; }
+}
+@media (max-width:400px) {
+  .stack-card { min-width:100%; }
+  .mock-g4 { grid-template-columns:1fr 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── NAVBAR ── -->
+<nav id="navbar">
+  <a class="nav-logo" href="#"><span>PS</span> Panel</a>
+  <ul class="nav-links">
+    <li><a href="#features">Features</a></li>
+    <li><a href="#stack">Stack</a></li>
+    <li><a href="#preview">Preview</a></li>
+    <li><a href="#install">Install</a></li>
+    <li><a href="#faq">FAQ</a></li>
+  </ul>
+  <a class="btn-gh" href="https://github.com/setiawansopan/PS-Panel" target="_blank" rel="noopener">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.69c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0112 6.8c.85 0 1.71.11 2.51.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10.01 10.01 0 0022 12c0-5.52-4.48-10-10-10z"/></svg>
+    GitHub
+  </a>
+</nav>
+
+<!-- ── HERO ── -->
+<section id="hero">
+  <div class="hero-glow" id="hero-glow"></div>
+  <div class="hero-glow2"></div>
+
+  <div class="hero-badge fade-up">
+    <span class="hb-dot"></span>
+    v2.0 &nbsp;·&nbsp; Ubuntu 24.04 LTS &nbsp;·&nbsp; FrankenPHP Stack
+  </div>
+
+  <h1 class="hero-title fade-up delay-1">
+    <span class="ps">PS</span> Panel
+  </h1>
+
+  <p class="hero-sub fade-up delay-2">
+    Modern server management for Ubuntu 24.04.<br>
+    One command. Fully operational in minutes.
+  </p>
+
+  <div class="terminal fade-up delay-3">
+    <div class="term-bar">
+      <div class="term-dots">
+        <span class="td-r"></span><span class="td-y"></span><span class="td-g"></span>
+      </div>
+      <div class="term-title">bash — install.sh</div>
+    </div>
+    <div class="term-body">
+      <span class="term-prompt">root@ubuntu:~# </span><span id="typed"></span><span class="term-cursor" id="cursor"></span>
+    </div>
+  </div>
+
+  <div class="hero-btns fade-up delay-4">
+    <a href="#install" class="btn-primary">Get Started →</a>
+    <a href="https://github.com/setiawansopan/PS-Panel" target="_blank" rel="noopener" class="btn-secondary">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.69c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0112 6.8c.85 0 1.71.11 2.51.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10.01 10.01 0 0022 12c0-5.52-4.48-10-10-10z"/></svg>
+      View on GitHub
+    </a>
+  </div>
+
+  <div class="scroll-hint">
+    <span>scroll</span>
+    <div class="scroll-line"></div>
+  </div>
+</section>
+
+<!-- ── FEATURES ── -->
+<section id="features">
+  <div class="container">
+    <div class="sec-label fade-up">// features</div>
+    <h2 class="sec-title fade-up delay-1">Everything you need,<br>nothing you don't.</h2>
+    <p class="sec-sub fade-up delay-2">Minimal footprint, maximum control. Manage your entire stack from one clean interface.</p>
+    <div class="feat-grid">
+      <div class="feat-card fade-up delay-1" style="--c:var(--accent)">
+        <span class="feat-icon">⚡</span>
+        <div class="feat-title">One-command Install</div>
+        <div class="feat-desc">A single curl command installs and configures the entire stack. FrankenPHP, PHP 8.3, PostgreSQL 16, Redis, and Node.js — ready in under 10 minutes.</div>
+      </div>
+      <div class="feat-card fade-up delay-2" style="--c:var(--accent2)">
+        <span class="feat-icon">📊</span>
+        <div class="feat-title">Real-time Monitoring</div>
+        <div class="feat-desc">Live CPU, RAM, disk, and network I/O metrics with 5-second auto-refresh. Top processes, load average, and 30-second bandwidth history.</div>
+      </div>
+      <div class="feat-card fade-up delay-3" style="--c:var(--accent3)">
+        <span class="feat-icon">🟥</span>
+        <div class="feat-title">Redis Statistics</div>
+        <div class="feat-desc">Cache hit rate, memory usage, ops/sec, connected clients, eviction counts, and keyspace stats — everything at a glance.</div>
+      </div>
+      <div class="feat-card fade-up delay-4" style="--c:var(--accent2)">
+        <span class="feat-icon">🗄️</span>
+        <div class="feat-title">PostgreSQL Management</div>
+        <div class="feat-desc">Monitor active connections, database sizes, lock counts, and connection states. Create databases directly from the browser.</div>
+      </div>
+      <div class="feat-card fade-up delay-5" style="--c:var(--accent)">
+        <span class="feat-icon">🐘</span>
+        <div class="feat-title">PHP-FPM Stats</div>
+        <div class="feat-desc">Worker pool utilization, idle/active process counts, listen queue depth, and slow request tracking via the FPM status socket.</div>
+      </div>
+      <div class="feat-card fade-up delay-6" style="--c:var(--warn)">
+        <span class="feat-icon">▲</span>
+        <div class="feat-title">Smart Git Deploy</div>
+        <div class="feat-desc">Trigger deploys from the browser — or automate with GitHub webhooks. Laravel mode runs composer, migrate, and artisan cache commands automatically.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── STACK ── -->
+<section id="stack">
+  <div class="container">
+    <div class="sec-label fade-up">// tech stack</div>
+    <h2 class="sec-title fade-up delay-1">Built on proven technology</h2>
+    <p class="sec-sub fade-up delay-2">Production-grade components, carefully selected and pre-configured to work together perfectly.</p>
+    <div class="stack-row">
+      <div class="stack-card fade-up delay-1" style="--c:var(--accent)">
+        <span class="stack-em">⚡</span>
+        <div class="stack-name">FrankenPHP</div>
+        <div class="stack-ver">Latest</div>
+        <div class="stack-desc">Modern PHP server built on Caddy. Auto HTTPS via Let's Encrypt. No Nginx config files.</div>
+      </div>
+      <div class="stack-card fade-up delay-2" style="--c:var(--accent3)">
+        <span class="stack-em">🐘</span>
+        <div class="stack-name">PHP</div>
+        <div class="stack-ver">8.3 + FPM</div>
+        <div class="stack-desc">Latest stable PHP with pgsql, redis, opcache, gd, mbstring, and 10+ extensions pre-installed.</div>
+      </div>
+      <div class="stack-card fade-up delay-3" style="--c:var(--accent2)">
+        <span class="stack-em">🗄️</span>
+        <div class="stack-name">PostgreSQL</div>
+        <div class="stack-ver">16</div>
+        <div class="stack-desc">Enterprise-grade relational database. Auto-configured with a secure random password at install.</div>
+      </div>
+      <div class="stack-card fade-up delay-4" style="--c:var(--accent3)">
+        <span class="stack-em">🟥</span>
+        <div class="stack-name">Redis</div>
+        <div class="stack-ver">Latest</div>
+        <div class="stack-desc">In-memory cache and session store. Bound to 127.0.0.1 for security out of the box.</div>
+      </div>
+      <div class="stack-card fade-up delay-5" style="--c:var(--accent)">
+        <span class="stack-em">🟩</span>
+        <div class="stack-name">Node.js</div>
+        <div class="stack-ver">20 LTS + PM2</div>
+        <div class="stack-desc">JS runtime with PM2 process manager. Panel survives server reboots automatically.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── DASHBOARD PREVIEW ── -->
+<section id="preview">
+  <div class="container" style="max-width:1020px">
+    <div class="sec-label fade-up" style="text-align:center">// dashboard preview</div>
+    <h2 class="sec-title fade-up delay-1" style="text-align:center">See it in action</h2>
+    <p class="sec-sub fade-up delay-2" style="text-align:center;margin-left:auto;margin-right:auto">
+      Clean, minimal interface. Everything at a glance — no bloat, no noise.
+    </p>
+
+    <div class="browser-wrap fade-up delay-2">
+      <div class="b-bar">
+        <div class="b-dots"><span class="b-r"></span><span class="b-y"></span><span class="b-g"></span></div>
+        <div class="b-url">http://your-server-ip:8765</div>
+      </div>
+      <div class="b-content">
+
+        <!-- Sidebar -->
+        <div class="mock-sb">
+          <div class="msb-logo"><span>PS</span> Panel</div>
+          <div class="msb-lbl">Overview</div>
+          <div class="msb-item on">◈ &nbsp;Dashboard</div>
+          <div class="msb-lbl">Applications</div>
+          <div class="msb-item">⬡ &nbsp;Redis</div>
+          <div class="msb-item">◫ &nbsp;PostgreSQL</div>
+          <div class="msb-item">🐘 &nbsp;PHP-FPM</div>
+          <div class="msb-lbl">Server</div>
+          <div class="msb-item">⚙ &nbsp;Services</div>
+          <div class="msb-item">◉ &nbsp;Virtual Hosts</div>
+          <div class="msb-lbl">Deploy</div>
+          <div class="msb-item">▲ &nbsp;Deploy</div>
+          <div style="flex:1"></div>
+          <div style="padding:10px 10px 6px;display:flex;align-items:center;gap:8px;border-top:1px solid var(--line)">
+            <div style="width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse 2s infinite;flex-shrink:0"></div>
+            <span style="font-family:var(--mono);font-size:9px;color:var(--muted)">live · 5s refresh</span>
+          </div>
+        </div>
+
+        <!-- Main -->
+        <div class="mock-main">
+          <div class="mock-h">Dashboard</div>
+          <div class="mock-sub">// real-time server overview</div>
+
+          <div class="mock-g4">
+            <div class="mock-mc" style="--c:var(--accent2);--p:.27">
+              <div class="mock-lbl">CPU</div>
+              <div class="mock-val">27<span class="mock-u">%</span></div>
+              <div class="mock-s">4 cores · 2.4GHz</div>
+            </div>
+            <div class="mock-mc" style="--c:var(--accent3);--p:.61">
+              <div class="mock-lbl">Memory</div>
+              <div class="mock-val">61<span class="mock-u">%</span></div>
+              <div class="mock-s">2.4G / 4.0G</div>
+            </div>
+            <div class="mock-mc" style="--c:var(--accent);--p:.34">
+              <div class="mock-lbl">Disk</div>
+              <div class="mock-val">34<span class="mock-u">%</span></div>
+              <div class="mock-s">17G / 50G used</div>
+            </div>
+            <div class="mock-mc" style="--c:var(--warn);--p:.15">
+              <div class="mock-lbl">Load Avg</div>
+              <div class="mock-val" style="font-size:14px;letter-spacing:-.3px;padding-top:3px">0.42 · 0.38</div>
+              <div class="mock-s">1m · 5m · 15m</div>
+            </div>
+          </div>
+
+          <div class="mock-g2">
+            <div class="mock-card">
+              <div class="mock-ct">Services <span class="mock-ct-b">4/5 running</span></div>
+              <div class="mock-sr">
+                <div><div class="mock-sn">FrankenPHP</div><div class="mock-sk">Web server</div></div>
+                <span class="mock-pill mp-on"><span class="mpd"></span>running</span>
+              </div>
+              <div class="mock-sr">
+                <div><div class="mock-sn">PHP-FPM</div><div class="mock-sk">PHP processor</div></div>
+                <span class="mock-pill mp-on"><span class="mpd"></span>running</span>
+              </div>
+              <div class="mock-sr">
+                <div><div class="mock-sn">PostgreSQL</div><div class="mock-sk">Database</div></div>
+                <span class="mock-pill mp-on"><span class="mpd"></span>running</span>
+              </div>
+              <div class="mock-sr">
+                <div><div class="mock-sn">Redis</div><div class="mock-sk">Cache layer</div></div>
+                <span class="mock-pill mp-on"><span class="mpd"></span>running</span>
+              </div>
+              <div class="mock-sr">
+                <div><div class="mock-sn">Node.js</div><div class="mock-sk">PS Panel runtime</div></div>
+                <span class="mock-pill mp-unk"><span class="mpd"></span>n/a</span>
+              </div>
+            </div>
+            <div class="mock-card">
+              <div class="mock-ct">Network I/O <span class="mock-ct-b">eth0</span></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+                <div style="background:var(--ink3);border-radius:7px;padding:9px 10px">
+                  <div style="font-family:var(--mono);font-size:8px;color:var(--muted);margin-bottom:4px">↓ Download</div>
+                  <div style="font-family:var(--mono);font-size:14px;font-weight:500;color:var(--accent)">2.4 MB/s</div>
+                </div>
+                <div style="background:var(--ink3);border-radius:7px;padding:9px 10px">
+                  <div style="font-family:var(--mono);font-size:8px;color:var(--muted);margin-bottom:4px">↑ Upload</div>
+                  <div style="font-family:var(--mono);font-size:14px;font-weight:500;color:var(--accent2)">384 KB/s</div>
+                </div>
+              </div>
+              <div style="font-family:var(--mono);font-size:8px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em">Top Processes</div>
+              <div class="mock-prog-row"><span class="mock-prog-lbl">php-fpm</span><div class="mock-prog-bar"><div class="mock-prog-fill" style="width:42%"></div></div><span class="mock-prog-val">42%</span></div>
+              <div class="mock-prog-row"><span class="mock-prog-lbl">postgres</span><div class="mock-prog-bar"><div class="mock-prog-fill" style="width:18%;background:var(--accent3)"></div></div><span class="mock-prog-val">18%</span></div>
+              <div class="mock-prog-row"><span class="mock-prog-lbl">redis</span><div class="mock-prog-bar"><div class="mock-prog-fill" style="width:7%;background:var(--warn)"></div></div><span class="mock-prog-val">7%</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── INSTALL ── -->
+<section id="install">
+  <div class="container">
+    <div class="sec-label fade-up">// quick install</div>
+    <h2 class="sec-title fade-up delay-1">Get started in minutes</h2>
+    <p class="sec-sub fade-up delay-2">Four steps from a fresh VPS to a fully running panel.</p>
+
+    <div class="steps">
+      <div class="step fade-up delay-1">
+        <div class="step-num">01</div>
+        <div class="step-body">
+          <div class="step-title">Prepare a Ubuntu 24.04 VPS</div>
+          <div class="step-desc">SSH into your server as root. Minimum 1 GB RAM, 10 GB disk. Open ports 80, 443, and 8765 in your firewall.</div>
+          <div class="code-block" data-code="ssh root@your-server-ip">
+            <code>ssh root@your-server-ip</code>
+            <button class="code-copy" onclick="copyCode(this)">copy</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="step fade-up delay-2">
+        <div class="step-num">02</div>
+        <div class="step-body">
+          <div class="step-title">Run the one-line install command</div>
+          <div class="step-desc">Installs and configures the complete stack automatically. Takes 5–10 minutes depending on your server's connection speed.</div>
+          <div class="code-block" data-code="curl -fsSL https://raw.githubusercontent.com/setiawansopan/PS-Panel/main/install.sh | sudo bash">
+            <code>curl -fsSL https://raw.githubusercontent.com/setiawansopan/PS-Panel/main/install.sh | sudo bash</code>
+            <button class="code-copy" onclick="copyCode(this)">copy</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="step fade-up delay-3">
+        <div class="step-num">03</div>
+        <div class="step-body">
+          <div class="step-title">Open the panel in your browser</div>
+          <div class="step-desc">After install completes, navigate to your server's IP on port 8765. The install summary will show the exact URL.</div>
+          <div class="code-block" data-code="http://your-server-ip:8765">
+            <code>http://your-server-ip:8765</code>
+            <button class="code-copy" onclick="copyCode(this)">copy</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="step fade-up delay-4">
+        <div class="step-num">04</div>
+        <div class="step-body">
+          <div class="step-title">Login with the generated password</div>
+          <div class="step-desc">Your credentials are displayed at the end of the install. You can always retrieve them from the credentials file.</div>
+          <div class="code-block" data-code="cat /root/.pspanel_credentials">
+            <code>cat /root/.pspanel_credentials</code>
+            <button class="code-copy" onclick="copyCode(this)">copy</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="note-box fade-up">
+      <strong>📁 Credentials file:</strong> All auto-generated passwords (panel + PostgreSQL) are saved to <strong>/root/.pspanel_credentials</strong>. Keep this file secure.<br><br>
+      <strong>🔑 Change panel password:</strong> <code>PANEL_PASS=newpassword pm2 restart ps-panel</code>
+    </div>
+  </div>
+</section>
+
+<!-- ── FAQ ── -->
+<section id="faq">
+  <div class="container">
+    <div class="sec-label fade-up" style="text-align:center">// faq</div>
+    <h2 class="sec-title fade-up delay-1" style="text-align:center">Frequently asked questions</h2>
+    <p class="sec-sub fade-up delay-2" style="text-align:center;margin-left:auto;margin-right:auto;margin-bottom:44px">Everything you need to know before getting started.</p>
+
+    <div class="faq-list fade-up delay-2">
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          What is PS Panel?
+          <div class="faq-icon">+</div>
+        </div>
+        <div class="faq-a"><div class="faq-a-inner">
+          PS Panel is a lightweight, self-hosted server management panel for Ubuntu 24.04 LTS. It provides a browser-based interface to monitor system resources, manage services (FrankenPHP, PHP-FPM, PostgreSQL, Redis), configure virtual hosts with SSL, and deploy applications via git — without needing SSH for routine tasks.
+        </div></div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          Is PS Panel free?
+          <div class="faq-icon">+</div>
+        </div>
+        <div class="faq-a"><div class="faq-a-inner">
+          Yes, completely free and open-source. No subscriptions, no usage limits, no hidden costs. PS Panel is released for the open-source community. You can use it for personal projects or commercial deployments, and contribute to its development on GitHub.
+        </div></div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          Which operating systems are supported?
+          <div class="faq-icon">+</div>
+        </div>
+        <div class="faq-a"><div class="faq-a-inner">
+          PS Panel is optimized and tested for <strong style="color:var(--text)">Ubuntu 24.04 LTS</strong>. The installer may work on other Debian-based systems, but Ubuntu 24.04 is the only officially supported target. Support for additional distributions may be added in future versions.
+        </div></div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          How do I change the panel password?
+          <div class="faq-icon">+</div>
+        </div>
+        <div class="faq-a"><div class="faq-a-inner">
+          Restart the panel with the <code>PANEL_PASS</code> environment variable:<br><br>
+          <code>PANEL_PASS=yournewpassword pm2 restart ps-panel</code><br><br>
+          The current credentials are always readable from <code>/root/.pspanel_credentials</code>.
+        </div></div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          Is the panel secure?
+          <div class="faq-icon">+</div>
+        </div>
+        <div class="faq-a"><div class="faq-a-inner">
+          PS Panel includes: JWT authentication (8-hour expiry), bcrypt password hashing, login rate limiting (5 attempts / 15 min), WebSocket authentication, command injection prevention on deploy inputs, and domain validation on virtual host creation. For production use, we recommend restricting port 8765 to trusted IPs via your server's firewall.
+        </div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FOOTER ── -->
+<footer>
+  <div class="footer-logo"><span>PS</span> Panel</div>
+  <div class="footer-tag">
+    Modern server management for Ubuntu 24.04<br>
+    FrankenPHP · PHP 8.3 · PostgreSQL 16 · Redis · Node.js 20
+  </div>
+  <div class="footer-links">
+    <a href="https://github.com/setiawansopan/PS-Panel" target="_blank" rel="noopener">GitHub</a>
+    <a href="#features">Features</a>
+    <a href="#stack">Stack</a>
+    <a href="#install">Install</a>
+    <a href="#faq">FAQ</a>
+  </div>
+  <div class="footer-copy">
+    Built with ❤️ for the open-source community &nbsp;·&nbsp; PS Panel v2.0<br>
+    <span style="opacity:.5">Released under MIT License</span>
+  </div>
+</footer>
+
+<script>
+// ── NAVBAR ──
+const navbar = document.getElementById('navbar');
+window.addEventListener('scroll', () => {
+  navbar.classList.toggle('scrolled', window.scrollY > 60);
+}, { passive: true });
+
+// ── TYPING ANIMATION ──
+const CMD = 'curl -fsSL https://raw.githubusercontent.com/setiawansopan/PS-Panel/main/install.sh | sudo bash';
+const typedEl = document.getElementById('typed');
+let ti = 0, done = false;
+
+function typeChar() {
+  if (ti <= CMD.length) {
+    typedEl.textContent = CMD.slice(0, ti++);
+    const delay = ti === 1 ? 900 : 22 + Math.random() * 20;
+    setTimeout(typeChar, delay);
+  } else {
+    done = true;
+  }
+}
+setTimeout(typeChar, 1400);
+
+// ── SCROLL ANIMATIONS ──
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.classList.add('visible');
+      observer.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+
+// ── PARALLAX ──
+const heroGlow = document.getElementById('hero-glow');
+window.addEventListener('scroll', () => {
+  const y = window.scrollY;
+  if (heroGlow) heroGlow.style.transform = `translateX(-50%) translateY(${y * 0.28}px)`;
+}, { passive: true });
+
+// ── FAQ ACCORDION ──
+function toggleFaq(el) {
+  const item = el.parentElement;
+  const isOpen = item.classList.contains('open');
+  document.querySelectorAll('.faq-item.open').forEach(i => i.classList.remove('open'));
+  if (!isOpen) item.classList.add('open');
+}
+
+// ── COPY CODE ──
+function copyCode(btn) {
+  const text = btn.parentElement.dataset.code;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'copied!';
+    btn.style.color = 'var(--accent)';
+    btn.style.borderColor = 'rgba(110,231,183,.3)';
+    setTimeout(() => {
+      btn.textContent = orig;
+      btn.style.color = '';
+      btn.style.borderColor = '';
+    }, 2000);
+  }).catch(() => {
+    // fallback for older browsers
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    btn.textContent = 'copied!';
+    setTimeout(() => btn.textContent = 'copy', 2000);
+  });
+}
+</script>
+</body>
+</html>
