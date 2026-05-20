@@ -16,7 +16,7 @@ PANEL_PORT=8765
 NODE_VERSION=20
 
 # ── Ganti dengan URL repo Anda ──────────────────────────────
-GITHUB_RAW="https://raw.githubusercontent.com/USERNAME/ps-panel/main"
+GITHUB_RAW="https://raw.githubusercontent.com/setiawansopan/PS-Panel/main"
 # ────────────────────────────────────────────────────────────
 
 print_banner() {
