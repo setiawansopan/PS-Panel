@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>PS Panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0a0b0f;--ink2:#12141a;--ink3:#1a1d26;--ink4:#232735;
+  --line:rgba(255,255,255,0.07);--line2:rgba(255,255,255,0.13);
+  --text:#e8eaf2;--muted:#5c6278;--dim:#3a3f54;
+  --accent:#6ee7b7;--accent2:#818cf8;--accent3:#f472b6;
+  --warn:#fbbf24;--danger:#f87171;--info:#38bdf8;
+  --font:'Syne',sans-serif;--mono:'JetBrains Mono',monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--ink);color:var(--text);font-family:var(--font);min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(110,231,183,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(110,231,183,.025) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+
+/* ── LOGIN ── */
+#login-screen{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;background:var(--ink)}
+#login-screen::after{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 50% at 50% 50%,rgba(110,231,183,.06) 0%,transparent 70%);pointer-events:none}
+.lw{position:relative;z-index:1;width:380px}
+.ll{text-align:center;margin-bottom:36px}
+.ll .ps{font-size:52px;font-weight:800;letter-spacing:-2px;line-height:1}
+.ll .ps span{color:var(--accent)}
+.ll .tag{font-size:11px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;margin-top:6px;font-family:var(--mono)}
+.lc{background:var(--ink2);border:1px solid var(--line2);border-radius:20px;padding:32px;position:relative;overflow:hidden}
+.lc::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--accent),transparent)}
+.li-lbl{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:7px}
+.li{width:100%;background:var(--ink3);border:1px solid var(--line2);border-radius:10px;padding:13px 16px;color:var(--text);font-family:var(--mono);font-size:15px;outline:none;transition:border-color .2s,box-shadow .2s;margin-bottom:14px;letter-spacing:.1em}
+.li:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(110,231,183,.1)}
+.lb{width:100%;background:var(--accent);color:var(--ink);border:none;border-radius:10px;padding:13px;font-family:var(--font);font-size:14px;font-weight:700;letter-spacing:.05em;cursor:pointer;transition:opacity .15s,transform .1s}
+.lb:hover{opacity:.88;transform:translateY(-1px)}
+.le{color:var(--danger);font-size:11px;font-family:var(--mono);margin-top:8px;text-align:center}
+
+/* ── LAYOUT ── */
+#app{display:none;position:relative;z-index:1}
+.sb{position:fixed;left:0;top:0;bottom:0;width:230px;background:var(--ink2);border-right:1px solid var(--line);display:flex;flex-direction:column;z-index:50}
+.sb-top{padding:22px 18px 18px;border-bottom:1px solid var(--line)}
+.logo{font-size:22px;font-weight:800;letter-spacing:-.5px;line-height:1}
+.logo span{color:var(--accent)}
+.logo-s{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.2em;text-transform:uppercase;margin-top:4px}
+.nav{padding:14px 10px;flex:1;overflow-y:auto}
+.ns{font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:.15em;text-transform:uppercase;padding:0 8px;margin:14px 0 5px}
+.ni{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:9px;cursor:pointer;color:var(--muted);font-size:13px;font-weight:600;transition:all .15s;margin-bottom:1px;position:relative}
+.ni:hover{background:var(--ink3);color:var(--text)}
+.ni.on{background:rgba(110,231,183,.1);color:var(--accent)}
+.ni.on::before{content:'';position:absolute;left:-10px;top:25%;bottom:25%;width:3px;border-radius:0 3px 3px 0;background:var(--accent)}
+.sb-ft{padding:14px 18px;border-top:1px solid var(--line);display:flex;align-items:center;gap:8px}
+@keyframes lp{0%,100%{opacity:1}50%{opacity:.3}}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:lp 2s ease-in-out infinite;flex-shrink:0}
+.lt{font-family:var(--mono);font-size:9px;color:var(--muted)}
+
+.main{margin-left:230px;padding:32px 28px;min-height:100vh}
+.page{display:none;animation:fi .18s ease}
+.page.on{display:block}
+@keyframes fi{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.ph{margin-bottom:24px}
+.ph h1{font-size:24px;font-weight:800;letter-spacing:-.5px}
+.ph p{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:3px}
+.sec-hdr{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:5px}
+
+/* ── GRID ── */
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}
+.g2l{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-bottom:18px}
+
+/* ── CARDS ── */
+.card{background:var(--ink2);border:1px solid var(--line);border-radius:14px;padding:18px}
+.card-sm{background:var(--ink2);border:1px solid var(--line);border-radius:14px;padding:14px}
+.ct{font-size:12px;font-weight:700;letter-spacing:-.1px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
+.ct-badge{font-family:var(--mono);font-size:10px;color:var(--muted);font-weight:400}
+
+/* ── METRIC CARDS ── */
+.mc{background:var(--ink2);border:1px solid var(--line);border-radius:14px;padding:16px;position:relative;overflow:hidden;transition:border-color .2s}
+.mc:hover{border-color:var(--line2)}
+.mc::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--c,var(--accent2));transform:scaleX(var(--p,0));transform-origin:left;transition:transform .7s cubic-bezier(.4,0,.2,1)}
+.mc-lbl{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px}
+.mc-val{font-size:30px;font-weight:800;letter-spacing:-1.5px;line-height:1}
+.mc-u{font-size:14px;font-weight:400;color:var(--muted)}
+.mc-sub{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:5px}
+
+/* ── PILL ── */
+.pill{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-family:var(--mono);font-size:10px;font-weight:500}
+.pd{width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0}
+.p-on {background:rgba(110,231,183,.12);color:var(--accent)}
+.p-off{background:rgba(248,113,113,.10);color:var(--danger)}
+.p-unk{background:rgba(255,255,255,.06);color:var(--muted)}
+.p-warn{background:rgba(251,191,36,.1);color:var(--warn)}
+.p-info{background:rgba(56,189,248,.1);color:var(--info)}
+
+/* ── STATUS ROW ── */
+.sr{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line)}
+.sr:last-child{border-bottom:none}
+.sr-n{font-size:12px;font-weight:600}
+.sr-k{font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:1px}
+
+/* ── INFO ROW ── */
+.ir{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:12px}
+.ir:last-child{border-bottom:none}
+.irl{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.irv{font-weight:600;font-size:11px;font-family:var(--mono)}
+
+/* ── STAT BLOCK ── */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat{background:var(--ink3);border-radius:9px;padding:10px 12px}
+.stat-lbl{font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+.stat-val{font-family:var(--mono);font-size:16px;font-weight:500;color:var(--text)}
+.stat-val.accent{color:var(--accent)}
+.stat-val.accent2{color:var(--accent2)}
+.stat-val.warn{color:var(--warn)}
+.stat-val.danger{color:var(--danger)}
+.stat-val.info{color:var(--info)}
+
+/* ── SERVICE CARD ── */
+.svc-card{background:var(--ink2);border:1px solid var(--line);border-radius:14px;padding:18px;transition:border-color .2s,transform .15s}
+.svc-card:hover{border-color:var(--line2);transform:translateY(-2px)}
+.svc-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
+.svc-em{font-size:26px;line-height:1}
+.svc-nm{font-size:14px;font-weight:700;margin-top:8px}
+.svc-ky{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px}
+.svc-acts{display:flex;gap:6px;margin-top:12px}
+.bsv{flex:1;padding:7px 0;background:var(--ink3);border:1px solid var(--line);border-radius:8px;color:var(--muted);font-family:var(--font);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s}
+.bsv:hover{background:var(--ink4);color:var(--text);border-color:var(--line2)}
+.bsv.s:hover{color:var(--accent);border-color:rgba(110,231,183,.3)}
+.bsv.x:hover{color:var(--danger);border-color:rgba(248,113,113,.3)}
+
+/* ── TABLE ── */
+.tbl-w{overflow:hidden}
+table{width:100%;border-collapse:collapse}
+th{padding:9px 13px;font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;border-bottom:1px solid var(--line);text-align:left}
+td{padding:11px 13px;border-bottom:1px solid var(--line);font-size:12px}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.015)}
+.td-mono{font-family:var(--mono);font-size:11px;color:var(--muted)}
+
+/* ── BTN ── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;background:var(--accent);color:var(--ink);border:none;border-radius:9px;font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s,transform .1s}
+.btn:hover{opacity:.85;transform:translateY(-1px)}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--line2)}
+.btn-ghost:hover{background:var(--ink3);color:var(--text);opacity:1}
+.btn-red{background:var(--danger);color:#fff}
+
+/* ── INPUT ── */
+.inp{width:100%;background:var(--ink3);border:1px solid var(--line2);border-radius:9px;padding:10px 13px;color:var(--text);font-family:var(--mono);font-size:12px;outline:none;transition:border-color .2s,box-shadow .2s}
+.inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(110,231,183,.08)}
+.inp-lbl{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;display:block}
+.fg{margin-bottom:13px}
+
+/* ── MODAL ── */
+.mbg{position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:100}
+.mbg.open{display:flex}
+.modal{background:var(--ink2);border:1px solid var(--line2);border-radius:18px;padding:26px;width:450px;position:relative}
+.modal::before{content:'';position:absolute;top:0;left:10%;right:10%;height:1px;background:linear-gradient(90deg,transparent,var(--accent2),transparent)}
+.modal h3{font-size:17px;font-weight:800;margin-bottom:18px}
+.mf{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+
+/* ── TERMINAL ── */
+.term{background:#060a10;border:1px solid var(--line);border-radius:12px;padding:16px;font-family:var(--mono);font-size:11px;color:var(--accent);line-height:1.9;min-height:70px;max-height:200px;overflow-y:auto;display:none;margin-top:14px;white-space:pre-wrap}
+
+/* ── NET CHART ── */
+.net-bars{display:flex;align-items:flex-end;gap:2px;height:40px;padding:0 2px}
+.net-bar{flex:1;border-radius:2px 2px 0 0;min-height:2px;transition:height .4s ease}
+
+/* ── PROGRESS ── */
+.prog-wrap{margin-top:8px}
+.prog-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.prog-lbl{font-family:var(--mono);font-size:10px;color:var(--muted);width:80px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prog-bar{flex:1;height:4px;background:var(--ink3);border-radius:2px;overflow:hidden}
+.prog-fill{height:100%;border-radius:2px;transition:width .5s ease}
+.prog-val{font-family:var(--mono);font-size:10px;color:var(--muted);width:36px;text-align:right;flex-shrink:0}
+
+/* ── BADGE ── */
+.badge{display:inline-block;padding:2px 8px;border-radius:6px;font-family:var(--mono);font-size:10px}
+.b-red{background:rgba(248,113,113,.12);color:var(--danger)}
+.b-green{background:rgba(110,231,183,.1);color:var(--accent)}
+.b-blue{background:rgba(129,140,248,.1);color:var(--accent2)}
+.b-yellow{background:rgba(251,191,36,.1);color:var(--warn)}
+
+.check-lbl{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px}
+.check-lbl input{accent-color:var(--accent);width:14px;height:14px}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="lw">
+    <div class="ll">
+      <div class="ps"><span>PS</span> Panel</div>
+      <div class="tag">Server Management Interface</div>
+    </div>
+    <div class="lc">
+      <div class="li-lbl">Access Key</div>
+      <input type="password" class="li" id="pw" placeholder="••••••••••••" onkeydown="if(event.key==='Enter')login()">
+      <button class="lb" onclick="login()">Enter Panel →</button>
+      <div class="le" id="lerr"></div>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <aside class="sb">
+    <div class="sb-top">
+      <div class="logo"><span>PS</span> Panel</div>
+      <div class="logo-s">v2.0 · FrankenPHP Stack</div>
+    </div>
+    <nav class="nav">
+      <div class="ns">Overview</div>
+      <div class="ni on" onclick="go('dashboard')">◈ &nbsp;Dashboard</div>
+      <div class="ns">Applications</div>
+      <div class="ni" onclick="go('redis')">⬡ &nbsp;Redis</div>
+      <div class="ni" onclick="go('postgres')">◫ &nbsp;PostgreSQL</div>
+      <div class="ni" onclick="go('phpfpm')">🐘 &nbsp;PHP-FPM</div>
+      <div class="ns">Server</div>
+      <div class="ni" onclick="go('services')">⚙ &nbsp;Services</div>
+      <div class="ni" onclick="go('vhosts')">◉ &nbsp;Virtual Hosts</div>
+      <div class="ns">Deploy</div>
+      <div class="ni" onclick="go('deploy')">▲ &nbsp;Deploy</div>
+    </nav>
+    <div class="sb-ft">
+      <div class="dot"></div>
+      <span class="lt">live · 5s refresh</span>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- ── DASHBOARD ── -->
+    <div class="page on" id="page-dashboard">
+      <div class="ph"><h1>Dashboard</h1><p>// real-time server overview</p></div>
+
+      <div class="g4">
+        <div class="mc" style="--c:var(--accent2)">
+          <div class="mc-lbl">CPU</div>
+          <div class="mc-val" id="d-cpu">—<span class="mc-u">%</span></div>
+          <div class="mc-sub" id="d-cpus">— cores</div>
+        </div>
+        <div class="mc" style="--c:var(--accent3)">
+          <div class="mc-lbl">Memory</div>
+          <div class="mc-val" id="d-mem">—<span class="mc-u">%</span></div>
+          <div class="mc-sub" id="d-mems">—</div>
+        </div>
+        <div class="mc" style="--c:var(--accent)">
+          <div class="mc-lbl">Disk</div>
+          <div class="mc-val" id="d-disk">—<span class="mc-u">%</span></div>
+          <div class="mc-sub" id="d-disks">—</div>
+        </div>
+        <div class="mc" style="--c:var(--warn)">
+          <div class="mc-lbl">Load Average</div>
+          <div class="mc-val" id="d-load" style="font-size:17px;letter-spacing:-.5px;padding-top:4px">—</div>
+          <div class="mc-sub">1m · 5m · 15m</div>
+        </div>
+      </div>
+
+      <div class="g2l">
+        <!-- Services status -->
+        <div class="card">
+          <div class="ct">Services <span class="ct-badge" id="d-svc-count"></span></div>
+          <div id="d-svcs"><div style="color:var(--muted);font-size:12px">Loading...</div></div>
+        </div>
+        <!-- Network -->
+        <div class="card">
+          <div class="ct">Network I/O <span class="ct-badge" id="d-netiface"></span></div>
+          <div class="stat-grid" style="margin-bottom:12px">
+            <div class="stat">
+              <div class="stat-lbl">↓ Download</div>
+              <div class="stat-val accent" id="d-rx">—</div>
+            </div>
+            <div class="stat">
+              <div class="stat-lbl">↑ Upload</div>
+              <div class="stat-val accent2" id="d-tx">—</div>
+            </div>
+          </div>
+          <div class="mc-lbl" style="margin-bottom:6px">Bandwidth history (30s)</div>
+          <div class="net-bars" id="d-netbars"></div>
+        </div>
+      </div>
+
+      <!-- Top processes -->
+      <div class="card">
+        <div class="ct">Top Processes</div>
+        <table>
+          <thead><tr><th>Process</th><th>PID</th><th>CPU %</th><th>MEM %</th></tr></thead>
+          <tbody id="d-procs"><tr><td colspan="4" style="color:var(--muted)">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── REDIS ── -->
+    <div class="page" id="page-redis">
+      <div class="ph"><h1>Redis</h1><p>// cache layer statistics</p></div>
+      <div id="redis-offline" style="display:none" class="card"><div style="color:var(--danger);font-family:var(--mono);font-size:12px" id="redis-err-msg"></div></div>
+      <div id="redis-content">
+        <div class="g4">
+          <div class="mc" style="--c:var(--danger)">
+            <div class="mc-lbl">Memory Used</div>
+            <div class="mc-val" id="r-mem">—</div>
+            <div class="mc-sub" id="r-mempeak">peak: —</div>
+          </div>
+          <div class="mc" style="--c:var(--accent)">
+            <div class="mc-lbl">Hit Rate</div>
+            <div class="mc-val" id="r-hit">—<span class="mc-u">%</span></div>
+            <div class="mc-sub" id="r-hitstats">—</div>
+          </div>
+          <div class="mc" style="--c:var(--accent2)">
+            <div class="mc-lbl">Connected Clients</div>
+            <div class="mc-val" id="r-clients">—</div>
+            <div class="mc-sub" id="r-totalconn">total conn: —</div>
+          </div>
+          <div class="mc" style="--c:var(--warn)">
+            <div class="mc-lbl">Ops / sec</div>
+            <div class="mc-val" id="r-ops">—</div>
+            <div class="mc-sub" id="r-totalcmds">total cmds: —</div>
+          </div>
+        </div>
+        <div class="g2">
+          <div class="card">
+            <div class="ct">Server Info</div>
+            <div class="ir"><span class="irl">Version</span><span class="irv" id="r-ver">—</span></div>
+            <div class="ir"><span class="irl">Mode</span><span class="irv" id="r-mode">—</span></div>
+            <div class="ir"><span class="irl">Role</span><span class="irv" id="r-role">—</span></div>
+            <div class="ir"><span class="irl">Uptime</span><span class="irv" id="r-uptime">—</span></div>
+            <div class="ir"><span class="irl">Evictions</span><span class="irv" id="r-evictions">—</span></div>
+          </div>
+          <div class="card">
+            <div class="ct">Key Stats</div>
+            <div style="margin-bottom:10px">
+              <div class="mc-lbl" style="margin-bottom:6px">Cache hit rate</div>
+              <div style="background:var(--ink3);height:8px;border-radius:4px;overflow:hidden">
+                <div id="r-hitbar" style="height:100%;background:var(--accent);border-radius:4px;transition:width .6s;width:0%"></div>
+              </div>
+            </div>
+            <div class="stat-grid">
+              <div class="stat"><div class="stat-lbl">Hits</div><div class="stat-val accent" id="r-hits">—</div></div>
+              <div class="stat"><div class="stat-lbl">Misses</div><div class="stat-val danger" id="r-misses">—</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── POSTGRESQL ── -->
+    <div class="page" id="page-postgres">
+      <div class="ph"><h1>PostgreSQL</h1><p>// database statistics</p></div>
+      <div id="pg-offline" style="display:none" class="card"><div style="color:var(--danger);font-family:var(--mono);font-size:12px" id="pg-err-msg"></div></div>
+      <div id="pg-content">
+        <div class="g3">
+          <div class="mc" style="--c:var(--accent2)">
+            <div class="mc-lbl">Active Connections</div>
+            <div class="mc-val" id="pg-conns">—</div>
+            <div class="mc-sub">total connections</div>
+          </div>
+          <div class="mc" style="--c:var(--warn)">
+            <div class="mc-lbl">Locks</div>
+            <div class="mc-val" id="pg-locks">—</div>
+            <div class="mc-sub">active locks</div>
+          </div>
+          <div class="mc" style="--c:var(--accent)">
+            <div class="mc-lbl">Databases</div>
+            <div class="mc-val" id="pg-dbcount">—</div>
+            <div class="mc-sub">user databases</div>
+          </div>
+        </div>
+        <div class="g2">
+          <div class="card">
+            <div class="ct">Database Sizes</div>
+            <div class="prog-wrap" id="pg-sizes"></div>
+          </div>
+          <div class="card">
+            <div class="ct">Connection States</div>
+            <div id="pg-activity"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PHP-FPM ── -->
+    <div class="page" id="page-phpfpm">
+      <div class="ph"><h1>PHP-FPM</h1><p>// PHP 8.3 worker statistics</p></div>
+      <div id="fpm-offline" style="display:none" class="card">
+        <div style="color:var(--warn);font-family:var(--mono);font-size:12px" id="fpm-err-msg"></div>
+        <div style="color:var(--muted);font-size:11px;margin-top:10px;font-family:var(--mono)">
+          Untuk mengaktifkan status page, tambahkan ke php-fpm config:<br><br>
+          <code style="color:var(--accent)">pm.status_path = /status</code><br><br>
+          Dan install: <code style="color:var(--accent)">apt install libfcgi-dev</code><br>
+          Kemudian restart: <code style="color:var(--accent)">systemctl restart php8.3-fpm</code>
+        </div>
+      </div>
+      <div id="fpm-content">
+        <div class="g4">
+          <div class="mc" style="--c:var(--accent)">
+            <div class="mc-lbl">Active Workers</div>
+            <div class="mc-val" id="fpm-active">—</div>
+            <div class="mc-sub" id="fpm-total">total: —</div>
+          </div>
+          <div class="mc" style="--c:var(--accent2)">
+            <div class="mc-lbl">Idle Workers</div>
+            <div class="mc-val" id="fpm-idle">—</div>
+            <div class="mc-sub">waiting for requests</div>
+          </div>
+          <div class="mc" style="--c:var(--warn)">
+            <div class="mc-lbl">Listen Queue</div>
+            <div class="mc-val" id="fpm-queue">—</div>
+            <div class="mc-sub" id="fpm-maxqueue">max: —</div>
+          </div>
+          <div class="mc" style="--c:var(--accent3)">
+            <div class="mc-lbl">Accepted Conn</div>
+            <div class="mc-val" id="fpm-conn" style="font-size:22px">—</div>
+            <div class="mc-sub" id="fpm-slow">slow req: —</div>
+          </div>
+        </div>
+        <div class="g2">
+          <div class="card">
+            <div class="ct">Pool Info</div>
+            <div class="ir"><span class="irl">Pool Name</span><span class="irv" id="fpm-pool">—</span></div>
+            <div class="ir"><span class="irl">Process Manager</span><span class="irv" id="fpm-pm">—</span></div>
+            <div class="ir"><span class="irl">Start Since</span><span class="irv" id="fpm-since">—</span></div>
+            <div class="ir"><span class="irl">Max Active (ever)</span><span class="irv" id="fpm-maxact">—</span></div>
+          </div>
+          <div class="card">
+            <div class="ct">Worker Utilization</div>
+            <div style="margin-bottom:10px">
+              <div class="mc-lbl" style="margin-bottom:6px">Active / Total workers</div>
+              <div style="background:var(--ink3);height:8px;border-radius:4px;overflow:hidden">
+                <div id="fpm-utilbar" style="height:100%;background:var(--accent);border-radius:4px;transition:width .6s;width:0%"></div>
+              </div>
+              <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:5px" id="fpm-utilpct">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SERVICES ── -->
+    <div class="page" id="page-services">
+      <div class="ph"><h1>Services</h1><p>// start · stop · restart</p></div>
+      <div class="g3" id="svc-grid"><div style="color:var(--muted)">Loading...</div></div>
+    </div>
+
+    <!-- ── VIRTUAL HOSTS ── -->
+    <div class="page" id="page-vhosts">
+      <div class="ph">
+        <div class="sec-hdr">
+          <div><h1>Virtual Hosts</h1><p>// FrankenPHP site configurations</p></div>
+          <button class="btn" onclick="document.getElementById('m-vhost').classList.add('open')">+ Add Domain</button>
+        </div>
+      </div>
+      <div class="card tbl-w">
+        <table><thead><tr><th>Domain</th><th>SSL</th><th>Config File</th><th>Action</th></tr></thead>
+        <tbody id="vhost-tb"><tr><td colspan="3" style="color:var(--muted)">Loading...</td></tr></tbody></table>
+      </div>
+    </div>
+
+    <!-- ── DEPLOY ── -->
+    <div class="page" id="page-deploy">
+      <div class="ph"><h1>Deploy</h1><p>// git pull to application directory</p></div>
+      <div class="card" style="max-width:500px">
+        <div class="fg"><label class="inp-lbl">Application Path</label><input class="inp" id="dep-path" placeholder="/var/www/myapp"></div>
+        <div class="fg"><label class="inp-lbl">Branch</label><input class="inp" id="dep-branch" value="main"></div>
+        <button class="btn" id="dep-btn" onclick="deploy()">▲ &nbsp;Run Deploy</button>
+        <div class="term" id="dep-out"></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Modal vhost -->
+<div class="mbg" id="m-vhost">
+  <div class="modal">
+    <h3>Add Virtual Host</h3>
+    <div class="fg"><label class="inp-lbl">Domain</label><input class="inp" id="v-domain" placeholder="example.com"></div>
+    <div class="fg"><label class="inp-lbl">Document Root (optional)</label><input class="inp" id="v-root" placeholder="/var/www/example.com"></div>
+    <label class="check-lbl" style="margin-top:2px;margin-bottom:8px"><input type="checkbox" id="v-php" checked> Enable PHP</label>
+    <label class="check-lbl" style="margin-top:6px"><input type="checkbox" id="v-ssl"> Enable SSL (Let's Encrypt)</label>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="document.getElementById('m-vhost').classList.remove('open')">Cancel</button>
+      <button class="btn" onclick="addVhost()">Add Domain</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal database -->
+<div class="mbg" id="m-db-add">
+  <div class="modal">
+    <h3>New PostgreSQL Database</h3>
+    <div class="fg">
+      <label class="inp-lbl">Database Name</label>
+      <input class="inp" id="db-nm" placeholder="my_database">
+      <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:5px">lowercase · numbers · underscore only</div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="document.getElementById('m-db-add').classList.remove('open')">Cancel</button>
+      <button class="btn" onclick="createDb()">Create</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API=''; let TOK=localStorage.getItem('psp_tok');
+const SVC_META={
+  frankenphp:{name:'FrankenPHP',em:'⚡',key:'Web server'},
+  php_fpm:   {name:'PHP-FPM',   em:'🐘',key:'PHP processor'},
+  postgresql:{name:'PostgreSQL',em:'🗄️',key:'Database'},
+  redis:     {name:'Redis',     em:'🟥',key:'Cache layer'},
+  node:      {name:'Node.js',   em:'🟩',key:'JS runtime'},
+};
+
+async function api(method,path,body){
+  const r=await fetch(path,{method,headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOK},body:body?JSON.stringify(body):undefined});
+  if(r.status===401){logout();return null;}
+  return r.json();
+}
+async function login(){
+  const pw=document.getElementById('pw').value;
+  const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
+  const d=await r.json();
+  if(d.token){TOK=d.token;localStorage.setItem('psp_tok',TOK);document.getElementById('login-screen').style.display='none';document.getElementById('app').style.display='block';init();}
+  else document.getElementById('lerr').textContent='// '+(d.error||'invalid access key');
+}
+function logout(){localStorage.removeItem('psp_tok');location.reload();}
+
+function go(name){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.ni').forEach(n=>n.classList.remove('on'));
+  document.getElementById('page-'+name).classList.add('on');
+  document.querySelector(`[onclick="go('${name}')"]`).classList.add('on');
+  if(name==='services')  loadServices();
+  if(name==='vhosts')    loadVhosts();
+  if(name==='redis')     loadRedis();
+  if(name==='postgres')  loadPostgres();
+  if(name==='phpfpm')    loadFpm();
+}
+
+// ── Helpers ──
+const fmt=b=>b>1e9?(b/1e9).toFixed(1)+'G':b>1e6?(b/1e6).toFixed(0)+'M':b>1e3?(b/1e3).toFixed(0)+'K':b+'B';
+const fmtSec=b=>{if(b>1e6)return(b/1e6).toFixed(1)+' MB/s';if(b>1e3)return(b/1e3).toFixed(0)+' KB/s';return b+' B/s';};
+const fmtUptime=s=>{const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60);return d>0?`${d}d ${h}h`:h>0?`${h}h ${m}m`:`${m}m`;};
+const fmtNum=n=>parseInt(n||0).toLocaleString();
+function setBar(card,pct){card.style.setProperty('--p',(Math.min(100,pct)/100).toFixed(2));}
+
+// ── Net history ──
+const netHist={rx:[],tx:[],max:1};
+function pushNet(rxS,txS){
+  netHist.rx.push(rxS); netHist.tx.push(txS);
+  if(netHist.rx.length>15){netHist.rx.shift();netHist.tx.shift();}
+  netHist.max=Math.max(1,...netHist.rx,...netHist.tx);
+  const c=document.getElementById('d-netbars');
+  c.innerHTML='';
+  netHist.rx.forEach((r,i)=>{
+    const t=netHist.tx[i]||0;
+    const wrap=document.createElement('div');
+    wrap.style.cssText='flex:1;display:flex;flex-direction:column;gap:1px;justify-content:flex-end;height:100%';
+    wrap.innerHTML=`<div style="background:var(--accent);border-radius:2px 2px 0 0;height:${Math.round(r/netHist.max*18)+2}px;transition:height .4s"></div><div style="background:var(--accent2);border-radius:2px 2px 0 0;height:${Math.round(t/netHist.max*18)+2}px;transition:height .4s"></div>`;
+    c.appendChild(wrap);
+  });
+}
+
+// ── Dashboard metrics ──
+async function loadMetrics(){
+  const d=await api('GET','/api/metrics');
+  if(!d)return;
+  const cards=document.querySelectorAll('#page-dashboard .mc');
+  document.getElementById('d-cpu').innerHTML=d.cpu.pct+'<span class="mc-u">%</span>';
+  document.getElementById('d-cpus').textContent=d.cpu.cores+' cores';
+  setBar(cards[0],d.cpu.pct);
+  document.getElementById('d-mem').innerHTML=d.mem.pct+'<span class="mc-u">%</span>';
+  document.getElementById('d-mems').textContent=fmt(d.mem.used)+' / '+fmt(d.mem.total);
+  setBar(cards[1],d.mem.pct);
+  if(d.disk){document.getElementById('d-disk').innerHTML=d.disk.pct+'<span class="mc-u">%</span>';document.getElementById('d-disks').textContent=fmt(d.disk.used)+' / '+fmt(d.disk.size);setBar(cards[2],d.disk.pct);}
+  if(d.load)document.getElementById('d-load').textContent=d.load.join(' · ');
+  if(d.net){
+    document.getElementById('d-rx').textContent=fmtSec(d.net.rxSec);
+    document.getElementById('d-tx').textContent=fmtSec(d.net.txSec);
+    document.getElementById('d-netiface').textContent=d.net.iface;
+    pushNet(d.net.rxSec,d.net.txSec);
+  }
+  if(d.procs){
+    const maxCpu=Math.max(1,...d.procs.map(p=>parseFloat(p.cpu)));
+    document.getElementById('d-procs').innerHTML=d.procs.map(p=>`<tr>
+      <td style="font-weight:600">${p.name}</td>
+      <td class="td-mono">${p.pid}</td>
+      <td><div style="display:flex;align-items:center;gap:8px"><div style="width:60px;background:var(--ink3);height:4px;border-radius:2px;overflow:hidden"><div style="height:100%;background:var(--accent2);width:${(parseFloat(p.cpu)/maxCpu*100).toFixed(0)}%;transition:width .5s"></div></div><span class="td-mono">${p.cpu}%</span></div></td>
+      <td class="td-mono">${p.mem}%</td>
+    </tr>`).join('');
+  }
+}
+
+async function loadDashSvc(){
+  const d=await api('GET','/api/services');
+  if(!d)return;
+  const entries=Object.entries(d);
+  const running=entries.filter(([,s])=>s.status==='active').length;
+  document.getElementById('d-svc-count').textContent=running+'/'+entries.length+' running';
+  document.getElementById('d-svcs').innerHTML=entries.map(([k,s])=>`<div class="sr">
+    <div><div class="sr-n">${s.name}</div><div class="sr-k">${SVC_META[k]?.key||''}</div></div>
+    <span class="pill ${s.status==='active'?'p-on':s.status==='unknown'?'p-unk':'p-off'}"><span class="pd"></span>${s.status==='active'?'running':s.status==='unknown'?'n/a':'stopped'}</span>
+  </div>`).join('');
+}
+
+// ── Redis ──
+async function loadRedis(){
+  const d=await api('GET','/api/redis');
+  if(!d)return;
+  if(!d.ok){
+    document.getElementById('redis-offline').style.display='block';
+    document.getElementById('redis-content').style.display='none';
+    document.getElementById('redis-err-msg').textContent='Redis error: '+(d.error||'cannot connect');
+    return;
+  }
+  document.getElementById('redis-offline').style.display='none';
+  document.getElementById('redis-content').style.display='block';
+  const memBytes=parseInt(d.memUsed||0);
+  const memPeakBytes=parseInt(d.memPeak||0);
+  const memTotalBytes=parseInt(d.memTotal||0);
+  const hitPct=parseFloat(d.hitRate||0);
+  const cards=document.querySelectorAll('#page-redis .mc');
+  document.getElementById('r-mem').textContent=fmt(memBytes);
+  document.getElementById('r-mempeak').textContent='peak: '+fmt(memPeakBytes);
+  setBar(cards[0],memTotalBytes>0?memBytes/memTotalBytes*100:50);
+  document.getElementById('r-hit').innerHTML=hitPct+'<span class="mc-u">%</span>';
+  document.getElementById('r-hitstats').textContent='hits: '+fmtNum(d.hits)+' / misses: '+fmtNum(d.misses);
+  setBar(cards[1],hitPct);
+  document.getElementById('r-clients').textContent=d.clients||'0';
+  document.getElementById('r-totalconn').textContent='total conn: '+fmtNum(d.totalConns);
+  setBar(cards[2],Math.min(100,parseInt(d.clients||0)*5));
+  document.getElementById('r-ops').textContent=d.opsPerSec||'0';
+  document.getElementById('r-totalcmds').textContent='total cmds: '+fmtNum(d.totalCmds);
+  setBar(cards[3],Math.min(100,parseInt(d.opsPerSec||0)/10));
+  document.getElementById('r-ver').textContent=d.version||'—';
+  document.getElementById('r-mode').textContent=d.mode||'—';
+  document.getElementById('r-role').textContent=d.role||'—';
+  document.getElementById('r-uptime').textContent=d.uptime?fmtUptime(parseInt(d.uptime)):'—';
+  document.getElementById('r-evictions').textContent=fmtNum(d.evictions);
+  document.getElementById('r-hitbar').style.width=hitPct+'%';
+  document.getElementById('r-hits').textContent=fmtNum(d.hits);
+  document.getElementById('r-misses').textContent=fmtNum(d.misses);
+}
+
+// ── PostgreSQL ──
+async function loadPostgres(){
+  const d=await api('GET','/api/postgres');
+  if(!d)return;
+  if(!d.ok){
+    document.getElementById('pg-offline').style.display='block';
+    document.getElementById('pg-content').style.display='none';
+    document.getElementById('pg-err-msg').textContent='PostgreSQL error: '+(d.error||'cannot connect');
+    return;
+  }
+  document.getElementById('pg-offline').style.display='none';
+  document.getElementById('pg-content').style.display='block';
+  const userDbs=d.databases.filter(db=>!['postgres','template0','template1'].includes(db.name));
+  const cards=document.querySelectorAll('#page-postgres .mc');
+  document.getElementById('pg-conns').textContent=d.totalConnections;
+  setBar(cards[0],Math.min(100,d.totalConnections/100*100));
+  document.getElementById('pg-locks').textContent=d.locks;
+  setBar(cards[1],Math.min(100,d.locks/50*100));
+  document.getElementById('pg-dbcount').textContent=userDbs.length;
+  setBar(cards[2],userDbs.length);
+  // DB sizes
+  const maxSize=Math.max(1,...d.databases.map(db=>db.size));
+  document.getElementById('pg-sizes').innerHTML=d.databases.slice(0,6).map(db=>`
+    <div class="prog-row">
+      <span class="prog-lbl">${db.name}</span>
+      <div class="prog-bar"><div class="prog-fill" style="background:var(--accent2);width:${(db.size/maxSize*100).toFixed(0)}%"></div></div>
+      <span class="prog-val">${fmt(db.size)}</span>
+    </div>`).join('');
+  // Activity states
+  document.getElementById('pg-activity').innerHTML=d.activity.map(a=>`
+    <div class="ir">
+      <span class="irl">${a.state||'unknown'}</span>
+      <span class="irv">${a.count} conn</span>
+    </div>`).join('')||'<div style="color:var(--muted);font-size:12px">No activity</div>';
+}
+
+// ── PHP-FPM ──
+async function loadFpm(){
+  const d=await api('GET','/api/phpfpm');
+  if(!d)return;
+  if(!d.ok){
+    document.getElementById('fpm-offline').style.display='block';
+    document.getElementById('fpm-content').style.display='none';
+    document.getElementById('fpm-err-msg').textContent=d.error||'PHP-FPM status unavailable';
+    return;
+  }
+  document.getElementById('fpm-offline').style.display='none';
+  document.getElementById('fpm-content').style.display='block';
+  const active=parseInt(d.activeProcesses||0);
+  const total=parseInt(d.totalProcesses||0);
+  const cards=document.querySelectorAll('#page-phpfpm .mc');
+  document.getElementById('fpm-active').textContent=active;
+  document.getElementById('fpm-total').textContent='total: '+total;
+  setBar(cards[0],total>0?active/total*100:0);
+  document.getElementById('fpm-idle').textContent=d.idleProcesses||'0';
+  setBar(cards[1],total>0?parseInt(d.idleProcesses||0)/total*100:100);
+  document.getElementById('fpm-queue').textContent=d.listenQueue||'0';
+  document.getElementById('fpm-maxqueue').textContent='max: '+(d.maxListenQueue||'0');
+  setBar(cards[2],Math.min(100,parseInt(d.listenQueue||0)*10));
+  document.getElementById('fpm-conn').textContent=fmtNum(d.acceptedConn);
+  document.getElementById('fpm-slow').textContent='slow req: '+(d.slowRequests||'0');
+  document.getElementById('fpm-pool').textContent=d.pool||'—';
+  document.getElementById('fpm-pm').textContent=d.processManager||'—';
+  document.getElementById('fpm-since').textContent=d.startSince?fmtUptime(parseInt(d.startSince)):'—';
+  document.getElementById('fpm-maxact').textContent=d.maxActiveProcs||'—';
+  const utilPct=total>0?Math.round(active/total*100):0;
+  document.getElementById('fpm-utilbar').style.width=utilPct+'%';
+  document.getElementById('fpm-utilpct').textContent=utilPct+'% utilized ('+active+' active / '+total+' total)';
+}
+
+// ── Services ──
+async function loadServices(){
+  const d=await api('GET','/api/services');
+  if(!d)return;
+  document.getElementById('svc-grid').innerHTML=Object.entries(d).map(([k,s])=>{
+    const m=SVC_META[k]||{};
+    return `<div class="svc-card">
+      <div class="svc-top"><span style="font-size:26px">${m.em||'⚙️'}</span>
+        <span class="pill ${s.status==='active'?'p-on':s.status==='unknown'?'p-unk':'p-off'}"><span class="pd"></span>${s.status==='active'?'running':s.status==='unknown'?'n/a':'stopped'}</span>
+      </div>
+      <div class="svc-nm">${s.name}</div><div class="svc-ky">${m.key||''}</div>
+      <div class="svc-acts">
+        <button class="bsv s" onclick="svcAct('${k}','start')">▶</button>
+        <button class="bsv" onclick="svcAct('${k}','restart')">↺</button>
+        <button class="bsv x" onclick="svcAct('${k}','stop')">■</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+async function svcAct(name,action){await api('POST',`/api/services/${name}/${action}`);loadServices();loadDashSvc();}
+
+// ── Virtual Hosts ──
+async function loadVhosts(){
+  const d=await api('GET','/api/vhosts');if(!d)return;
+  document.getElementById('vhost-tb').innerHTML=d.length
+    ?d.map(v=>{const ssl=!v.content.trimStart().startsWith('http://');return`<tr><td style="font-weight:600">${v.file.replace('.conf','')}</td><td><span class="pill ${ssl?'p-on':'p-unk'}" style="font-size:9px">${ssl?'🔒 HTTPS':'HTTP'}</span></td><td class="td-mono">${v.file}</td><td><button class="btn btn-red" style="padding:4px 11px;font-size:11px" onclick="delVhost('${v.file.replace('.conf','')}')">Remove</button></td></tr>`;}).join('')
+    :'<tr><td colspan="4" style="color:var(--muted)">No virtual hosts configured</td></tr>';
+}
+async function addVhost(){
+  const domain=document.getElementById('v-domain').value.trim();if(!domain)return;
+  const r=await api('POST','/api/vhosts',{domain,root:document.getElementById('v-root').value.trim(),php:document.getElementById('v-php').checked,ssl:document.getElementById('v-ssl').checked});
+  if(!r||!r.ok){alert(r?.error||'Failed to add vhost');return;}
+  document.getElementById('m-vhost').classList.remove('open');document.getElementById('v-domain').value='';loadVhosts();
+}
+async function delVhost(domain){if(!confirm(`Remove vhost: ${domain}?`))return;await api('DELETE',`/api/vhosts/${domain}`);loadVhosts();}
+
+// ── Deploy ──
+async function deploy(){
+  const p=document.getElementById('dep-path').value.trim();if(!p)return;
+  const btn=document.getElementById('dep-btn'),out=document.getElementById('dep-out');
+  btn.textContent='⏳ Deploying...';btn.disabled=true;
+  out.style.display='block';out.textContent='$ git pull origin '+(document.getElementById('dep-branch').value||'main')+'\n';
+  const r=await api('POST','/api/deploy',{path:p,branch:document.getElementById('dep-branch').value||'main'});
+  btn.innerHTML='▲ &nbsp;Run Deploy';btn.disabled=false;
+  out.textContent='$ git pull...\n'+(r?r.output:'error');
+  out.style.color=r?.ok?'var(--accent)':'var(--danger)';
+}
+
+// ── Init ──
+function init(){
+  loadMetrics();loadDashSvc();
+  setInterval(loadMetrics,5000);
+  setInterval(loadDashSvc,10000);
+}
+
+if(TOK){document.getElementById('login-screen').style.display='none';document.getElementById('app').style.display='block';init();}
+</script>
+</body>
+</html>
