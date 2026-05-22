@@ -104,17 +104,22 @@ app.get('/api/metrics', auth, async(req,res)=>{
     ]);
 
     const topProcs = (procs.list||[])
-      .sort((a,b)=>b.pcpu-a.pcpu)
+      .sort((a,b)=>(b.pcpu||0)-(a.pcpu||0))
       .slice(0,5)
-      .map(p=>({name:p.name, pid:p.pid, cpu:p.pcpu.toFixed(1), mem:p.pmem.toFixed(1), memVsz: p.mem_vsz}));
+      .map(p=>({name:p.name, pid:p.pid, cpu:(p.pcpu||0).toFixed(1), mem:(p.pmem||0).toFixed(1), memVsz: p.mem_vsz||0}));
 
     const netIface = (net||[]).find(n=>n.iface!=='lo') || (net||[])[0] || {};
 
+    // avgLoad1/5/15 exist in systeminformation v5+; older versions only have avgLoad
+    const loadAvg = cpu.avgLoad1 != null
+      ? [cpu.avgLoad1, cpu.avgLoad5, cpu.avgLoad15]
+      : [cpu.avgLoad, cpu.avgLoad, cpu.avgLoad];
+
     res.json({
       cpu: { pct: Math.round(cpu.currentLoad||0), cores: cpu.cpus?.length||1, speed: (cpu.currentLoad||0).toFixed(1) },
-      mem: { used:mem.used, total:mem.total||1, free:mem.free, pct:Math.round((mem.used/(mem.total||1))*100), cached:mem.cached },
+      mem: { used:mem.used||0, total:mem.total||1, free:mem.free||0, pct:Math.round(((mem.used||0)/(mem.total||1))*100), cached:mem.cached||0 },
       disk: disk[0] ? {used:disk[0].used, size:disk[0].size, pct:Math.round(disk[0].use||0), fs:disk[0].fs} : null,
-      load: [cpu.avgLoad1?.toFixed(2)||'0.00', cpu.avgLoad5?.toFixed(2)||'0.00', cpu.avgLoad15?.toFixed(2)||'0.00'],
+      load: loadAvg.map(v=>(v||0).toFixed(2)),
       net: { rx: netIface.rx_bytes||0, tx: netIface.tx_bytes||0, rxSec: netIface.rx_sec||0, txSec: netIface.tx_sec||0, iface: netIface.iface||'eth0' },
       procs: topProcs,
       temp: temp?.main || null,
