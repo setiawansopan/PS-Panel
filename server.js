@@ -247,7 +247,29 @@ const VHOSTS_DIR = '/etc/frankenphp/sites';
 fs.mkdirSync(VHOSTS_DIR,{recursive:true});
 app.get('/api/vhosts', auth,(req,res)=>{
   const files = fs.existsSync(VHOSTS_DIR)?fs.readdirSync(VHOSTS_DIR):[];
-  res.json(files.map(f=>({file:f, content:fs.readFileSync(path.join(VHOSTS_DIR,f),'utf8')})));
+  res.json(files.map(f=>{
+    const fpath=path.join(VHOSTS_DIR,f);
+    const content=fs.readFileSync(fpath,'utf8');
+    const stats=fs.statSync(fpath);
+    const domain=f.replace('.conf','');
+    // Parse document root
+    const m=content.match(/root\s+\*\s+(.+?)(?:\n|$)/);
+    const docroot=m?m[1].trim():'/var/www/'+domain;
+    // Check if PHP enabled
+    const phpEnabled=content.includes('php_server');
+    // Check if SSL enabled
+    const sslEnabled=!content.match(/^http:\/\//m);
+    return {
+      file:f,
+      domain,
+      content,
+      docroot,
+      phpEnabled,
+      ssl:sslEnabled?'HTTPS':'HTTP',
+      created:new Date(stats.mtime).toLocaleDateString('id-ID',{year:'numeric',month:'short',day:'numeric'}),
+      size:Math.round(stats.size/1024)+'KB'
+    };
+  }));
 });
 app.post('/api/vhosts', auth,(req,res)=>{
   const {domain,root,php,ssl}=req.body;

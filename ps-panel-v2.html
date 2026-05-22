@@ -522,8 +522,8 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         </div>
       </div>
       <div class="card tbl-w">
-        <table><thead><tr><th>Domain</th><th>SSL</th><th>Config File</th><th>Action</th></tr></thead>
-        <tbody id="vhost-tb"><tr><td colspan="3" style="color:var(--muted)">Loading...</td></tr></tbody></table>
+        <table><thead><tr><th>Domain</th><th>Document Root</th><th>PHP</th><th>SSL</th><th>Created</th><th>Size</th><th>Action</th></tr></thead>
+        <tbody id="vhost-tb"><tr><td colspan="7" style="color:var(--muted)">Loading...</td></tr></tbody></table>
       </div>
     </div>
 
@@ -1159,8 +1159,16 @@ async function svcAct(name,action){await api('POST',`/api/services/${name}/${act
 async function loadVhosts(){
   const d=await api('GET','/api/vhosts');if(!d)return;
   document.getElementById('vhost-tb').innerHTML=d.length
-    ?d.map(v=>{const ssl=!v.content.trimStart().startsWith('http://');return`<tr><td style="font-weight:600">${v.file.replace('.conf','')}</td><td><span class="pill ${ssl?'p-on':'p-unk'}" style="font-size:9px">${ssl?'🔒 HTTPS':'HTTP'}</span></td><td class="td-mono">${v.file}</td><td><button class="btn btn-red" style="padding:4px 11px;font-size:11px" onclick="delVhost('${v.file.replace('.conf','')}')">Remove</button></td></tr>`;}).join('')
-    :'<tr><td colspan="4" style="color:var(--muted)">No virtual hosts configured</td></tr>';
+    ?d.map(v=>`<tr>
+      <td style="font-weight:600">${v.domain}</td>
+      <td class="td-mono" style="font-size:11px;max-width:300px;overflow:hidden;text-overflow:ellipsis">${v.docroot}</td>
+      <td><span class="pill ${v.phpEnabled?'p-on':'p-unk'}" style="font-size:9px">${v.phpEnabled?'✓ Enabled':'—'}</span></td>
+      <td><span class="pill ${v.ssl==='HTTPS'?'p-on':'p-unk'}" style="font-size:9px">${v.ssl==='HTTPS'?'🔒 HTTPS':'HTTP'}</span></td>
+      <td style="font-size:11px;color:var(--muted)">${v.created}</td>
+      <td style="font-size:11px;color:var(--muted);text-align:right">${v.size}</td>
+      <td><button class="btn btn-red" style="padding:4px 11px;font-size:11px" onclick="delVhost('${v.domain}')">Remove</button></td>
+    </tr>`).join('')
+    :'<tr><td colspan="7" style="color:var(--muted)">No virtual hosts configured</td></tr>';
 }
 async function addVhost(){
   const domain=document.getElementById('v-domain').value.trim();if(!domain)return;
