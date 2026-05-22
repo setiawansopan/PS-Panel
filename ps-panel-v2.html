@@ -249,7 +249,6 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       <div class="ni" onclick="go('frankenphp')">⚡ &nbsp;FrankenPHP</div>
       <div class="ni" onclick="go('redis')">⬡ &nbsp;Redis</div>
       <div class="ni" onclick="go('postgres')">◫ &nbsp;PostgreSQL</div>
-      <div class="ni" onclick="go('phpfpm')">🐘 &nbsp;PHP-FPM</div>
       <div class="ns">Server</div>
       <div class="ni" onclick="go('services')">⚙ &nbsp;Services</div>
       <div class="ni" onclick="go('vhosts')">◉ &nbsp;Virtual Hosts</div>
@@ -417,63 +416,6 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         <div class="card" style="margin-bottom:18px">
           <div class="ct">Connection &amp; Lock History <span class="ct-badge">Live · 30-point window · updates every 5s</span></div>
           <canvas id="pg-chart" style="width:100%;height:200px;display:block"></canvas>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── PHP-FPM ── -->
-    <div class="page" id="page-phpfpm">
-      <div class="ph"><h1>PHP-FPM</h1><p>// PHP 8.3 worker statistics</p></div>
-      <div id="fpm-offline" style="display:none" class="card">
-        <div style="color:var(--warn);font-family:var(--mono);font-size:12px" id="fpm-err-msg"></div>
-        <div style="color:var(--muted);font-size:11px;margin-top:10px;font-family:var(--mono)">
-          Untuk mengaktifkan status page, tambahkan ke php-fpm config:<br><br>
-          <code style="color:var(--accent)">pm.status_path = /status</code><br><br>
-          Dan install: <code style="color:var(--accent)">apt install libfcgi-dev</code><br>
-          Kemudian restart: <code style="color:var(--accent)">systemctl restart php8.3-fpm</code>
-        </div>
-      </div>
-      <div id="fpm-content">
-        <div class="g4">
-          <div class="mc" style="--c:var(--accent)">
-            <div class="mc-lbl">Active Workers</div>
-            <div class="mc-val" id="fpm-active">—</div>
-            <div class="mc-sub" id="fpm-total">total: —</div>
-          </div>
-          <div class="mc" style="--c:var(--accent2)">
-            <div class="mc-lbl">Idle Workers</div>
-            <div class="mc-val" id="fpm-idle">—</div>
-            <div class="mc-sub">waiting for requests</div>
-          </div>
-          <div class="mc" style="--c:var(--warn)">
-            <div class="mc-lbl">Listen Queue</div>
-            <div class="mc-val" id="fpm-queue">—</div>
-            <div class="mc-sub" id="fpm-maxqueue">max: —</div>
-          </div>
-          <div class="mc" style="--c:var(--accent3)">
-            <div class="mc-lbl">Accepted Conn</div>
-            <div class="mc-val" id="fpm-conn" style="font-size:22px">—</div>
-            <div class="mc-sub" id="fpm-slow">slow req: —</div>
-          </div>
-        </div>
-        <div class="g2">
-          <div class="card">
-            <div class="ct">Pool Info</div>
-            <div class="ir"><span class="irl">Pool Name</span><span class="irv" id="fpm-pool">—</span></div>
-            <div class="ir"><span class="irl">Process Manager</span><span class="irv" id="fpm-pm">—</span></div>
-            <div class="ir"><span class="irl">Start Since</span><span class="irv" id="fpm-since">—</span></div>
-            <div class="ir"><span class="irl">Max Active (ever)</span><span class="irv" id="fpm-maxact">—</span></div>
-          </div>
-          <div class="card">
-            <div class="ct">Worker Utilization</div>
-            <div style="margin-bottom:10px">
-              <div class="mc-lbl" style="margin-bottom:6px">Active / Total workers</div>
-              <div style="background:var(--ink3);height:8px;border-radius:4px;overflow:hidden">
-                <div id="fpm-utilbar" style="height:100%;background:var(--accent);border-radius:4px;transition:width .6s;width:0%"></div>
-              </div>
-              <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:5px" id="fpm-utilpct">—</div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -713,7 +655,6 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
 const API=''; let TOK=localStorage.getItem('psp_tok');
 const SVC_META={
   frankenphp:{name:'FrankenPHP',em:'⚡',key:'Web server'},
-  php_fpm:   {name:'PHP-FPM',   em:'🐘',key:'PHP processor'},
   postgresql:{name:'PostgreSQL',em:'🗄️',key:'Database'},
   redis:     {name:'Redis',     em:'🟥',key:'Cache layer'},
   node:      {name:'Node.js',   em:'🟩',key:'JS runtime'},
@@ -749,7 +690,6 @@ function go(name){
   if(name==='vhosts')    loadVhosts();
   if(name==='redis')     loadRedis();
   if(name==='postgres')  loadPostgres();
-  if(name==='phpfpm')    loadFpm();
   if(name==='frankenphp') loadFrankenphp();
   if(name==='deploy')    loadWebhookList();
 }
@@ -1008,40 +948,6 @@ async function createDb(){
   } else {
     alert('Error: '+(d?.error||'Failed to create database'));
   }
-}
-
-// ── PHP-FPM ──
-async function loadFpm(){
-  const d=await api('GET','/api/phpfpm');
-  if(!d)return;
-  if(!d.ok){
-    document.getElementById('fpm-offline').style.display='block';
-    document.getElementById('fpm-content').style.display='none';
-    document.getElementById('fpm-err-msg').textContent=d.error||'PHP-FPM status unavailable';
-    return;
-  }
-  document.getElementById('fpm-offline').style.display='none';
-  document.getElementById('fpm-content').style.display='block';
-  const active=parseInt(d.activeProcesses||0);
-  const total=parseInt(d.totalProcesses||0);
-  const cards=document.querySelectorAll('#page-phpfpm .mc');
-  document.getElementById('fpm-active').textContent=active;
-  document.getElementById('fpm-total').textContent='total: '+total;
-  setBar(cards[0],total>0?active/total*100:0);
-  document.getElementById('fpm-idle').textContent=d.idleProcesses||'0';
-  setBar(cards[1],total>0?parseInt(d.idleProcesses||0)/total*100:100);
-  document.getElementById('fpm-queue').textContent=d.listenQueue||'0';
-  document.getElementById('fpm-maxqueue').textContent='max: '+(d.maxListenQueue||'0');
-  setBar(cards[2],Math.min(100,parseInt(d.listenQueue||0)*10));
-  document.getElementById('fpm-conn').textContent=fmtNum(d.acceptedConn);
-  document.getElementById('fpm-slow').textContent='slow req: '+(d.slowRequests||'0');
-  document.getElementById('fpm-pool').textContent=d.pool||'—';
-  document.getElementById('fpm-pm').textContent=d.processManager||'—';
-  document.getElementById('fpm-since').textContent=d.startSince?fmtUptime(parseInt(d.startSince)):'—';
-  document.getElementById('fpm-maxact').textContent=d.maxActiveProcs||'—';
-  const utilPct=total>0?Math.round(active/total*100):0;
-  document.getElementById('fpm-utilbar').style.width=utilPct+'%';
-  document.getElementById('fpm-utilpct').textContent=utilPct+'% utilized ('+active+' active / '+total+' total)';
 }
 
 // ── FrankenPHP ──

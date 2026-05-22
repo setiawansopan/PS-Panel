@@ -402,22 +402,10 @@ install_php() {
 
   spinner_start "Installing PHP 8.3 extensions... (this may take a while)"
   apt_install \
-    php8.3 php8.3-fpm php8.3-cli php8.3-common \
+    php8.3 php8.3-cli php8.3-common \
     php8.3-pgsql php8.3-redis php8.3-curl php8.3-mbstring \
     php8.3-xml php8.3-zip php8.3-bcmath php8.3-intl \
-    php8.3-gd php8.3-opcache php8.3-tokenizer \
-    libfcgi-bin
-  spinner_stop ok
-
-  spinner_start "Configuring PHP-FPM status page..."
-  # Enable pm.status_path (may be commented out by default)
-  sed -i 's/^;*pm\.status_path.*/pm.status_path = \/status/' \
-    /etc/php/8.3/fpm/pool.d/www.conf
-  # Ensure status path is present even if the line didn't exist
-  grep -q "^pm.status_path" /etc/php/8.3/fpm/pool.d/www.conf \
-    || echo "pm.status_path = /status" >> /etc/php/8.3/fpm/pool.d/www.conf
-  run_logged systemctl enable php8.3-fpm
-  run_logged systemctl start php8.3-fpm
+    php8.3-gd php8.3-opcache php8.3-tokenizer
   spinner_stop ok
 
   log "PHP $(php -r 'echo PHP_VERSION;') installed"
@@ -845,7 +833,7 @@ print_summary() {
   echo "  ║  Service Status                                      ║" >&2
   echo "  ╠══════════════════════════════════════════════════════╣" >&2
 
-  local services=( "frankenphp:FrankenPHP" "php8.3-fpm:PHP-FPM" \
+  local services=( "frankenphp:FrankenPHP" \
                    "postgresql:PostgreSQL" "redis-server:Redis" )
   for entry in "${services[@]}"; do
     local svc="${entry%%:*}"

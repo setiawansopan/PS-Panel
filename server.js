@@ -64,7 +64,6 @@ app.post('/api/login',(req,res)=>{
 // ── Services ──
 const SERVICES = {
   frankenphp: {name:'FrankenPHP', unit:'frankenphp'},
-  php_fpm:    {name:'PHP-FPM',    unit:'php8.3-fpm'},
   postgresql: {name:'PostgreSQL', unit:'postgresql'},
   redis:      {name:'Redis',      unit:'redis-server'},
   node:       {name:'Node.js',    unit:null},
@@ -186,37 +185,6 @@ app.get('/api/postgres', auth, async(req,res)=>{
       locks: parseInt(locks.rows[0].count),
     });
   } catch(e){ res.json({ok:false, error:e.message}); }
-});
-
-// ── PHP-FPM stats ──
-app.get('/api/phpfpm', auth,(req,res)=>{
-  // Read php-fpm status via socket
-  exec(`SCRIPT_NAME=/status SCRIPT_FILENAME=/status REQUEST_METHOD=GET cgi-fcgi -bind -connect /run/php/php8.3-fpm.sock 2>/dev/null || echo "error"`, (err,stdout)=>{
-    if(err||stdout.includes('error')||!stdout.trim()){
-      // Fallback: parse systemd journal
-      exec(`systemctl status php8.3-fpm --no-pager -l 2>/dev/null | head -20`, (e2,o2)=>{
-        const active = !e2 && o2.includes('active (running)');
-        res.json({ok:active, error: active?null:'PHP-FPM status unavailable (install cgi-fcgi or enable status page)'});
-      });
-      return;
-    }
-    const parse = (key) => { const m=stdout.match(new RegExp(key+':\\s*(.+)')); return m?m[1].trim():null; };
-    res.json({
-      ok: true,
-      pool:           parse('pool'),
-      processManager: parse('process manager'),
-      startTime:      parse('start time'),
-      startSince:     parse('start since'),
-      acceptedConn:   parse('accepted conn'),
-      listenQueue:    parse('listen queue'),
-      maxListenQueue: parse('max listen queue'),
-      idleProcesses:  parse('idle processes'),
-      activeProcesses:parse('active processes'),
-      totalProcesses: parse('total processes'),
-      maxActiveProcs: parse('max active processes'),
-      slowRequests:   parse('slow requests'),
-    });
-  });
 });
 
 // ── FrankenPHP stats ──
