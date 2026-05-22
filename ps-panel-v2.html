@@ -45,10 +45,19 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .logo-s{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.2em;text-transform:uppercase;margin-top:4px}
 .nav{padding:14px 10px;flex:1;overflow-y:auto}
 .ns{font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:.15em;text-transform:uppercase;padding:0 8px;margin:14px 0 5px}
-.ni{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:9px;cursor:pointer;color:var(--muted);font-size:13px;font-weight:600;transition:all .15s;margin-bottom:1px;position:relative}
+.ni{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:9px;cursor:pointer;color:var(--muted);font-size:13px;font-weight:600;transition:all .15s;margin-bottom:2px;position:relative}
 .ni:hover{background:var(--ink3);color:var(--text)}
 .ni.on{background:rgba(110,231,183,.1);color:var(--accent)}
 .ni.on::before{content:'';position:absolute;left:-10px;top:25%;bottom:25%;width:3px;border-radius:0 3px 3px 0;background:var(--accent)}
+.ni-icon{font-size:18px;display:flex;align-items:center;justify-content:center;width:24px;flex-shrink:0}
+.ni-dashboard .ni-icon{color:#6ee7b7}
+.ni-frankenphp .ni-icon{color:#f97316}
+.ni-redis .ni-icon{color:#ef4444}
+.ni-postgres .ni-icon{color:#3b82f6}
+.ni-services .ni-icon{color:#8b5cf6}
+.ni-vhosts .ni-icon{color:#06b6d4}
+.ni-deploy .ni-icon{color:#10b981}
+.ni-settings .ni-icon{color:#f59e0b}
 .sb-ft{padding:14px 18px;border-top:1px solid var(--line);display:flex;align-items:center;gap:8px}
 @keyframes lp{0%,100%{opacity:1}50%{opacity:.3}}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:lp 2s ease-in-out infinite;flex-shrink:0}
@@ -254,18 +263,18 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
     </div>
     <nav class="nav">
       <div class="ns">Overview</div>
-      <div class="ni on" onclick="go('dashboard')">◈ &nbsp;Dashboard</div>
+      <div class="ni ni-dashboard on" onclick="go('dashboard')"><span class="ni-icon">◈</span>Dashboard</div>
       <div class="ns">Applications</div>
-      <div class="ni" onclick="go('frankenphp')">⚡ &nbsp;FrankenPHP</div>
-      <div class="ni" onclick="go('redis')">⬡ &nbsp;Redis</div>
-      <div class="ni" onclick="go('postgres')">◫ &nbsp;PostgreSQL</div>
+      <div class="ni ni-frankenphp" onclick="go('frankenphp')"><span class="ni-icon">⚡</span>FrankenPHP</div>
+      <div class="ni ni-redis" onclick="go('redis')"><span class="ni-icon">⬡</span>Redis</div>
+      <div class="ni ni-postgres" onclick="go('postgres')"><span class="ni-icon">◫</span>PostgreSQL</div>
       <div class="ns">Server</div>
-      <div class="ni" onclick="go('services')">⚙ &nbsp;Services</div>
-      <div class="ni" onclick="go('vhosts')">◉ &nbsp;Virtual Hosts</div>
+      <div class="ni ni-services" onclick="go('services')"><span class="ni-icon">⚙</span>Services</div>
+      <div class="ni ni-vhosts" onclick="go('vhosts')"><span class="ni-icon">◉</span>Virtual Hosts</div>
       <div class="ns">Deploy</div>
-      <div class="ni" onclick="go('deploy')">▲ &nbsp;Deploy</div>
+      <div class="ni ni-deploy" onclick="go('deploy')"><span class="ni-icon">▲</span>Deploy</div>
       <div class="ns">Configuration</div>
-      <div class="ni" onclick="go('settings')">⚒ &nbsp;Settings</div>
+      <div class="ni ni-settings" onclick="go('settings')"><span class="ni-icon">⚒</span>Settings</div>
     </nav>
     <div class="sb-ft">
       <div class="dot"></div>
