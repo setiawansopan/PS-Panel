@@ -563,6 +563,8 @@ install_frankenphp() {
   fi
 
   chmod +x /usr/local/bin/frankenphp
+  # Allow binding to privileged ports (80/443) without running as root
+  setcap 'cap_net_bind_service=+ep' /usr/local/bin/frankenphp 2>/dev/null || true
   spinner_stop ok
 
   # Verify the downloaded binary is a valid ELF executable
@@ -576,6 +578,9 @@ install_frankenphp() {
 
   spinner_start "Creating FrankenPHP config and systemd service..."
   mkdir -p /etc/frankenphp/sites /var/www/html
+  # Caddy/FrankenPHP stores TLS state here; must be writable by www-data
+  mkdir -p /var/www/.local/share/caddy/locks
+  chown -R www-data:www-data /var/www/.local
 
   cat > /etc/frankenphp/Caddyfile << 'CADDYFILE'
 http://:80 {
@@ -599,6 +604,9 @@ ExecStart=/usr/local/bin/frankenphp run --config /etc/frankenphp/Caddyfile
 Restart=always
 RestartSec=5
 LimitNOFILE=1048576
+# Allow www-data to bind to privileged ports (80/443)
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 
 [Install]
 WantedBy=multi-user.target
