@@ -832,7 +832,7 @@ function go(name){
   if(name==='redis')     loadRedis();
   if(name==='postgres')  loadPostgres();
   if(name==='frankenphp') loadFrankenphp();
-  if(name==='deploy')    loadWebhookList();
+  if(name==='deploy'){loadWebhookList();loadDeployVhosts();}
   if(name==='settings')  loadSettings();
 }
 
