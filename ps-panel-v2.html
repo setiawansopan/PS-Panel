@@ -381,7 +381,10 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
 
     <!-- ── POSTGRESQL ── -->
     <div class="page" id="page-postgres">
-      <div class="ph"><h1>PostgreSQL</h1><p>// database statistics</p></div>
+      <div class="ph" style="display:flex;align-items:flex-start;justify-content:space-between">
+        <div><h1>PostgreSQL</h1><p>// database statistics</p></div>
+        <button class="btn" onclick="document.getElementById('m-db-add').classList.add('open');document.getElementById('db-nm').focus()">+ New Database</button>
+      </div>
       <div id="pg-offline" style="display:none" class="card"><div style="color:var(--danger);font-family:var(--mono);font-size:12px" id="pg-err-msg"></div></div>
       <div id="pg-content">
         <div class="g3">
@@ -879,6 +882,22 @@ async function loadPostgres(){
       <span class="irl">${a.state||'unknown'}</span>
       <span class="irv">${a.count} conn</span>
     </div>`).join('')||'<div style="color:var(--muted);font-size:12px">No activity</div>';
+}
+
+async function createDb(){
+  const name=document.getElementById('db-nm').value.trim();
+  if(!name) return;
+  const btn=document.querySelector('#m-db-add .btn:not(.btn-ghost)');
+  btn.disabled=true; btn.textContent='Creating...';
+  const d=await api('POST','/api/databases',{name});
+  btn.disabled=false; btn.textContent='Create';
+  if(d?.ok){
+    document.getElementById('m-db-add').classList.remove('open');
+    document.getElementById('db-nm').value='';
+    loadPostgres();
+  } else {
+    alert('Error: '+(d?.error||'Failed to create database'));
+  }
 }
 
 // ── PHP-FPM ──
