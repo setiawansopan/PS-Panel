@@ -407,12 +407,16 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         <div class="g2">
           <div class="card">
             <div class="ct">Database Sizes</div>
-            <div class="prog-wrap" id="pg-sizes"></div>
+            <div id="pg-sizes"></div>
           </div>
           <div class="card">
             <div class="ct">Connection States</div>
             <div id="pg-activity"></div>
           </div>
+        </div>
+        <div class="card" style="margin-bottom:18px">
+          <div class="ct">Connection &amp; Lock History <span class="ct-badge">Live · 30-point window · updates every 5s</span></div>
+          <canvas id="pg-chart" style="width:100%;height:200px;display:block"></canvas>
         </div>
       </div>
     </div>
@@ -849,6 +853,8 @@ async function loadRedis(){
 }
 
 // ── PostgreSQL ──
+const _pgH={conns:[],locks:[],MAX:30};
+
 async function loadPostgres(){
   const d=await api('GET','/api/postgres');
   if(!d)return;
@@ -868,20 +874,117 @@ async function loadPostgres(){
   setBar(cards[1],Math.min(100,d.locks/50*100));
   document.getElementById('pg-dbcount').textContent=userDbs.length;
   setBar(cards[2],userDbs.length);
-  // DB sizes
+
+  // DB sizes — bigger bars & readable text
   const maxSize=Math.max(1,...d.databases.map(db=>db.size));
-  document.getElementById('pg-sizes').innerHTML=d.databases.slice(0,6).map(db=>`
-    <div class="prog-row">
-      <span class="prog-lbl">${db.name}</span>
-      <div class="prog-bar"><div class="prog-fill" style="background:var(--accent2);width:${(db.size/maxSize*100).toFixed(0)}%"></div></div>
-      <span class="prog-val">${fmt(db.size)}</span>
-    </div>`).join('');
-  // Activity states
+  document.getElementById('pg-sizes').innerHTML=d.databases.slice(0,8).map(db=>`
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+      <span style="font-family:var(--mono);font-size:13px;color:var(--text);width:130px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600">${db.name}</span>
+      <div style="flex:1;height:10px;background:var(--ink3);border-radius:5px;overflow:hidden">
+        <div style="height:100%;border-radius:5px;background:var(--accent2);width:${(db.size/maxSize*100).toFixed(0)}%;transition:width .6s ease"></div>
+      </div>
+      <span style="font-family:var(--mono);font-size:13px;color:var(--text);width:44px;text-align:right;flex-shrink:0">${fmt(db.size)}</span>
+    </div>`).join('')||'<div style="color:var(--muted);font-size:12px;font-family:var(--mono);padding:8px 0">No databases yet</div>';
+
+  // Connection states — bigger & clearer rows
   document.getElementById('pg-activity').innerHTML=d.activity.map(a=>`
-    <div class="ir">
-      <span class="irl">${a.state||'unknown'}</span>
-      <span class="irv">${a.count} conn</span>
-    </div>`).join('')||'<div style="color:var(--muted);font-size:12px">No activity</div>';
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 0;border-bottom:1px solid var(--line)">
+      <span style="font-family:var(--mono);font-size:13px;color:var(--muted)">${a.state||'unknown'}</span>
+      <span style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--text)">${a.count}<span style="font-size:11px;font-weight:400;color:var(--muted);margin-left:4px">conn</span></span>
+    </div>`).join('')||'<div style="color:var(--muted);font-size:12px;padding:8px 0">No activity</div>';
+
+  // History for chart
+  _pgH.conns.push(d.totalConnections);
+  _pgH.locks.push(d.locks);
+  if(_pgH.conns.length>_pgH.MAX){_pgH.conns.shift();_pgH.locks.shift();}
+  drawPgChart();
+}
+
+function drawPgChart(){
+  const canvas=document.getElementById('pg-chart');
+  if(!canvas)return;
+  // Resize canvas to actual CSS size
+  canvas.width=canvas.offsetWidth||canvas.parentElement.offsetWidth||600;
+  canvas.height=200;
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width, H=canvas.height;
+
+  // Read CSS variables so chart respects light/dark theme
+  const cs=getComputedStyle(document.documentElement);
+  const isLight=document.body.classList.contains('light');
+  const gridColor   = isLight ? 'rgba(0,0,0,0.06)'       : 'rgba(255,255,255,0.05)';
+  const labelColor  = isLight ? 'rgba(80,90,120,0.8)'     : 'rgba(92,98,120,0.9)';
+  const connColor   = isLight ? '#6366f1'                  : '#818cf8';
+  const lockColor   = isLight ? '#d97706'                  : '#fbbf24';
+  const connFill    = isLight ? 'rgba(99,102,241,0.10)'   : 'rgba(129,140,248,0.10)';
+  const lockFill    = isLight ? 'rgba(217,119,6,0.08)'    : 'rgba(251,191,36,0.08)';
+
+  ctx.clearRect(0,0,W,H);
+
+  const data=_pgH.conns, ldata=_pgH.locks;
+  if(data.length<2){
+    ctx.fillStyle=labelColor;
+    ctx.font='12px monospace';
+    ctx.textAlign='center';
+    ctx.fillText('Collecting data…',W/2,H/2);
+    return;
+  }
+
+  const pL=42,pR=14,pT=28,pB=28;
+  const cW=W-pL-pR, cH=H-pT-pB;
+  const maxVal=Math.max(...data,...ldata,1);
+  const n=_pgH.MAX;
+
+  // Grid lines + Y labels
+  ctx.lineWidth=1;
+  for(let i=0;i<=4;i++){
+    const y=pT+(cH/4)*i;
+    ctx.strokeStyle=gridColor;
+    ctx.beginPath();ctx.moveTo(pL,y);ctx.lineTo(W-pR,y);ctx.stroke();
+    ctx.fillStyle=labelColor;ctx.font='10px monospace';ctx.textAlign='right';
+    ctx.fillText(Math.round(maxVal-(maxVal/4)*i),pL-6,y+4);
+  }
+
+  // Draw a series (area + line)
+  const drawSeries=(dataset,lineCol,fillCol)=>{
+    if(dataset.length<2)return;
+    ctx.beginPath();
+    dataset.forEach((v,i)=>{
+      const x=pL+((n-dataset.length+i)/(n-1))*cW;
+      const y=pT+cH-(v/maxVal)*cH;
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    });
+    ctx.strokeStyle=lineCol;ctx.lineWidth=2;ctx.lineJoin='round';ctx.stroke();
+    // Fill area under line
+    const lastX=pL+((n-dataset.length+dataset.length-1)/(n-1))*cW;
+    const firstX=pL+((n-dataset.length)/(n-1))*cW;
+    ctx.lineTo(lastX,pT+cH);ctx.lineTo(firstX,pT+cH);ctx.closePath();
+    ctx.fillStyle=fillCol;ctx.fill();
+  };
+
+  drawSeries(ldata,lockColor,lockFill);
+  drawSeries(data,connColor,connFill);
+
+  // Dot at latest value
+  const dot=(dataset,col)=>{
+    if(!dataset.length)return;
+    const x=pL+((n-dataset.length+dataset.length-1)/(n-1))*cW;
+    const y=pT+cH-(dataset[dataset.length-1]/maxVal)*cH;
+    ctx.beginPath();ctx.arc(x,y,4,0,Math.PI*2);
+    ctx.fillStyle=col;ctx.fill();
+    ctx.strokeStyle=isLight?'#fff':'#0a0b0f';ctx.lineWidth=2;ctx.stroke();
+  };
+  dot(data,connColor);dot(ldata,lockColor);
+
+  // Legend
+  const legendItems=[[connColor,'Connections'],[lockColor,'Locks']];
+  ctx.textAlign='left';
+  legendItems.forEach(([col,label],i)=>{
+    const lx=pL+i*120;
+    ctx.fillStyle=col;ctx.fillRect(lx,8,14,4);
+    ctx.fillStyle=labelColor;ctx.font='10px monospace';
+    ctx.fillText(label,lx+18,14);
+  });
 }
 
 async function createDb(){
@@ -1107,6 +1210,9 @@ function init(){
   loadMetrics();loadDashSvc();
   setInterval(loadMetrics,5000);
   setInterval(loadDashSvc,10000);
+  setInterval(()=>{
+    if(document.getElementById('pg-chart')?.closest('.page.on')) loadPostgres();
+  },5000);
 }
 
 // ── THEME ──
