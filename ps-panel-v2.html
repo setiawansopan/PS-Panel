@@ -1223,13 +1223,9 @@ async function loadDeployVhosts(){
   const sel=document.getElementById('dep-vhost');
   sel.innerHTML='<option value="">-- Select a virtual host --</option>';
   v.forEach(vhost=>{
-    const domain=vhost.file.replace('.conf','');
-    // Parse document root from config file
-    const m=vhost.content.match(/root\s+\*\s+(.+?)(?:\n|$)/);
-    const root=m?m[1].trim():'/var/www/'+domain;
     const opt=document.createElement('option');
-    opt.value=root;
-    opt.textContent=domain+' ('+root+')';
+    opt.value=vhost.docroot;
+    opt.textContent=vhost.domain+' ('+vhost.docroot+')';
     sel.appendChild(opt);
   });
 }
@@ -1244,12 +1240,9 @@ async function openWebhookModal(){
   sel.innerHTML='<option value="">-- Select a virtual host --</option>';
   if(v){
     v.forEach(vhost=>{
-      const domain=vhost.file.replace('.conf','');
-      const m=vhost.content.match(/root\s+\*\s+(.+?)(?:\n|$)/);
-      const root=m?m[1].trim():'/var/www/'+domain;
       const opt=document.createElement('option');
-      opt.value=root;
-      opt.textContent=domain+' ('+root+')';
+      opt.value=vhost.docroot;
+      opt.textContent=vhost.domain+' ('+vhost.docroot+')';
       sel.appendChild(opt);
     });
   }
