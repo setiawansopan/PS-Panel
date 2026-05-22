@@ -434,63 +434,120 @@ install_frankenphp() {
   arch=$(dpkg --print-architecture)
   latest=""
 
+  # FrankenPHP moved from dunglas/frankenphp to php/frankenphp (PHP Foundation).
+  # Try the new repo first, then the legacy one as fallback.
+  local repos=("php/frankenphp" "dunglas/frankenphp")
+  local working_repo=""
+
   # Strategy 1: GitHub API with User-Agent and timeouts
-  api_response=$(curl -sf \
-    --connect-timeout 10 --max-time 30 \
-    -H "User-Agent: ps-panel-installer/2.1" \
-    https://api.github.com/repos/dunglas/frankenphp/releases/latest 2>/dev/null || true)
-
-  if echo "$api_response" | grep -qi "rate limit\|API rate limit exceeded"; then
-    warn "GitHub API rate limit hit — skipping API method"
-    api_response=""
-  fi
-
-  if [[ -n "$api_response" ]]; then
-    latest=$(echo "$api_response" | grep '"tag_name"' | cut -d'"' -f4 || true)
-  fi
-
-  # Strategy 2: Parse version from redirect URL
-  if [[ -z "$latest" ]]; then
-    warn "GitHub API unavailable — trying redirect method..."
-    latest=$(curl -fsI \
+  for repo in "${repos[@]}"; do
+    api_response=$(curl -sf \
       --connect-timeout 10 --max-time 30 \
       -H "User-Agent: ps-panel-installer/2.1" \
-      https://github.com/dunglas/frankenphp/releases/latest 2>/dev/null \
-      | grep -i "^location:" | sed 's|.*/tag/||' | tr -d '\r\n' || true)
+      "https://api.github.com/repos/${repo}/releases/latest" 2>/dev/null || true)
+
+    if echo "$api_response" | grep -qi "rate limit\|API rate limit exceeded"; then
+      warn "GitHub API rate limit hit — skipping API method"
+      api_response=""
+      break
+    fi
+
+    if [[ -n "$api_response" ]]; then
+      latest=$(echo "$api_response" | grep '"tag_name"' | head -1 | cut -d'"' -f4 || true)
+      if [[ -n "$latest" ]]; then
+        working_repo="$repo"
+        log_raw "Resolved via API from ${repo}: $latest"
+        break
+      fi
+    fi
+  done
+
+  # Strategy 2: Parse version from redirect URL (follow redirects to handle repo transfer)
+  if [[ -z "$latest" ]]; then
+    warn "GitHub API unavailable — trying redirect method..."
+    for repo in "${repos[@]}"; do
+      # -L follows redirects so we land on the final /tag/<version> location
+      local redirect_target
+      redirect_target=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+        --connect-timeout 10 --max-time 30 \
+        -H "User-Agent: ps-panel-installer/2.1" \
+        "https://github.com/${repo}/releases/latest" 2>/dev/null || true)
+
+      if [[ "$redirect_target" == *"/tag/"* ]]; then
+        latest="${redirect_target##*/tag/}"
+        latest="${latest%%[[:space:]]*}"
+        # Detect which repo it actually landed on
+        if [[ "$redirect_target" == *"/php/frankenphp/"* ]]; then
+          working_repo="php/frankenphp"
+        elif [[ "$redirect_target" == *"/dunglas/frankenphp/"* ]]; then
+          working_repo="dunglas/frankenphp"
+        else
+          working_repo="$repo"
+        fi
+        log_raw "Resolved via redirect from ${repo} → ${working_repo}: $latest"
+        break
+      fi
+    done
+  fi
+
+  # Validate version matches expected semver-ish pattern (e.g. v1.3.2)
+  if [[ ! "$latest" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+    log_raw "Resolved version '$latest' is invalid — discarding"
+    latest=""
   fi
 
   # Strategy 3: Hardcoded fallback
   if [[ -z "$latest" ]]; then
     warn "Could not fetch FrankenPHP version — using fallback ${FRANKENPHP_FALLBACK}"
     latest="$FRANKENPHP_FALLBACK"
+    working_repo="dunglas/frankenphp"
   fi
 
-  log_raw "FrankenPHP version resolved: $latest"
+  # Default repo if still unset (shouldn't happen, but be safe)
+  [[ -z "$working_repo" ]] && working_repo="php/frankenphp"
+
+  log_raw "FrankenPHP version resolved: $latest (repo: $working_repo)"
   spinner_stop ok
 
-  # Download with retry and exponential backoff (5s, 10s, 20s)
+  # Download with retry and exponential backoff (5s, 10s, 20s).
+  # Try BOTH repos for each attempt since the release tarball may exist under
+  # the legacy repo even after the transfer (and vice versa).
   spinner_start "Downloading FrankenPHP ${latest}..."
-  local primary_url="https://github.com/dunglas/frankenphp/releases/download/${latest}/frankenphp-linux-${arch}"
-  local fallback_url="https://github.com/dunglas/frankenphp/releases/download/${latest}/frankenphp-linux-x86_64"
   local delays=(5 10 20)
   local dl_ok=false
   local attempt
 
+  # Build candidate URL list — primary repo first, then the other one, plus x86_64 fallbacks
+  local urls=(
+    "https://github.com/${working_repo}/releases/download/${latest}/frankenphp-linux-${arch}"
+    "https://github.com/${working_repo}/releases/download/${latest}/frankenphp-linux-x86_64"
+  )
+  for repo in "${repos[@]}"; do
+    if [[ "$repo" != "$working_repo" ]]; then
+      urls+=("https://github.com/${repo}/releases/download/${latest}/frankenphp-linux-${arch}")
+      urls+=("https://github.com/${repo}/releases/download/${latest}/frankenphp-linux-x86_64")
+    fi
+  done
+
   for attempt in 1 2 3; do
-    log_raw "FrankenPHP download attempt $attempt/3 (primary: $primary_url)"
-    if curl -fsSL \
-        --connect-timeout 10 --max-time 120 \
-        -H "User-Agent: ps-panel-installer/2.1" \
-        "$primary_url" -o /usr/local/bin/frankenphp >> "$LOG_FILE" 2>&1; then
-      dl_ok=true; break
-    fi
-    log_raw "Primary URL failed — trying fallback: $fallback_url"
-    if curl -fsSL \
-        --connect-timeout 10 --max-time 120 \
-        -H "User-Agent: ps-panel-installer/2.1" \
-        "$fallback_url" -o /usr/local/bin/frankenphp >> "$LOG_FILE" 2>&1; then
-      dl_ok=true; break
-    fi
+    for url in "${urls[@]}"; do
+      log_raw "FrankenPHP download attempt $attempt/3: $url"
+      if curl -fsSL \
+          --connect-timeout 10 --max-time 120 \
+          -H "User-Agent: ps-panel-installer/2.1" \
+          "$url" -o /usr/local/bin/frankenphp >> "$LOG_FILE" 2>&1; then
+        # Sanity check: file must be non-trivial size (real binary is ~50MB+)
+        if [[ -s /usr/local/bin/frankenphp ]] && \
+           [[ $(stat -c%s /usr/local/bin/frankenphp 2>/dev/null || echo 0) -gt 1048576 ]]; then
+          dl_ok=true
+          log_raw "Download succeeded from: $url"
+          break 2
+        else
+          log_raw "Downloaded file too small — discarding and trying next URL"
+          rm -f /usr/local/bin/frankenphp
+        fi
+      fi
+    done
     if (( attempt < 3 )); then
       local delay="${delays[$((attempt - 1))]}"
       printf "\r  ${YELLOW}[!]${RESET}  Download failed, retrying in %ds... (attempt %d/3)   \n" \
@@ -502,7 +559,7 @@ install_frankenphp() {
   if [[ "$dl_ok" != "true" ]]; then
     spinner_stop fail
     fatal "Failed to download FrankenPHP after 3 attempts" \
-      "Check connectivity or manually download from github.com/dunglas/frankenphp/releases"
+      "Check connectivity or manually download from github.com/php/frankenphp/releases"
   fi
 
   chmod +x /usr/local/bin/frankenphp
