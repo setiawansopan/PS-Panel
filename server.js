@@ -213,6 +213,61 @@ app.get('/api/phpfpm', auth,(req,res)=>{
   });
 });
 
+// ── FrankenPHP stats ──
+app.get('/api/frankenphp', auth, async (req, res) => {
+  try {
+    const execP = (cmd) => new Promise(resolve =>
+      exec(cmd, (_, out) => resolve((out || '').trim())));
+
+    const showOut = await execP(
+      'systemctl show frankenphp --no-pager ' +
+      '--property=ActiveState,MainPID,MemoryCurrent,NRestarts,ActiveEnterTimestamp 2>/dev/null'
+    );
+
+    const parseShow = (key) => {
+      const m = showOut.match(new RegExp(`^${key}=(.+)$`, 'm'));
+      return m ? m[1].trim() : '';
+    };
+
+    const activeState = parseShow('ActiveState') || 'unknown';
+    const pid         = parseInt(parseShow('MainPID'))  || 0;
+    const memRaw      = parseShow('MemoryCurrent');
+    const memBytes    = (memRaw && memRaw !== '[not set]' && parseInt(memRaw) < 1e15)
+                          ? parseInt(memRaw) : null;
+    const restarts    = parseInt(parseShow('NRestarts')) || 0;
+    const enterTs     = parseShow('ActiveEnterTimestamp');
+
+    let uptimeSec = null;
+    if (enterTs) {
+      const t = new Date(enterTs).getTime();
+      if (!isNaN(t) && t > 0) uptimeSec = Math.floor((Date.now() - t) / 1000);
+    }
+
+    let vhostCount = 0;
+    try {
+      if (fs.existsSync('/etc/frankenphp/sites'))
+        vhostCount = fs.readdirSync('/etc/frankenphp/sites')
+          .filter(f => f.endsWith('.conf')).length;
+    } catch {}
+
+    const [workersOut, cpuOut, versionOut, logsOut] = await Promise.all([
+      pid > 0 ? execP(`ps --ppid ${pid} -o pid= 2>/dev/null | wc -l`) : Promise.resolve('0'),
+      pid > 0 ? execP(`ps -p ${pid} -o %cpu= 2>/dev/null`)            : Promise.resolve('0'),
+      execP('frankenphp version 2>/dev/null || frankenphp --version 2>/dev/null'),
+      execP('journalctl -u frankenphp --no-pager -n 20 --output=short-iso 2>/dev/null'),
+    ]);
+
+    const workers  = Math.max(0, parseInt(workersOut) || 0);
+    const cpuPct   = parseFloat(cpuOut) || 0;
+    const verMatch = versionOut.match(/v?\d+\.\d+\.\d+/);
+    const version  = verMatch ? verMatch[0] : '—';
+    const logs     = logsOut.split('\n').filter(l => l);
+
+    res.json({ ok: activeState === 'active', status: activeState, version,
+      pid: pid || null, uptimeSec, memBytes, cpuPct, restarts, workers, vhostCount, logs });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
 // ── Virtual Hosts ──
 const VHOSTS_DIR = '/etc/frankenphp/sites';
 fs.mkdirSync(VHOSTS_DIR,{recursive:true});

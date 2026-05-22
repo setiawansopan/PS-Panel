@@ -246,6 +246,7 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       <div class="ns">Overview</div>
       <div class="ni on" onclick="go('dashboard')">◈ &nbsp;Dashboard</div>
       <div class="ns">Applications</div>
+      <div class="ni" onclick="go('frankenphp')">⚡ &nbsp;FrankenPHP</div>
       <div class="ni" onclick="go('redis')">⬡ &nbsp;Redis</div>
       <div class="ni" onclick="go('postgres')">◫ &nbsp;PostgreSQL</div>
       <div class="ni" onclick="go('phpfpm')">🐘 &nbsp;PHP-FPM</div>
@@ -470,6 +471,71 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       </div>
     </div>
 
+    <!-- ── FRANKENPHP ── -->
+    <div class="page" id="page-frankenphp">
+      <div class="ph"><h1>FrankenPHP</h1><p>// web server · Caddy-based PHP runtime</p></div>
+
+      <div class="g4">
+        <div class="mc" id="fpx-scard" style="--c:var(--accent)">
+          <div class="mc-lbl">Status</div>
+          <div style="margin:6px 0 8px" id="fpx-pill">—</div>
+          <div class="mc-sub" id="fpx-uptime">uptime: —</div>
+        </div>
+        <div class="mc" id="fpx-wcard" style="--c:var(--accent2)">
+          <div class="mc-lbl">Worker Processes</div>
+          <div class="mc-val" id="fpx-workers">—</div>
+          <div class="mc-sub">PHP worker threads</div>
+        </div>
+        <div class="mc" id="fpx-mcard" style="--c:var(--accent3)">
+          <div class="mc-lbl">Memory Usage</div>
+          <div class="mc-val" id="fpx-mem">—</div>
+          <div class="mc-sub">systemd reported</div>
+        </div>
+        <div class="mc" id="fpx-vcard" style="--c:var(--info)">
+          <div class="mc-lbl">Virtual Hosts</div>
+          <div class="mc-val" id="fpx-vhosts">—</div>
+          <div class="mc-sub">active site configs</div>
+        </div>
+      </div>
+
+      <div class="g2">
+        <div class="card">
+          <div class="ct">Server Info</div>
+          <div class="ir"><span class="irl">Version</span><span class="irv" id="fpx-ver">—</span></div>
+          <div class="ir"><span class="irl">Process ID</span><span class="irv" id="fpx-pid">—</span></div>
+          <div class="ir"><span class="irl">CPU Usage</span><span class="irv" id="fpx-cpu">—</span></div>
+          <div class="ir"><span class="irl">Service Restarts</span><span class="irv" id="fpx-restarts">—</span></div>
+          <div class="ir"><span class="irl">Sites Directory</span><span class="irv" style="color:var(--muted);font-size:10px">/etc/frankenphp/sites/</span></div>
+        </div>
+        <div class="card">
+          <div class="ct">Resource Usage</div>
+          <div style="margin-bottom:16px">
+            <div class="mc-lbl" style="margin-bottom:6px">Memory</div>
+            <div style="background:var(--ink3);height:6px;border-radius:3px;overflow:hidden">
+              <div id="fpx-membar" style="height:100%;background:var(--accent3);border-radius:3px;transition:width .6s;width:0%"></div>
+            </div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:5px" id="fpx-membarlbl">—</div>
+          </div>
+          <div style="margin-bottom:16px">
+            <div class="mc-lbl" style="margin-bottom:6px">CPU</div>
+            <div style="background:var(--ink3);height:6px;border-radius:3px;overflow:hidden">
+              <div id="fpx-cpubar" style="height:100%;background:var(--accent2);border-radius:3px;transition:width .6s;width:0%"></div>
+            </div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:5px" id="fpx-cpubarlbl">—</div>
+          </div>
+          <div class="stat-grid">
+            <div class="stat"><div class="stat-lbl">Workers</div><div class="stat-val accent" id="fpx-wstat">—</div></div>
+            <div class="stat"><div class="stat-lbl">Restarts</div><div class="stat-val" id="fpx-rstat">—</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="ct">Recent Logs <span class="ct-badge" id="fpx-logcount"></span></div>
+        <div id="fpx-logs" style="background:#060a10;border:1px solid var(--line);border-radius:10px;padding:14px 16px;font-family:var(--mono);font-size:10px;color:var(--accent);line-height:1.85;max-height:240px;overflow-y:auto;white-space:pre-wrap">—</div>
+      </div>
+    </div>
+
     <!-- ── SERVICES ── -->
     <div class="page" id="page-services">
       <div class="ph"><h1>Services</h1><p>// start · stop · restart</p></div>
@@ -670,6 +736,7 @@ function go(name){
   if(name==='redis')     loadRedis();
   if(name==='postgres')  loadPostgres();
   if(name==='phpfpm')    loadFpm();
+  if(name==='frankenphp') loadFrankenphp();
   if(name==='deploy')    loadWebhookList();
 }
 
@@ -846,6 +913,64 @@ async function loadFpm(){
   const utilPct=total>0?Math.round(active/total*100):0;
   document.getElementById('fpm-utilbar').style.width=utilPct+'%';
   document.getElementById('fpm-utilpct').textContent=utilPct+'% utilized ('+active+' active / '+total+' total)';
+}
+
+// ── FrankenPHP ──
+async function loadFrankenphp(){
+  const d=await api('GET','/api/frankenphp');
+  if(!d)return;
+
+  // Status card
+  const isOn=d.status==='active';
+  document.getElementById('fpx-scard').style.setProperty('--c',isOn?'var(--accent)':'var(--danger)');
+  document.getElementById('fpx-pill').innerHTML=
+    `<span class="pill ${isOn?'p-on':'p-off'}"><span class="pd"></span>${isOn?'running':(d.status||'stopped')}</span>`;
+  document.getElementById('fpx-uptime').textContent=
+    'uptime: '+(d.uptimeSec!=null?fmtUptime(d.uptimeSec):'—');
+
+  // Metric cards
+  document.getElementById('fpx-workers').textContent=d.workers??'—';
+  setBar(document.getElementById('fpx-wcard'),Math.min(100,(d.workers||0)*10));
+  document.getElementById('fpx-mem').textContent=d.memBytes!=null?fmt(d.memBytes):'—';
+  document.getElementById('fpx-vhosts').textContent=d.vhostCount??'—';
+  setBar(document.getElementById('fpx-vcard'),Math.min(100,(d.vhostCount||0)*25));
+
+  // Server info
+  document.getElementById('fpx-ver').textContent=d.version||'—';
+  document.getElementById('fpx-pid').textContent=d.pid||'—';
+  document.getElementById('fpx-cpu').textContent=d.cpuPct!=null?d.cpuPct.toFixed(1)+'%':'—';
+  const rEl=document.getElementById('fpx-restarts');
+  rEl.textContent=d.restarts??'—';
+  rEl.style.color=d.restarts>0?'var(--warn)':'';
+
+  // Memory bar (ref: 512 MB)
+  const memPct=d.memBytes?Math.min(100,d.memBytes/(512*1024*1024)*100):0;
+  document.getElementById('fpx-membar').style.width=memPct.toFixed(1)+'%';
+  document.getElementById('fpx-membarlbl').textContent=d.memBytes?fmt(d.memBytes)+' used':'not available';
+  setBar(document.getElementById('fpx-mcard'),memPct);
+
+  // CPU bar
+  const cpuPct=Math.min(100,d.cpuPct||0);
+  document.getElementById('fpx-cpubar').style.width=cpuPct.toFixed(1)+'%';
+  document.getElementById('fpx-cpubarlbl').textContent=(d.cpuPct||0).toFixed(1)+'% of one core';
+
+  // Stat grid
+  document.getElementById('fpx-wstat').textContent=d.workers??'—';
+  const rs=document.getElementById('fpx-rstat');
+  rs.textContent=d.restarts??'—';
+  rs.className='stat-val '+(d.restarts>0?'warn':'accent');
+
+  // Logs
+  const logEl=document.getElementById('fpx-logs');
+  document.getElementById('fpx-logcount').textContent=d.logs?.length?d.logs.length+' lines':'';
+  if(d.logs?.length){
+    logEl.style.color='var(--accent)';
+    logEl.textContent=d.logs.join('\n');
+    logEl.scrollTop=logEl.scrollHeight;
+  }else{
+    logEl.style.color='var(--muted)';
+    logEl.textContent='No logs available';
+  }
 }
 
 // ── Services ──

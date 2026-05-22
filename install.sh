@@ -21,6 +21,7 @@ WARN_DISK_GB=5
 MIN_RAM_MB=512
 MAX_RETRIES=3
 RETRY_DELAY=5
+FRANKENPHP_FALLBACK="v1.3.2"
 
 # ── Colors ───────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -232,7 +233,8 @@ apt_install() {
 curl_download() {
   local url="$1" dest="$2"
   retry_run "download $(basename "$dest")" \
-    curl -fsSL --connect-timeout 30 --retry 3 "$url" -o "$dest"
+    curl -fsSL --connect-timeout 10 --max-time 30 --retry 3 \
+      -H "User-Agent: ps-panel-installer/2.1" "$url" -o "$dest"
 }
 
 # wget_download <url> <dest>
@@ -428,20 +430,91 @@ install_frankenphp() {
   fi
 
   spinner_start "Fetching latest FrankenPHP release info..."
-  local arch latest
+  local arch latest api_response
   arch=$(dpkg --print-architecture)
-  latest=$(curl -s --connect-timeout 15 \
-    https://api.github.com/repos/dunglas/frankenphp/releases/latest \
-    | grep '"tag_name"' | cut -d'"' -f4) \
-    || fatal "Failed to fetch FrankenPHP release info" \
-             "Check your internet connection or try again later."
+  latest=""
+
+  # Strategy 1: GitHub API with User-Agent and timeouts
+  api_response=$(curl -sf \
+    --connect-timeout 10 --max-time 30 \
+    -H "User-Agent: ps-panel-installer/2.1" \
+    https://api.github.com/repos/dunglas/frankenphp/releases/latest 2>/dev/null || true)
+
+  if echo "$api_response" | grep -qi "rate limit\|API rate limit exceeded"; then
+    warn "GitHub API rate limit hit — skipping API method"
+    api_response=""
+  fi
+
+  if [[ -n "$api_response" ]]; then
+    latest=$(echo "$api_response" | grep '"tag_name"' | cut -d'"' -f4 || true)
+  fi
+
+  # Strategy 2: Parse version from redirect URL
+  if [[ -z "$latest" ]]; then
+    warn "GitHub API unavailable — trying redirect method..."
+    latest=$(curl -fsI \
+      --connect-timeout 10 --max-time 30 \
+      -H "User-Agent: ps-panel-installer/2.1" \
+      https://github.com/dunglas/frankenphp/releases/latest 2>/dev/null \
+      | grep -i "^location:" | sed 's|.*/tag/||' | tr -d '\r\n' || true)
+  fi
+
+  # Strategy 3: Hardcoded fallback
+  if [[ -z "$latest" ]]; then
+    warn "Could not fetch FrankenPHP version — using fallback ${FRANKENPHP_FALLBACK}"
+    latest="$FRANKENPHP_FALLBACK"
+  fi
+
+  log_raw "FrankenPHP version resolved: $latest"
   spinner_stop ok
 
+  # Download with retry and exponential backoff (5s, 10s, 20s)
   spinner_start "Downloading FrankenPHP ${latest}..."
-  curl_download \
-    "https://github.com/dunglas/frankenphp/releases/download/${latest}/frankenphp-linux-${arch}" \
-    /usr/local/bin/frankenphp
+  local primary_url="https://github.com/dunglas/frankenphp/releases/download/${latest}/frankenphp-linux-${arch}"
+  local fallback_url="https://github.com/dunglas/frankenphp/releases/download/${latest}/frankenphp-linux-x86_64"
+  local delays=(5 10 20)
+  local dl_ok=false
+  local attempt
+
+  for attempt in 1 2 3; do
+    log_raw "FrankenPHP download attempt $attempt/3 (primary: $primary_url)"
+    if curl -fsSL \
+        --connect-timeout 10 --max-time 120 \
+        -H "User-Agent: ps-panel-installer/2.1" \
+        "$primary_url" -o /usr/local/bin/frankenphp >> "$LOG_FILE" 2>&1; then
+      dl_ok=true; break
+    fi
+    log_raw "Primary URL failed — trying fallback: $fallback_url"
+    if curl -fsSL \
+        --connect-timeout 10 --max-time 120 \
+        -H "User-Agent: ps-panel-installer/2.1" \
+        "$fallback_url" -o /usr/local/bin/frankenphp >> "$LOG_FILE" 2>&1; then
+      dl_ok=true; break
+    fi
+    if (( attempt < 3 )); then
+      local delay="${delays[$((attempt - 1))]}"
+      printf "\r  ${YELLOW}[!]${RESET}  Download failed, retrying in %ds... (attempt %d/3)   \n" \
+        "$delay" "$(( attempt + 1 ))" >&2
+      sleep "$delay"
+    fi
+  done
+
+  if [[ "$dl_ok" != "true" ]]; then
+    spinner_stop fail
+    fatal "Failed to download FrankenPHP after 3 attempts" \
+      "Check connectivity or manually download from github.com/dunglas/frankenphp/releases"
+  fi
+
   chmod +x /usr/local/bin/frankenphp
+  spinner_stop ok
+
+  # Verify the downloaded binary is a valid ELF executable
+  spinner_start "Verifying FrankenPHP binary..."
+  if ! file /usr/local/bin/frankenphp 2>/dev/null | grep -q "ELF"; then
+    spinner_stop fail
+    fatal "Downloaded FrankenPHP binary is not a valid ELF executable" \
+      "The download may be corrupted or the wrong architecture. Check ${LOG_FILE} and retry."
+  fi
   spinner_stop ok
 
   spinner_start "Creating FrankenPHP config and systemd service..."
