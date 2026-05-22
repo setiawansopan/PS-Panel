@@ -532,7 +532,13 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       <div class="ph"><h1>Deploy</h1><p>// git pull to application directory</p></div>
       <div class="g2" style="max-width:1040px">
       <div class="card">
-        <div class="fg"><label class="inp-lbl">Application Path</label><input class="inp" id="dep-path" placeholder="/var/www/myapp"></div>
+        <div class="fg">
+          <label class="inp-lbl">Virtual Host / Application</label>
+          <select class="inp" id="dep-vhost" onchange="selectDeployVhost()">
+            <option value="">-- Select a virtual host --</option>
+          </select>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:6px">Path: <span id="dep-path-display">none selected</span></div>
+        </div>
         <div class="fg"><label class="inp-lbl">Branch</label><input class="inp" id="dep-branch" value="main"></div>
         <div class="fg" style="margin-bottom:16px">
           <label class="check-lbl"><input type="checkbox" id="dep-laravel" onchange="toggleLaravelSteps()"> Laravel App</label>
@@ -584,7 +590,7 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         <div class="ct">Auto Deploy
           <div style="display:flex;align-items:center;gap:10px">
             <span class="ct-badge">GitHub Webhook</span>
-            <button class="btn" style="padding:5px 13px;font-size:11px" onclick="document.getElementById('m-webhook').classList.add('open')">+ Add</button>
+            <button class="btn" style="padding:5px 13px;font-size:11px" onclick="openWebhookModal()">+ Add</button>
           </div>
         </div>
         <div id="webhook-list"><div style="color:var(--muted);font-size:12px;font-family:var(--mono)">Belum ada webhook. Klik + Add untuk setup auto deploy.</div></div>
@@ -705,7 +711,12 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
 <div class="mbg" id="m-webhook">
   <div class="modal">
     <h3>Add Auto Deploy</h3>
-    <div class="fg"><label class="inp-lbl">Application Path</label><input class="inp" id="wh-path" placeholder="/var/www/myapp"></div>
+    <div class="fg">
+      <label class="inp-lbl">Virtual Host / Application</label>
+      <select class="inp" id="wh-vhost">
+        <option value="">-- Select a virtual host --</option>
+      </select>
+    </div>
     <div class="fg"><label class="inp-lbl">Branch</label><input class="inp" id="wh-branch" value="main"></div>
     <label class="check-lbl" style="margin-bottom:4px"><input type="checkbox" id="wh-laravel"> Laravel App (composer + artisan)</label>
     <div class="mf">
@@ -1161,6 +1172,7 @@ async function delVhost(domain){if(!confirm(`Remove vhost: ${domain}?`))return;a
 
 // ── Webhooks ──
 async function loadWebhookList(){
+  // Load webhooks for the webhook list
   const d=await api('GET','/api/webhooks');if(!d)return;
   const el=document.getElementById('webhook-list');
   if(!d.length){el.innerHTML='<div style="color:var(--muted);font-size:12px;font-family:var(--mono)">Belum ada webhook. Klik + Add untuk setup auto deploy.</div>';return;}
@@ -1173,16 +1185,55 @@ async function loadWebhookList(){
       <td><button class="btn btn-red" style="padding:4px 11px;font-size:11px" onclick="deleteWebhook('${h.id}')">Remove</button></td>
     </tr>`).join('')+
   '</tbody></table>';
+  // Also load vhosts for deploy dropdown
+  loadDeployVhosts();
+}
+async function loadDeployVhosts(){
+  const v=await api('GET','/api/vhosts');if(!v)return;
+  const sel=document.getElementById('dep-vhost');
+  sel.innerHTML='<option value="">-- Select a virtual host --</option>';
+  v.forEach(vhost=>{
+    const domain=vhost.file.replace('.conf','');
+    // Parse document root from config file
+    const m=vhost.content.match(/root\s+\*\s+(.+?)(?:\n|$)/);
+    const root=m?m[1].trim():'/var/www/'+domain;
+    const opt=document.createElement('option');
+    opt.value=root;
+    opt.textContent=domain+' ('+root+')';
+    sel.appendChild(opt);
+  });
+}
+function selectDeployVhost(){
+  const path=document.getElementById('dep-vhost').value;
+  document.getElementById('dep-path-display').textContent=path||'none selected';
+}
+async function openWebhookModal(){
+  // Load vhosts into webhook modal dropdown
+  const v=await api('GET','/api/vhosts');
+  const sel=document.getElementById('wh-vhost');
+  sel.innerHTML='<option value="">-- Select a virtual host --</option>';
+  if(v){
+    v.forEach(vhost=>{
+      const domain=vhost.file.replace('.conf','');
+      const m=vhost.content.match(/root\s+\*\s+(.+?)(?:\n|$)/);
+      const root=m?m[1].trim():'/var/www/'+domain;
+      const opt=document.createElement('option');
+      opt.value=root;
+      opt.textContent=domain+' ('+root+')';
+      sel.appendChild(opt);
+    });
+  }
+  document.getElementById('m-webhook').classList.add('open');
 }
 async function addWebhook(){
-  const p=document.getElementById('wh-path').value.trim();if(!p)return;
+  const p=document.getElementById('wh-vhost').value.trim();if(!p){alert('Pilih virtual host terlebih dahulu');return;}
   const r=await api('POST','/api/webhooks',{path:p,branch:document.getElementById('wh-branch').value||'main',laravel:document.getElementById('wh-laravel').checked});
   if(!r?.ok){alert(r?.error||'Failed');return;}
   document.getElementById('m-webhook').classList.remove('open');
   document.getElementById('wi-url').textContent=location.origin+'/api/webhook/'+r.id;
   document.getElementById('wi-secret').textContent=r.secret;
   document.getElementById('m-webhook-info').classList.add('open');
-  document.getElementById('wh-path').value='';
+  document.getElementById('wh-vhost').value='';
 }
 async function deleteWebhook(id){
   if(!confirm('Hapus webhook ini?'))return;
@@ -1219,7 +1270,7 @@ function toggleLaravelSteps(){
     document.getElementById('dep-laravel').checked?'block':'none';
 }
 async function deploy(){
-  const p=document.getElementById('dep-path').value.trim();if(!p)return;
+  const p=document.getElementById('dep-vhost').value.trim();if(!p){alert('Pilih virtual host terlebih dahulu');return;}
   const btn=document.getElementById('dep-btn'),out=document.getElementById('dep-out');
   const isLaravel=document.getElementById('dep-laravel').checked;
   const branch=document.getElementById('dep-branch').value||'main';
