@@ -576,13 +576,38 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
               1. Copy key di atas<br>
               2. GitHub repo → <span style="color:var(--text)">Settings → Deploy keys → Add key</span><br>
               3. Paste key → centang <span style="color:var(--text)">Allow write access</span> (opsional) → Add<br>
-              4. Clone repo via SSH (sekali saja):<br>
-              <span style="color:var(--accent);padding-left:12px">git clone git@github.com:user/repo.git /var/www/app</span><br>
+              4. Gunakan fitur <span style="color:var(--accent)">Clone Repository</span> di bawah ↓<br>
               5. Deploy berikutnya pakai panel seperti biasa ✓
             </div>
           </div>
         </div>
       </div>
+      </div>
+
+      <!-- Clone Repository -->
+      <div class="card" style="max-width:1040px;margin-top:0">
+        <div class="ct">Clone Repository <span class="ct-badge">First-time Setup</span></div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:16px;line-height:1.7">
+          Clone repo GitHub ke virtual host yang dipilih. Lakukan sekali saja saat pertama setup. Pastikan SSH Deploy Key sudah ditambahkan ke repo jika private.
+        </div>
+        <div class="g2" style="margin-bottom:14px">
+          <div class="fg" style="margin-bottom:0">
+            <label class="inp-lbl">Repository URL</label>
+            <input class="inp" id="clone-url" placeholder="git@github.com:user/repo.git">
+            <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:5px">
+              SSH: <code style="color:var(--accent)">git@github.com:user/repo.git</code> atau HTTPS: <code style="color:var(--accent)">https://github.com/user/repo.git</code>
+            </div>
+          </div>
+          <div class="fg" style="margin-bottom:0">
+            <label class="inp-lbl">Target Virtual Host</label>
+            <select class="inp" id="clone-vhost" onchange="selectCloneVhost()">
+              <option value="">-- Select a virtual host --</option>
+            </select>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:5px">Clone ke: <span id="clone-path-display" style="color:var(--accent)">none selected</span></div>
+          </div>
+        </div>
+        <button class="btn" id="clone-btn" onclick="cloneRepo()">⬇ &nbsp;Clone Repository</button>
+        <div class="term" id="clone-out"></div>
       </div>
 
       <!-- Auto Deploy / Webhook -->
@@ -1220,14 +1245,39 @@ async function loadWebhookList(){
 }
 async function loadDeployVhosts(){
   const v=await api('GET','/api/vhosts');if(!v)return;
-  const sel=document.getElementById('dep-vhost');
-  sel.innerHTML='<option value="">-- Select a virtual host --</option>';
-  v.forEach(vhost=>{
-    const opt=document.createElement('option');
-    opt.value=vhost.docroot;
-    opt.textContent=vhost.domain+' ('+vhost.docroot+')';
-    sel.appendChild(opt);
+  ['dep-vhost','clone-vhost'].forEach(id=>{
+    const sel=document.getElementById(id);
+    if(!sel)return;
+    sel.innerHTML='<option value="">-- Select a virtual host --</option>';
+    v.forEach(vhost=>{
+      const opt=document.createElement('option');
+      opt.value=vhost.docroot;
+      opt.textContent=vhost.domain+' ('+vhost.docroot+')';
+      sel.appendChild(opt);
+    });
   });
+}
+function selectCloneVhost(){
+  const p=document.getElementById('clone-vhost').value;
+  document.getElementById('clone-path-display').textContent=p||'none selected';
+}
+async function cloneRepo(){
+  const url=document.getElementById('clone-url').value.trim();
+  const targetPath=document.getElementById('clone-vhost').value;
+  if(!url){alert('Masukkan repository URL');return;}
+  if(!targetPath){alert('Pilih virtual host target');return;}
+  const btn=document.getElementById('clone-btn');
+  const out=document.getElementById('clone-out');
+  btn.textContent='⏳ Cloning...';btn.disabled=true;
+  out.style.display='block';
+  out.style.color='var(--accent)';
+  out.textContent=`Cloning ${url}\nke ${targetPath} ...\n`;
+  const r=await api('POST','/api/clone',{repoUrl:url,path:targetPath});
+  btn.innerHTML='⬇ &nbsp;Clone Repository';btn.disabled=false;
+  if(!r){out.textContent+='[error] No response';out.style.color='var(--danger)';return;}
+  out.textContent+=r.output||'';
+  out.style.color=r.ok?'var(--accent)':'var(--danger)';
+  if(r.ok) out.textContent+='\n✓ Clone berhasil! Sekarang bisa deploy via panel.';
 }
 function selectDeployVhost(){
   const path=document.getElementById('dep-vhost').value;

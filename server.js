@@ -537,6 +537,42 @@ app.get('/api/deploy-key', auth, (req, res) => {
   });
 });
 
+// ── Git Clone ──
+app.post('/api/clone', auth, (req, res) => {
+  const { repoUrl, path: targetPath } = req.body || {};
+  if (!repoUrl || !targetPath)
+    return res.status(400).json({ error: 'repoUrl and path are required' });
+  if (!path.isAbsolute(targetPath))
+    return res.status(400).json({ error: 'Path must be absolute' });
+  // Only allow git/ssh/https URLs
+  if (!/^(git@|https?:\/\/)[\w.\-/:]+\.git$/.test(repoUrl))
+    return res.status(400).json({ error: 'Invalid repository URL. Use SSH (git@github.com:...) or HTTPS format.' });
+
+  // Check if target directory already has files (non-empty)
+  try {
+    if (fs.existsSync(targetPath)) {
+      const files = fs.readdirSync(targetPath).filter(f => f !== '.git');
+      if (files.length > 0)
+        return res.status(400).json({ error: `Directory ${targetPath} is not empty. Remove existing files first or choose another path.` });
+    }
+  } catch (e) {
+    return res.status(400).json({ error: 'Cannot check target directory: ' + e.message });
+  }
+
+  // Run git clone — use GIT_SSH_COMMAND to use ps-panel deploy key if it exists
+  const sshKey = '/root/.ssh/ps-panel-deploy';
+  const sshCmd = fs.existsSync(sshKey)
+    ? `GIT_SSH_COMMAND="ssh -i ${sshKey} -o StrictHostKeyChecking=no"`
+    : '';
+  const cmd = `${sshCmd} git clone ${repoUrl} ${targetPath} 2>&1`;
+
+  exec(cmd, { timeout: 120000 }, (err, stdout, stderr) => {
+    const output = (stdout || '') + (stderr || '');
+    if (err) return res.json({ ok: false, output });
+    res.json({ ok: true, output });
+  });
+});
+
 // ── Deploy ──
 app.post('/api/deploy', auth,(req,res)=>{
   const {path:p,branch,laravel}=req.body;
