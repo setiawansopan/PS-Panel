@@ -93,27 +93,28 @@ app.post('/api/services/:name/:action', auth,(req,res)=>{
 // ── System metrics ──
 app.get('/api/metrics', auth, async(req,res)=>{
   try {
+    // Individual catches so one failing call doesn't kill the entire response
     const [cpu, mem, disk, net, procs, temp] = await Promise.all([
-      si.currentLoad(),
-      si.mem(),
-      si.fsSize(),
-      si.networkStats(),
-      si.processes(),
+      si.currentLoad().catch(()=>({currentLoad:0,cpus:[],avgLoad1:0,avgLoad5:0,avgLoad15:0})),
+      si.mem().catch(()=>({used:0,total:1,free:0,cached:0})),
+      si.fsSize().catch(()=>[]),
+      si.networkStats().catch(()=>[]),
+      si.processes().catch(()=>({list:[]})),
       si.cpuTemperature().catch(()=>null),
     ]);
-    // Top 5 processes by CPU
+
     const topProcs = (procs.list||[])
       .sort((a,b)=>b.pcpu-a.pcpu)
       .slice(0,5)
       .map(p=>({name:p.name, pid:p.pid, cpu:p.pcpu.toFixed(1), mem:p.pmem.toFixed(1), memVsz: p.mem_vsz}));
 
-    const netIface = net.find(n=>n.iface!=='lo') || net[0] || {};
+    const netIface = (net||[]).find(n=>n.iface!=='lo') || (net||[])[0] || {};
 
     res.json({
-      cpu: { pct: Math.round(cpu.currentLoad), cores: cpu.cpus?.length||1, speed: cpu.currentLoad.toFixed(1) },
-      mem: { used:mem.used, total:mem.total, free:mem.free, pct:Math.round(mem.used/mem.total*100), cached:mem.cached },
-      disk: disk[0] ? {used:disk[0].used, size:disk[0].size, pct:Math.round(disk[0].use), fs:disk[0].fs} : null,
-      load: [cpu.avgLoad1?.toFixed(2), cpu.avgLoad5?.toFixed(2), cpu.avgLoad15?.toFixed(2)],
+      cpu: { pct: Math.round(cpu.currentLoad||0), cores: cpu.cpus?.length||1, speed: (cpu.currentLoad||0).toFixed(1) },
+      mem: { used:mem.used, total:mem.total||1, free:mem.free, pct:Math.round((mem.used/(mem.total||1))*100), cached:mem.cached },
+      disk: disk[0] ? {used:disk[0].used, size:disk[0].size, pct:Math.round(disk[0].use||0), fs:disk[0].fs} : null,
+      load: [cpu.avgLoad1?.toFixed(2)||'0.00', cpu.avgLoad5?.toFixed(2)||'0.00', cpu.avgLoad15?.toFixed(2)||'0.00'],
       net: { rx: netIface.rx_bytes||0, tx: netIface.tx_bytes||0, rxSec: netIface.rx_sec||0, txSec: netIface.tx_sec||0, iface: netIface.iface||'eth0' },
       procs: topProcs,
       temp: temp?.main || null,
