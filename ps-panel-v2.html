@@ -696,9 +696,25 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
 <div class="mbg" id="m-vhost">
   <div class="modal">
     <h3>Add Virtual Host</h3>
-    <div class="fg"><label class="inp-lbl">Domain</label><input class="inp" id="v-domain" placeholder="example.com"></div>
-    <div class="fg"><label class="inp-lbl">Document Root (optional)</label><input class="inp" id="v-root" placeholder="/var/www/example.com"></div>
-    <label class="check-lbl" style="margin-top:2px;margin-bottom:8px"><input type="checkbox" id="v-php" checked> Enable PHP</label>
+    <div class="fg">
+      <label class="inp-lbl">Domain</label>
+      <input class="inp" id="v-domain" placeholder="example.com" onkeyup="updateVhostPreview()">
+    </div>
+    <div class="fg">
+      <label class="inp-lbl">Document Root <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+      <input class="inp" id="v-root" placeholder="/var/www/example.com" onkeyup="updateVhostPreview()">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px;line-height:1.6">
+        <div style="color:var(--dim);margin-bottom:4px">📍 Path yang akan digunakan:</div>
+        <div style="background:var(--ink3);padding:8px 10px;border-radius:6px;color:var(--accent)">
+          <span id="vhost-path-preview">/var/www/example.com</span>
+        </div>
+        <div style="margin-top:6px;color:var(--muted)">
+          • Kosongkan untuk default: <code style="background:var(--ink3);padding:2px 6px;border-radius:4px">/var/www/{domain}</code><br>
+          • Isi manual jika ingin path berbeda atau folder sudah ada
+        </div>
+      </div>
+    </div>
+    <label class="check-lbl" style="margin-top:12px;margin-bottom:8px"><input type="checkbox" id="v-php" checked> Enable PHP</label>
     <label class="check-lbl" style="margin-top:6px"><input type="checkbox" id="v-ssl"> Enable SSL (Let's Encrypt)</label>
     <div class="mf">
       <button class="btn btn-ghost" onclick="document.getElementById('m-vhost').classList.remove('open')">Cancel</button>
@@ -1169,6 +1185,12 @@ async function loadVhosts(){
       <td><button class="btn btn-red" style="padding:4px 11px;font-size:11px" onclick="delVhost('${v.domain}')">Remove</button></td>
     </tr>`).join('')
     :'<tr><td colspan="7" style="color:var(--muted)">No virtual hosts configured</td></tr>';
+}
+function updateVhostPreview(){
+  const domain=document.getElementById('v-domain').value.trim();
+  const root=document.getElementById('v-root').value.trim();
+  const finalPath=root||(domain?`/var/www/${domain}`:'/var/www/example.com');
+  document.getElementById('vhost-path-preview').textContent=finalPath;
 }
 async function addVhost(){
   const domain=document.getElementById('v-domain').value.trim();if(!domain)return;
