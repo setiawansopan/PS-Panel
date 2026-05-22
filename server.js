@@ -288,6 +288,164 @@ app.post('/api/databases', auth,(req,res)=>{
   });
 });
 
+// ── Settings (PHP.ini + FrankenPHP) ──
+const PHP_INI_PATHS = [
+  '/etc/php/8.3/embed/php.ini',
+  '/etc/php/8.3/cli/php.ini',
+  '/etc/php/8.3/fpm/php.ini',
+];
+const CADDYFILE_PATH = '/etc/frankenphp/Caddyfile';
+
+const PHP_KEYS = [
+  'upload_max_filesize',
+  'post_max_size',
+  'memory_limit',
+  'max_execution_time',
+  'max_input_vars',
+  'max_input_time',
+];
+
+// Validate PHP ini value format
+// Size:    -?\d+[KMG]?     (e.g. 128M, 1G, -1)
+// Integer: -?\d+           (e.g. 30, 0, -1)
+const SIZE_RE = /^-?\d+[KMG]?$/i;
+const INT_RE  = /^-?\d+$/;
+const PHP_VALIDATORS = {
+  upload_max_filesize: SIZE_RE,
+  post_max_size:       SIZE_RE,
+  memory_limit:        SIZE_RE,
+  max_execution_time:  INT_RE,
+  max_input_vars:      INT_RE,
+  max_input_time:      INT_RE,
+};
+
+function findPhpIni() {
+  for (const p of PHP_INI_PATHS) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
+function readPhpIni() {
+  const iniPath = findPhpIni();
+  const settings = {};
+  for (const k of PHP_KEYS) settings[k] = null;
+  if (!iniPath) return { path: null, settings };
+  try {
+    const content = fs.readFileSync(iniPath, 'utf8');
+    for (const k of PHP_KEYS) {
+      const m = content.match(new RegExp(`^\\s*${k}\\s*=\\s*(.+?)\\s*$`, 'm'));
+      if (m) settings[k] = m[1].trim();
+    }
+  } catch {}
+  return { path: iniPath, settings };
+}
+
+function updatePhpIni(updates) {
+  const iniPath = findPhpIni();
+  if (!iniPath) throw new Error('php.ini not found');
+  // Validate
+  for (const [k, v] of Object.entries(updates)) {
+    if (!PHP_KEYS.includes(k)) throw new Error(`Unknown key: ${k}`);
+    if (!PHP_VALIDATORS[k].test(String(v))) throw new Error(`Invalid value for ${k}: ${v}`);
+  }
+  // Backup
+  fs.copyFileSync(iniPath, iniPath + '.bak.' + Date.now());
+  let content = fs.readFileSync(iniPath, 'utf8');
+  for (const [k, v] of Object.entries(updates)) {
+    const re = new RegExp(`^(\\s*;?\\s*)${k}(\\s*=\\s*).+$`, 'm');
+    if (re.test(content)) {
+      content = content.replace(re, `${k}$2${v}`);
+    } else {
+      content += `\n${k} = ${v}\n`;
+    }
+  }
+  fs.writeFileSync(iniPath, content);
+  return iniPath;
+}
+
+function readFrankenphpSettings() {
+  if (!fs.existsSync(CADDYFILE_PATH)) return { num_threads: null };
+  try {
+    const content = fs.readFileSync(CADDYFILE_PATH, 'utf8');
+    const m = content.match(/num_threads\s+(\d+)/);
+    return { num_threads: m ? parseInt(m[1]) : null };
+  } catch { return { num_threads: null }; }
+}
+
+function updateFrankenphpSettings(updates) {
+  if (!fs.existsSync(CADDYFILE_PATH)) throw new Error('Caddyfile not found');
+  const threads = parseInt(updates.num_threads);
+  if (!Number.isInteger(threads) || threads < 1 || threads > 256)
+    throw new Error('num_threads must be 1-256');
+
+  // Backup
+  fs.copyFileSync(CADDYFILE_PATH, CADDYFILE_PATH + '.bak.' + Date.now());
+  let content = fs.readFileSync(CADDYFILE_PATH, 'utf8');
+
+  const MARK_START = '# PS-PANEL-MANAGED-START';
+  const MARK_END   = '# PS-PANEL-MANAGED-END';
+  const block =
+`${MARK_START}
+{
+\tfrankenphp {
+\t\tnum_threads ${threads}
+\t}
+}
+${MARK_END}`;
+
+  const blockRe = new RegExp(`${MARK_START}[\\s\\S]*?${MARK_END}`);
+  if (blockRe.test(content)) {
+    content = content.replace(blockRe, block);
+  } else {
+    content = block + '\n\n' + content;
+  }
+  fs.writeFileSync(CADDYFILE_PATH, content);
+}
+
+app.get('/api/settings', auth, (req, res) => {
+  try {
+    const php = readPhpIni();
+    const fp  = readFrankenphpSettings();
+    res.json({
+      ok: true,
+      php: php.settings,
+      phpIniPath: php.path,
+      frankenphp: fp,
+    });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
+app.post('/api/settings/update', auth, (req, res) => {
+  const { password, php, frankenphp } = req.body || {};
+  if (!password || !bcrypt.compareSync(password, ADMIN_HASH))
+    return res.status(401).json({ error: 'Wrong password' });
+
+  try {
+    let phpPath = null;
+    if (php && typeof php === 'object' && Object.keys(php).length) {
+      phpPath = updatePhpIni(php);
+    }
+    let fpUpdated = false;
+    if (frankenphp && frankenphp.num_threads != null) {
+      updateFrankenphpSettings(frankenphp);
+      fpUpdated = true;
+    }
+    // Restart FrankenPHP to apply
+    exec('systemctl restart frankenphp', (err, _, se) => {
+      res.json({
+        ok: true,
+        phpIniPath: phpPath,
+        frankenphpUpdated: fpUpdated,
+        restartOk: !err,
+        restartError: err ? (se || err.message) : null,
+      });
+    });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 // ── Webhooks (Auto Deploy) ──
 const WEBHOOKS_FILE = path.join(__dirname, 'webhooks.json');
 function loadWebhooks() {

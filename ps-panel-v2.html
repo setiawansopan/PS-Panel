@@ -264,6 +264,8 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       <div class="ni" onclick="go('vhosts')">◉ &nbsp;Virtual Hosts</div>
       <div class="ns">Deploy</div>
       <div class="ni" onclick="go('deploy')">▲ &nbsp;Deploy</div>
+      <div class="ns">Configuration</div>
+      <div class="ni" onclick="go('settings')">⚒ &nbsp;Settings</div>
     </nav>
     <div class="sb-ft">
       <div class="dot"></div>
@@ -580,7 +582,99 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       </div>
     </div>
 
+    <!-- ── SETTINGS ── -->
+    <div class="page" id="page-settings">
+      <div class="ph">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <h1>Settings</h1>
+            <p>// konfigurasi PHP & FrankenPHP</p>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost" id="st-cancel" onclick="cancelSettingsEdit()" style="display:none">Cancel</button>
+            <button class="btn" id="st-edit-btn" onclick="unlockSettingsEdit()">⚿ &nbsp;Unlock Edit</button>
+            <button class="btn" id="st-save-btn" onclick="saveSettings()" style="display:none">✓ &nbsp;Save Changes</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="st-banner" style="display:none;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:var(--warn);font-family:var(--mono);font-size:11px;padding:10px 14px;border-radius:9px;margin-bottom:14px">
+        <span>⚿ Edit mode aktif — perubahan akan otomatis restart FrankenPHP service. Konfigurasi lama dibackup sebagai .bak.</span>
+      </div>
+
+      <div class="g2" style="max-width:1040px">
+        <!-- PHP.ini Settings -->
+        <div class="card">
+          <div class="ct">PHP Configuration <span class="ct-badge" id="st-php-path">php.ini</span></div>
+          <div class="fg">
+            <label class="inp-lbl">upload_max_filesize <span style="color:var(--dim);text-transform:none;letter-spacing:0">— max upload (e.g. 10M, 100M, 1G)</span></label>
+            <input class="inp" id="st-upload_max_filesize" disabled>
+          </div>
+          <div class="fg">
+            <label class="inp-lbl">post_max_size <span style="color:var(--dim);text-transform:none;letter-spacing:0">— max POST body (≥ upload size)</span></label>
+            <input class="inp" id="st-post_max_size" disabled>
+          </div>
+          <div class="fg">
+            <label class="inp-lbl">memory_limit <span style="color:var(--dim);text-transform:none;letter-spacing:0">— PHP memory per script (e.g. 256M, -1 = unlimited)</span></label>
+            <input class="inp" id="st-memory_limit" disabled>
+          </div>
+          <div class="fg">
+            <label class="inp-lbl">max_execution_time <span style="color:var(--dim);text-transform:none;letter-spacing:0">— seconds (0 = unlimited)</span></label>
+            <input class="inp" id="st-max_execution_time" disabled>
+          </div>
+          <div class="fg">
+            <label class="inp-lbl">max_input_time <span style="color:var(--dim);text-transform:none;letter-spacing:0">— input parse time (seconds)</span></label>
+            <input class="inp" id="st-max_input_time" disabled>
+          </div>
+          <div class="fg" style="margin-bottom:0">
+            <label class="inp-lbl">max_input_vars <span style="color:var(--dim);text-transform:none;letter-spacing:0">— max GET/POST/COOKIE vars</span></label>
+            <input class="inp" id="st-max_input_vars" disabled>
+          </div>
+        </div>
+
+        <!-- FrankenPHP Settings -->
+        <div class="card">
+          <div class="ct">FrankenPHP Configuration <span class="ct-badge">Caddyfile</span></div>
+          <div class="fg">
+            <label class="inp-lbl">num_threads <span style="color:var(--dim);text-transform:none;letter-spacing:0">— worker threads (1-256, default = CPU cores)</span></label>
+            <input class="inp" id="st-num_threads" disabled placeholder="default">
+          </div>
+          <div style="background:var(--ink3);border-radius:9px;padding:14px;margin-top:6px">
+            <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Tips</div>
+            <div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.9">
+              • Set <span style="color:var(--accent)">num_threads</span> = jumlah CPU cores untuk performa optimal<br>
+              • Kosongkan untuk pakai default (auto-detect)<br>
+              • <span style="color:var(--warn)">upload_max_filesize</span> harus ≤ <span style="color:var(--warn)">post_max_size</span><br>
+              • Restart FrankenPHP otomatis setelah save<br>
+              • Konfigurasi lama otomatis dibackup
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="st-result" style="display:none;max-width:1040px;margin-top:14px"></div>
+    </div>
+
   </main>
+</div>
+
+<!-- Modal Password Confirmation -->
+<div class="mbg" id="m-pw-confirm">
+  <div class="modal" style="width:380px">
+    <h3>Confirm Password</h3>
+    <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.6">
+      Masukkan password PS Panel untuk membuka edit mode.
+    </div>
+    <div class="fg" style="margin-bottom:0">
+      <label class="inp-lbl">PS Panel Password</label>
+      <input type="password" class="inp" id="pw-confirm-input" placeholder="••••••••••" onkeydown="if(event.key==='Enter')confirmPassword()">
+      <div style="color:var(--danger);font-size:11px;font-family:var(--mono);margin-top:8px;display:none" id="pw-confirm-err"></div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="closePwModal()">Cancel</button>
+      <button class="btn" onclick="confirmPassword()">Unlock</button>
+    </div>
+  </div>
 </div>
 
 <!-- Modal vhost -->
@@ -703,6 +797,7 @@ function go(name){
   if(name==='postgres')  loadPostgres();
   if(name==='frankenphp') loadFrankenphp();
   if(name==='deploy')    loadWebhookList();
+  if(name==='settings')  loadSettings();
 }
 
 // ── Helpers ──
@@ -1127,6 +1222,138 @@ async function deploy(){
   btn.innerHTML='▲ &nbsp;Run Deploy';btn.disabled=false;
   out.textContent=r?r.output:'[error] No response';
   out.style.color=r?.ok?'var(--accent)':'var(--danger)';
+}
+
+// ── Settings ──
+const ST_PHP_KEYS=['upload_max_filesize','post_max_size','memory_limit','max_execution_time','max_input_time','max_input_vars'];
+let stOriginal={};       // snapshot of current values for cancel/revert
+let stUnlocked=false;    // edit mode flag
+let stPassword='';       // verified password (held in memory while editing)
+
+async function loadSettings(){
+  const d=await api('GET','/api/settings');
+  if(!d||!d.ok){
+    document.getElementById('st-result').style.display='block';
+    document.getElementById('st-result').innerHTML='<div class="card" style="color:var(--danger);font-family:var(--mono);font-size:12px">Failed to load settings: '+(d?.error||'unknown')+'</div>';
+    return;
+  }
+  // Populate PHP fields
+  for(const k of ST_PHP_KEYS){
+    const el=document.getElementById('st-'+k);
+    el.value=d.php[k]||'';
+    stOriginal[k]=d.php[k]||'';
+  }
+  document.getElementById('st-php-path').textContent=d.phpIniPath?d.phpIniPath.split('/').pop():'php.ini';
+  // Populate FrankenPHP fields
+  const nt=document.getElementById('st-num_threads');
+  nt.value=d.frankenphp?.num_threads||'';
+  stOriginal['num_threads']=d.frankenphp?.num_threads||'';
+  // Reset UI to view mode
+  lockSettingsEdit();
+}
+
+function lockSettingsEdit(){
+  stUnlocked=false; stPassword='';
+  [...ST_PHP_KEYS,'num_threads'].forEach(k=>{
+    document.getElementById('st-'+k).disabled=true;
+  });
+  document.getElementById('st-edit-btn').style.display='inline-flex';
+  document.getElementById('st-save-btn').style.display='none';
+  document.getElementById('st-cancel').style.display='none';
+  document.getElementById('st-banner').style.display='none';
+}
+
+function unlockSettingsEdit(){
+  document.getElementById('pw-confirm-input').value='';
+  document.getElementById('pw-confirm-err').style.display='none';
+  document.getElementById('m-pw-confirm').classList.add('open');
+  setTimeout(()=>document.getElementById('pw-confirm-input').focus(),100);
+}
+
+function closePwModal(){
+  document.getElementById('m-pw-confirm').classList.remove('open');
+}
+
+async function confirmPassword(){
+  const pw=document.getElementById('pw-confirm-input').value;
+  const err=document.getElementById('pw-confirm-err');
+  if(!pw){err.textContent='Password required';err.style.display='block';return;}
+  // Verify by attempting login (lightweight check)
+  try{
+    const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
+    if(!r.ok){err.textContent='Wrong password';err.style.display='block';return;}
+    stPassword=pw; stUnlocked=true;
+    closePwModal();
+    [...ST_PHP_KEYS,'num_threads'].forEach(k=>{
+      document.getElementById('st-'+k).disabled=false;
+    });
+    document.getElementById('st-edit-btn').style.display='none';
+    document.getElementById('st-save-btn').style.display='inline-flex';
+    document.getElementById('st-cancel').style.display='inline-flex';
+    document.getElementById('st-banner').style.display='block';
+  }catch(e){err.textContent='Network error';err.style.display='block';}
+}
+
+function cancelSettingsEdit(){
+  // Restore original values
+  for(const k of ST_PHP_KEYS) document.getElementById('st-'+k).value=stOriginal[k]||'';
+  document.getElementById('st-num_threads').value=stOriginal['num_threads']||'';
+  lockSettingsEdit();
+  document.getElementById('st-result').style.display='none';
+}
+
+async function saveSettings(){
+  if(!stUnlocked||!stPassword){alert('Edit mode not active');return;}
+  // Collect changed PHP values
+  const phpChanges={};
+  for(const k of ST_PHP_KEYS){
+    const v=document.getElementById('st-'+k).value.trim();
+    if(v && v!==(stOriginal[k]||'')) phpChanges[k]=v;
+  }
+  const ntVal=document.getElementById('st-num_threads').value.trim();
+  const fpChanges={};
+  if(ntVal && ntVal!==String(stOriginal['num_threads']||'')) fpChanges.num_threads=parseInt(ntVal);
+
+  if(!Object.keys(phpChanges).length && !Object.keys(fpChanges).length){
+    showSettingsResult('info','Tidak ada perubahan untuk disimpan.');
+    return;
+  }
+
+  const btn=document.getElementById('st-save-btn');
+  btn.textContent='⏳ Saving...'; btn.disabled=true;
+  showSettingsResult('info','Menyimpan & restart FrankenPHP...');
+
+  const body={password:stPassword};
+  if(Object.keys(phpChanges).length) body.php=phpChanges;
+  if(Object.keys(fpChanges).length) body.frankenphp=fpChanges;
+
+  try{
+    const r=await fetch('/api/settings/update',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOK},body:JSON.stringify(body)});
+    const d=await r.json();
+    btn.innerHTML='✓ &nbsp;Save Changes'; btn.disabled=false;
+    if(!r.ok){showSettingsResult('error',d.error||'Save failed');return;}
+    let msg='Settings tersimpan. ';
+    if(d.phpIniPath) msg+=`PHP: ${d.phpIniPath}. `;
+    if(d.frankenphpUpdated) msg+='FrankenPHP config updated. ';
+    if(d.restartOk) msg+='Service restarted ✓';
+    else msg+=`Restart failed: ${d.restartError||'unknown'}`;
+    showSettingsResult(d.restartOk?'ok':'warn',msg);
+    // Refresh original snapshot
+    Object.assign(stOriginal,phpChanges);
+    if(fpChanges.num_threads!=null) stOriginal['num_threads']=fpChanges.num_threads;
+    lockSettingsEdit();
+  }catch(e){
+    btn.innerHTML='✓ &nbsp;Save Changes'; btn.disabled=false;
+    showSettingsResult('error','Network error: '+e.message);
+  }
+}
+
+function showSettingsResult(type,msg){
+  const el=document.getElementById('st-result');
+  const colors={ok:'var(--accent)',warn:'var(--warn)',error:'var(--danger)',info:'var(--accent2)'};
+  const bgs  ={ok:'rgba(110,231,183,.08)',warn:'rgba(251,191,36,.08)',error:'rgba(248,113,113,.08)',info:'rgba(129,140,248,.08)'};
+  el.style.display='block';
+  el.innerHTML=`<div class="card" style="background:${bgs[type]};border-color:${colors[type]};color:${colors[type]};font-family:var(--mono);font-size:12px;line-height:1.7">${msg}</div>`;
 }
 
 // ── Init ──
