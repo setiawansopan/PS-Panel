@@ -405,12 +405,17 @@ install_php() {
     php8.3 php8.3-fpm php8.3-cli php8.3-common \
     php8.3-pgsql php8.3-redis php8.3-curl php8.3-mbstring \
     php8.3-xml php8.3-zip php8.3-bcmath php8.3-intl \
-    php8.3-gd php8.3-opcache php8.3-tokenizer
+    php8.3-gd php8.3-opcache php8.3-tokenizer \
+    libfcgi-bin
   spinner_stop ok
 
   spinner_start "Configuring PHP-FPM status page..."
-  sed -i 's/^;pm.status_path.*/pm.status_path = \/status/' \
+  # Enable pm.status_path (may be commented out by default)
+  sed -i 's/^;*pm\.status_path.*/pm.status_path = \/status/' \
     /etc/php/8.3/fpm/pool.d/www.conf
+  # Ensure status path is present even if the line didn't exist
+  grep -q "^pm.status_path" /etc/php/8.3/fpm/pool.d/www.conf \
+    || echo "pm.status_path = /status" >> /etc/php/8.3/fpm/pool.d/www.conf
   run_logged systemctl enable php8.3-fpm
   run_logged systemctl start php8.3-fpm
   spinner_stop ok
