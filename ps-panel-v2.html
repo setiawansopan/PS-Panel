@@ -208,13 +208,23 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
 
 /* theme toggle button */
 .theme-btn{
-  margin-left:auto;background:none;border:1px solid var(--line2);
+  background:none;border:1px solid var(--line2);
   border-radius:7px;cursor:pointer;color:var(--muted);
   font-size:13px;padding:4px 8px;line-height:1;
   transition:color .15s,border-color .15s,background .15s;
   flex-shrink:0;
 }
 .theme-btn:hover{background:var(--ink3);color:var(--text);border-color:var(--line2)}
+
+/* logout button */
+.logout-btn{
+  background:none;border:1px solid var(--line2);
+  border-radius:7px;cursor:pointer;color:var(--muted);
+  font-size:13px;padding:4px 8px;line-height:1;
+  transition:color .15s,border-color .15s,background .15s;
+  flex-shrink:0;
+}
+.logout-btn:hover{background:rgba(248,113,113,.08);color:var(--danger);border-color:var(--danger)}
 </style>
 </head>
 <body>
@@ -259,6 +269,7 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       <div class="dot"></div>
       <span class="lt">live · 5s refresh</span>
       <button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle theme"></button>
+      <button class="logout-btn" onclick="logout()" title="Logout">⤴</button>
     </div>
   </aside>
 
