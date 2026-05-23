@@ -902,6 +902,28 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
   </div>
 </div>
 
+<div class="mbg" id="m-env-edit">
+  <div class="modal" style="max-width:780px;width:90vw">
+    <h3 style="display:flex;align-items:center;justify-content:space-between">
+      <span>Edit Environment <span id="env-domain" style="color:var(--accent);font-size:14px;font-weight:400"></span></span>
+      <span id="env-status" style="font-family:var(--mono);font-size:10px;color:var(--muted);font-weight:400"></span>
+    </h3>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:10px;line-height:1.7">
+      File: <code id="env-path" style="color:var(--accent)">/var/www/&lt;domain&gt;/.env</code><br>
+      <span style="color:var(--warn)">⚠️ Backup .bak otomatis dibuat sebelum simpan. Setelah save, klik "Clear Cache" untuk apply.</span>
+    </div>
+    <div class="fg">
+      <textarea class="inp" id="env-content" spellcheck="false" style="min-height:380px;max-height:55vh;font-family:var(--mono);font-size:11px;line-height:1.7;resize:vertical;white-space:pre;overflow:auto" placeholder="DB_CONNECTION=pgsql&#10;DB_HOST=127.0.0.1&#10;..."></textarea>
+    </div>
+    <div class="term" id="env-out" style="display:none;max-height:140px"></div>
+    <div class="mf" style="gap:8px">
+      <button class="btn btn-ghost" onclick="document.getElementById('m-env-edit').classList.remove('open')">Close</button>
+      <button class="btn btn-ghost" id="env-cache-btn" onclick="clearEnvCache()" style="display:none">⟳ Clear Laravel Cache</button>
+      <button class="btn" id="env-save-btn" onclick="saveEnv()">💾 Save .env</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API=''; let TOK=localStorage.getItem('psp_tok');
 const SVC_META={
@@ -1379,7 +1401,10 @@ async function loadVhosts(){
       <td><span class="pill ${v.ssl==='HTTPS'?'p-on':'p-unk'}" style="font-size:9px">${v.ssl==='HTTPS'?'🔒 HTTPS':'HTTP'}</span></td>
       <td style="font-size:11px;color:var(--muted)">${v.created}</td>
       <td style="font-size:11px;color:var(--muted);text-align:right">${v.size}</td>
-      <td><button class="btn btn-red" style="padding:4px 11px;font-size:11px" onclick="delVhost('${v.domain}')">Remove</button></td>
+      <td style="display:flex;gap:5px;justify-content:flex-end">
+        <button class="btn btn-ghost" style="padding:4px 11px;font-size:11px" onclick="openEnvEditor('${v.domain}')">⚙ ENV</button>
+        <button class="btn btn-red" style="padding:4px 11px;font-size:11px" onclick="delVhost('${v.domain}')">Remove</button>
+      </td>
     </tr>`).join('')
     :'<tr><td colspan="7" style="color:var(--muted)">No virtual hosts configured</td></tr>';
 }
@@ -1396,6 +1421,68 @@ async function addVhost(){
   document.getElementById('m-vhost').classList.remove('open');document.getElementById('v-domain').value='';loadVhosts();
 }
 async function delVhost(domain){if(!confirm(`Remove vhost: ${domain}?`))return;await api('DELETE',`/api/vhosts/${domain}`);loadVhosts();}
+
+// ── ENV Editor ──
+let _envDomain=null;
+async function openEnvEditor(domain){
+  _envDomain=domain;
+  document.getElementById('env-domain').textContent=`— ${domain}`;
+  document.getElementById('env-content').value='Loading...';
+  document.getElementById('env-status').textContent='';
+  document.getElementById('env-out').style.display='none';
+  document.getElementById('env-out').textContent='';
+  document.getElementById('env-cache-btn').style.display='none';
+  document.getElementById('m-env-edit').classList.add('open');
+
+  const r=await api('GET',`/api/vhost-env/${domain}`);
+  if(!r){
+    document.getElementById('env-content').value='// Error loading .env';
+    return;
+  }
+  document.getElementById('env-path').textContent=r.path||`/var/www/${domain}/.env`;
+  if(!r.exists){
+    document.getElementById('env-content').value='# .env file does not exist yet\n# Add your environment variables here\n\nAPP_NAME=Laravel\nAPP_ENV=production\nAPP_DEBUG=false\nAPP_URL=https://'+domain+'\n\nDB_CONNECTION=pgsql\nDB_HOST=127.0.0.1\nDB_PORT=5432\nDB_DATABASE=\nDB_USERNAME=\nDB_PASSWORD=\n';
+    document.getElementById('env-status').textContent='new file';
+    document.getElementById('env-status').style.color='var(--warn)';
+  } else {
+    document.getElementById('env-content').value=r.content;
+    const lines=r.content.split('\n').length;
+    document.getElementById('env-status').textContent=`${lines} lines · ${r.content.length} chars`;
+    document.getElementById('env-status').style.color='var(--muted)';
+  }
+}
+
+async function saveEnv(){
+  if(!_envDomain) return;
+  const content=document.getElementById('env-content').value;
+  const btn=document.getElementById('env-save-btn');
+  btn.disabled=true; btn.textContent='Saving...';
+  const r=await api('POST',`/api/vhost-env/${_envDomain}`,{content});
+  btn.disabled=false; btn.innerHTML='💾 Save .env';
+  if(r?.ok){
+    document.getElementById('env-status').textContent='✓ saved · backup .bak created';
+    document.getElementById('env-status').style.color='var(--accent)';
+    document.getElementById('env-cache-btn').style.display='inline-flex';
+  } else {
+    alert('Error: '+(r?.error||'Failed to save .env'));
+  }
+}
+
+async function clearEnvCache(){
+  if(!_envDomain) return;
+  const btn=document.getElementById('env-cache-btn');
+  btn.disabled=true; btn.textContent='Clearing...';
+  const out=document.getElementById('env-out');
+  out.style.display='block';
+  out.style.color='var(--accent)';
+  out.textContent='Clearing Laravel config cache...\n';
+  const r=await api('POST',`/api/vhost-env/${_envDomain}/clear-cache`);
+  btn.disabled=false; btn.innerHTML='⟳ Clear Laravel Cache';
+  if(!r){out.textContent+='[error] No response';out.style.color='var(--danger)';return;}
+  out.textContent+=r.output||'';
+  out.style.color=r.ok?'var(--accent)':'var(--danger)';
+  if(r.ok) out.textContent+='\n✓ Cache cleared! Aplikasi sekarang pakai config terbaru.';
+}
 
 // ── Webhooks ──
 async function loadWebhookList(){

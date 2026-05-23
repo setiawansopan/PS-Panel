@@ -319,6 +319,80 @@ app.post('/api/vhost-repo/:domain', auth,(req,res)=>{
   res.json({ok:true});
 });
 
+// ── Vhost .env Editor ──
+function getVhostEnvPath(domain){
+  if(!/^[a-zA-Z0-9.\-_]+$/.test(domain)) return null;
+  return `/var/www/${domain}/.env`;
+}
+
+app.get('/api/vhost-env/:domain', auth,(req,res)=>{
+  const envPath = getVhostEnvPath(req.params.domain);
+  if(!envPath) return res.status(400).json({error:'Invalid domain'});
+  if(!fs.existsSync(envPath)) return res.json({exists:false, content:'', path:envPath});
+  try{
+    const content = fs.readFileSync(envPath, 'utf8');
+    res.json({exists:true, content, path:envPath});
+  }catch(e){
+    res.status(500).json({error:'Cannot read .env: '+e.message});
+  }
+});
+
+app.post('/api/vhost-env/:domain', auth,(req,res)=>{
+  const envPath = getVhostEnvPath(req.params.domain);
+  if(!envPath) return res.status(400).json({error:'Invalid domain'});
+  const {content}=req.body;
+  if(typeof content!=='string') return res.status(400).json({error:'Content must be a string'});
+  if(content.length>1000000) return res.status(400).json({error:'Content too large'});
+
+  // Validate parent dir exists
+  const parentDir = path.dirname(envPath);
+  if(!fs.existsSync(parentDir)) return res.status(400).json({error:'Vhost directory not found: '+parentDir});
+
+  try{
+    // Backup existing .env
+    if(fs.existsSync(envPath)){
+      const backupPath = envPath + '.bak';
+      fs.copyFileSync(envPath, backupPath);
+    }
+    fs.writeFileSync(envPath, content);
+    // Set proper permissions (readable by web user)
+    try{fs.chmodSync(envPath, 0o644);}catch{}
+    res.json({ok:true});
+  }catch(e){
+    res.status(500).json({error:'Cannot save .env: '+e.message});
+  }
+});
+
+// Clear Laravel config cache after env change
+app.post('/api/vhost-env/:domain/clear-cache', auth,(req,res)=>{
+  const domain = req.params.domain;
+  if(!/^[a-zA-Z0-9.\-_]+$/.test(domain)) return res.status(400).json({error:'Invalid domain'});
+  const appPath = `/var/www/${domain}`;
+  if(!fs.existsSync(appPath)) return res.status(400).json({error:'Vhost directory not found'});
+
+  const commands = [
+    'php artisan config:clear',
+    'php artisan cache:clear',
+    'php artisan config:cache',
+  ];
+  let output='', i=0;
+  function runNext(){
+    if(i>=commands.length) return res.json({ok:true, output});
+    const cmd = commands[i++];
+    output += `$ ${cmd}\n`;
+    exec(cmd, {cwd: appPath, timeout: 30000}, (err, stdout, stderr)=>{
+      output += stdout || stderr || '';
+      output += '\n';
+      if(err){
+        output += '[FAILED]\n';
+        return res.json({ok:false, output});
+      }
+      runNext();
+    });
+  }
+  runNext();
+});
+
 // ── Databases ──
 app.get('/api/databases', auth,(req,res)=>{
   exec(`sudo -u postgres psql -c "\\l" --csv 2>/dev/null`,(err,stdout)=>{
