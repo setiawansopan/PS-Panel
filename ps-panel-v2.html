@@ -1475,22 +1475,36 @@ function copyWI(elId,btn){
 async function loadDeployKey(){
   const btn=document.getElementById('dk-btn');
   btn.textContent='Generating...';btn.disabled=true;
-  const r=await api('GET','/api/deploy-key');
-  btn.innerHTML='⚿ &nbsp;Regenerate Key';btn.disabled=false;
-  if(!r||!r.key){alert('Failed to generate key');return;}
-  document.getElementById('dk-key').textContent=r.key;
-  document.getElementById('dk-out').style.display='block';
+  try{
+    const r=await api('GET','/api/deploy-key');
+    if(!r){alert('Server error: no response');btn.textContent='⚿ &nbsp;Show Deploy Key';btn.disabled=false;return;}
+    if(r.error){alert('Error: '+r.error);btn.textContent='⚿ &nbsp;Show Deploy Key';btn.disabled=false;return;}
+    if(!r.key){alert('Failed: no key in response');btn.textContent='⚿ &nbsp;Show Deploy Key';btn.disabled=false;return;}
+    btn.innerHTML='⚿ &nbsp;Regenerate Key';
+    document.getElementById('dk-key').textContent=r.key;
+    document.getElementById('dk-out').style.display='block';
+    console.log('[Deploy Key] Loaded successfully, length:',r.key.length);
+  }catch(err){
+    alert('Error loading key: '+err.message);
+    console.error('[Deploy Key]',err);
+  }finally{
+    btn.disabled=false;
+  }
 }
 function copyDeployKey(){
   const text=document.getElementById('dk-key').textContent;
-  if(!text) return;
+  console.log('[Copy Key] Text length:',text?.length);
+  if(!text||text.length<10){alert('No valid key to copy');return;}
+  if(!navigator.clipboard){alert('Clipboard API not supported');return;}
   navigator.clipboard.writeText(text).then(()=>{
     const btn=document.getElementById('dk-copy');
     btn.textContent='✓ copied!';
     btn.style.color='var(--accent)';
     setTimeout(()=>{btn.textContent='copy';btn.style.color='var(--muted)';},2000);
+    console.log('[Copy Key] Success');
   }).catch(err=>{
-    alert('Copy gagal: '+err.message);
+    alert('Copy error: '+err.message);
+    console.error('[Copy Key]',err);
   });
 }
 

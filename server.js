@@ -623,12 +623,40 @@ app.post('/api/webhook/:id', (req, res) => {
 const DEPLOY_KEY = '/root/.ssh/ps-panel-deploy';
 app.get('/api/deploy-key', auth, (req, res) => {
   const pubPath = DEPLOY_KEY + '.pub';
+  const sshDir = path.dirname(DEPLOY_KEY);
+
+  // Jika key sudah ada, return
   if (fs.existsSync(pubPath)) {
-    return res.json({ key: fs.readFileSync(pubPath, 'utf8').trim() });
+    try {
+      const key = fs.readFileSync(pubPath, 'utf8').trim();
+      return res.json({ key });
+    } catch(e) {
+      return res.status(500).json({ error: 'Cannot read deploy key: ' + e.message });
+    }
   }
-  exec(`ssh-keygen -t ed25519 -C "ps-panel-deploy" -f ${DEPLOY_KEY} -N ""`, (err, _, se) => {
-    if (err) return res.status(500).json({ error: se });
-    res.json({ key: fs.readFileSync(pubPath, 'utf8').trim() });
+
+  // Create .ssh directory jika belum ada
+  if (!fs.existsSync(sshDir)) {
+    try {
+      fs.mkdirSync(sshDir, { mode: 0o700, recursive: true });
+    } catch(e) {
+      return res.status(500).json({ error: 'Cannot create .ssh directory: ' + e.message });
+    }
+  }
+
+  // Generate key baru
+  exec(`ssh-keygen -t ed25519 -C "ps-panel-deploy" -f ${DEPLOY_KEY} -N ""`, (err, stdout, stderr) => {
+    if (err) {
+      const errMsg = stderr || err.message || 'Unknown error';
+      console.error('[Deploy Key]', errMsg);
+      return res.status(500).json({ error: 'Failed to generate key: ' + errMsg });
+    }
+    try {
+      const key = fs.readFileSync(pubPath, 'utf8').trim();
+      res.json({ key });
+    } catch(e) {
+      res.status(500).json({ error: 'Generated but cannot read key: ' + e.message });
+    }
   });
 });
 
