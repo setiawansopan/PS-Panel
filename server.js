@@ -374,15 +374,32 @@ app.post('/api/db-users/:username/grant', auth, async(req,res)=>{
   if(!/^[a-z0-9_]+$/.test(username)) return res.status(400).json({error:'Invalid username'});
   if(!/^[a-z0-9_]+$/.test(database)) return res.status(400).json({error:'Invalid database'});
   try {
-    const privList = ['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'].filter(p=>privileges?.includes(p)).join(',');
-    const privStr = privileges?.includes('ALL') ? 'ALL PRIVILEGES' : privList;
     const creds = getCreds();
     const pool = new Pool({
       host:'localhost', user:'postgres',
       password: creds.PG_PASSWORD||'', database:'postgres',
       connectionTimeoutMillis:3000,
     });
-    await pool.query(`GRANT ${privStr} ON DATABASE "${database}" TO "${username}"`);
+
+    // Database-level privileges
+    const dbPrivs = ['CONNECT','TEMP'].filter(p=>privileges?.includes(p));
+    if(privileges?.includes('ALL')) {
+      await pool.query(`GRANT ALL PRIVILEGES ON DATABASE "${database}" TO "${username}"`);
+    } else if(dbPrivs.length) {
+      await pool.query(`GRANT ${dbPrivs.join(',')} ON DATABASE "${database}" TO "${username}"`);
+    }
+
+    // Schema/table-level privileges (for default public schema)
+    const tablePrivs = ['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'].filter(p=>privileges?.includes(p));
+    if(privileges?.includes('ALL')) {
+      await pool.query(`GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "${username}"`);
+      await pool.query(`GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "${username}"`);
+    } else if(tablePrivs.length) {
+      const privStr = tablePrivs.join(',');
+      await pool.query(`GRANT ${privStr} ON ALL TABLES IN SCHEMA public TO "${username}"`);
+      await pool.query(`GRANT ${privStr} ON ALL SEQUENCES IN SCHEMA public TO "${username}"`);
+    }
+
     await pool.end();
     res.json({ok:true});
   } catch(e){ res.status(500).json({error:e.message}); }

@@ -851,6 +851,37 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
   </div>
 </div>
 
+<div class="mbg" id="m-db-grant">
+  <div class="modal">
+    <h3>Assign Database to User</h3>
+    <div class="fg">
+      <label class="inp-lbl">Username</label>
+      <input class="inp" id="grant-user" disabled style="background:var(--ink3);opacity:.6">
+    </div>
+    <div class="fg">
+      <label class="inp-lbl">Database</label>
+      <select class="inp" id="grant-db">
+        <option value="">-- Select database --</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label class="inp-lbl">Privileges</label>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
+        <label class="check-lbl"><input type="checkbox" class="grant-priv" value="CONNECT"> CONNECT</label>
+        <label class="check-lbl"><input type="checkbox" class="grant-priv" value="SELECT"> SELECT</label>
+        <label class="check-lbl"><input type="checkbox" class="grant-priv" value="INSERT"> INSERT</label>
+        <label class="check-lbl"><input type="checkbox" class="grant-priv" value="UPDATE"> UPDATE</label>
+        <label class="check-lbl"><input type="checkbox" class="grant-priv" value="DELETE"> DELETE</label>
+        <label class="check-lbl"><input type="checkbox" class="grant-priv" value="ALL" style="grid-column:1/-1"> ALL PRIVILEGES</label>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="document.getElementById('m-db-grant').classList.remove('open')">Cancel</button>
+      <button class="btn" onclick="grantPrivilege()">Assign</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API=''; let TOK=localStorage.getItem('psp_tok');
 const SVC_META={
@@ -1187,7 +1218,10 @@ async function loadDbUsers(){
       <td style="color:var(--accent)">${u.usename}</td>
       <td><span class="pill ${u.canlogin?'p-on':'p-off'}"><span class="pd"></span>${u.canlogin?'Yes':'No'}</span></td>
       <td><span class="pill ${u.cancreatdb?'p-on':'p-off'}"><span class="pd"></span>${u.cancreatdb?'Yes':'No'}</span></td>
-      <td><button class="btn btn-sm" onclick="deleteDbUser('${u.usename}')">Remove</button></td>
+      <td style="display:flex;gap:6px">
+        <button class="btn btn-sm" onclick="openGrantModal('${u.usename}')">Grant DB</button>
+        <button class="btn btn-sm" onclick="deleteDbUser('${u.usename}')">Remove</button>
+      </td>
     </tr>
   `).join('');
 }
@@ -1199,6 +1233,39 @@ async function deleteDbUser(username){
     loadDbUsers();
   } else {
     alert('Error: '+(d?.error||'Failed to delete user'));
+  }
+}
+
+async function openGrantModal(username){
+  document.getElementById('grant-user').value=username;
+  document.getElementById('m-db-grant').classList.add('open');
+  document.querySelectorAll('.grant-priv').forEach(c=>c.checked=false);
+  await loadGrantDatabases();
+}
+
+async function loadGrantDatabases(){
+  const d=await api('GET','/api/databases');
+  if(!d?.databases) return;
+  const sel=document.getElementById('grant-db');
+  const userDbs=d.databases.filter(db=>!['postgres','template0','template1'].includes(db));
+  sel.innerHTML='<option value="">-- Select database --</option>'+userDbs.map(db=>`<option value="${db}">${db}</option>`).join('');
+}
+
+async function grantPrivilege(){
+  const username=document.getElementById('grant-user').value;
+  const database=document.getElementById('grant-db').value;
+  if(!username||!database) return alert('Select both user and database');
+  const privs=Array.from(document.querySelectorAll('.grant-priv:checked')).map(c=>c.value);
+  if(!privs.length) return alert('Select at least one privilege');
+  const btn=document.querySelector('#m-db-grant .btn:not(.btn-ghost)');
+  btn.disabled=true; btn.textContent='Assigning...';
+  const d=await api('POST',`/api/db-users/${username}/grant`,{database,privileges:privs});
+  btn.disabled=false; btn.textContent='Assign';
+  if(d?.ok){
+    document.getElementById('m-db-grant').classList.remove('open');
+    alert(`Privilege granted to ${username} on ${database}`);
+  } else {
+    alert('Error: '+(d?.error||'Failed to grant privilege'));
   }
 }
 
