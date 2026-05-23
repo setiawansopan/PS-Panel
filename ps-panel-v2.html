@@ -1495,17 +1495,47 @@ function copyDeployKey(){
   const text=document.getElementById('dk-key').textContent;
   console.log('[Copy Key] Text length:',text?.length);
   if(!text||text.length<10){alert('No valid key to copy');return;}
-  if(!navigator.clipboard){alert('Clipboard API not supported');return;}
-  navigator.clipboard.writeText(text).then(()=>{
-    const btn=document.getElementById('dk-copy');
-    btn.textContent='✓ copied!';
-    btn.style.color='var(--accent)';
-    setTimeout(()=>{btn.textContent='copy';btn.style.color='var(--muted)';},2000);
-    console.log('[Copy Key] Success');
-  }).catch(err=>{
-    alert('Copy error: '+err.message);
+
+  // Try modern Clipboard API first
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(text).then(()=>{
+      showCopiedFeedback();
+      console.log('[Copy Key] Success (Clipboard API)');
+    }).catch(err=>{
+      console.warn('[Copy Key] Clipboard API failed, trying fallback...',err);
+      copyFallback(text);
+    });
+  } else {
+    // Fallback untuk browser lama atau HTTP
+    copyFallback(text);
+  }
+}
+
+function copyFallback(text){
+  // Buat temporary textarea
+  const ta=document.createElement('textarea');
+  ta.value=text;
+  ta.style.position='fixed';ta.style.top='-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  try{
+    document.execCommand('copy');
+    showCopiedFeedback();
+    console.log('[Copy Key] Success (Fallback)');
+  }catch(err){
+    alert('Copy gagal: '+err.message+'\n\nGunakan manual copy atau pakai browser modern dengan HTTPS');
     console.error('[Copy Key]',err);
-  });
+  }finally{
+    document.body.removeChild(ta);
+  }
+}
+
+function showCopiedFeedback(){
+  const btn=document.getElementById('dk-copy');
+  const orig=btn.textContent;
+  btn.textContent='✓ copied!';
+  btn.style.color='var(--accent)';
+  setTimeout(()=>{btn.textContent=orig;btn.style.color='var(--muted)';},2000);
 }
 
 // ── Deploy ──
