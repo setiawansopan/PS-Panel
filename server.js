@@ -690,7 +690,7 @@ app.get('/api/deploy-key', auth, (req, res) => {
 
 // ── Git Clone ──
 app.post('/api/clone', auth, (req, res) => {
-  const { repoUrl, path: targetPath } = req.body || {};
+  const { repoUrl, path: targetPath, force } = req.body || {};
   if (!repoUrl || !targetPath)
     return res.status(400).json({ error: 'repoUrl and path are required' });
   if (!path.isAbsolute(targetPath))
@@ -699,15 +699,43 @@ app.post('/api/clone', auth, (req, res) => {
   if (!/^(git@|https?:\/\/)[\w.\-/:]+\.git$/.test(repoUrl))
     return res.status(400).json({ error: 'Invalid repository URL. Use SSH (git@github.com:...) or HTTPS format.' });
 
-  // Check if target directory already has files (non-empty)
-  try {
-    if (fs.existsSync(targetPath)) {
-      const files = fs.readdirSync(targetPath).filter(f => f !== '.git');
-      if (files.length > 0)
-        return res.status(400).json({ error: `Directory ${targetPath} is not empty. Remove existing files first or choose another path.` });
+  let output = '';
+
+  // Handle force flag - delete existing directory if needed
+  if (force && fs.existsSync(targetPath)) {
+    try {
+      output += `[FORCE] Deleting existing directory: ${targetPath}\n`;
+      const files = fs.readdirSync(targetPath);
+      for (const file of files) {
+        const filePath = path.join(targetPath, file);
+        if (fs.lstatSync(filePath).isDirectory()) {
+          fs.rmSync(filePath, { recursive: true, force: true });
+        } else {
+          fs.unlinkSync(filePath);
+        }
+      }
+      output += '[FORCE] Cleanup complete\n';
+    } catch (e) {
+      return res.status(400).json({ error: 'Cannot delete directory: ' + e.message });
     }
+  } else if (!force) {
+    // Check if target directory already has files (non-empty)
+    try {
+      if (fs.existsSync(targetPath)) {
+        const files = fs.readdirSync(targetPath).filter(f => f !== '.git');
+        if (files.length > 0)
+          return res.status(400).json({ error: `Directory ${targetPath} is not empty. Remove existing files first or check "Force" option to replace.` });
+      }
+    } catch (e) {
+      return res.status(400).json({ error: 'Cannot check target directory: ' + e.message });
+    }
+  }
+
+  // Create directory if doesn't exist
+  try {
+    fs.mkdirSync(targetPath, { recursive: true });
   } catch (e) {
-    return res.status(400).json({ error: 'Cannot check target directory: ' + e.message });
+    return res.status(400).json({ error: 'Cannot create directory: ' + e.message });
   }
 
   // Run git clone — use GIT_SSH_COMMAND to use ps-panel deploy key if it exists
@@ -717,8 +745,10 @@ app.post('/api/clone', auth, (req, res) => {
     : '';
   const cmd = `${sshCmd} git clone ${repoUrl} ${targetPath} 2>&1`;
 
+  output += `[CLONE] Starting git clone...\n`;
   exec(cmd, { timeout: 120000 }, (err, stdout, stderr) => {
-    const output = (stdout || '') + (stderr || '');
+    const cmdOutput = (stdout || '') + (stderr || '');
+    output += cmdOutput;
     if (err) return res.json({ ok: false, output });
     res.json({ ok: true, output });
   });

@@ -594,6 +594,10 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
             <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:5px">Clone ke: <span id="clone-path-display" style="color:var(--accent)">none selected</span></div>
           </div>
         </div>
+        <div style="margin-bottom:16px">
+          <label class="check-lbl"><input type="checkbox" id="clone-force"> Force (delete existing files first)</label>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--warn);margin-top:6px">⚠️ Akan menghapus folder yang ada sebelum clone</div>
+        </div>
         <button class="btn" id="clone-btn" onclick="cloneRepo()">⬇ &nbsp;Clone Repository</button>
         <div class="term" id="clone-out"></div>
       </div>
@@ -1432,15 +1436,17 @@ function selectCloneVhost(){
 async function cloneRepo(){
   const url=document.getElementById('clone-url').value.trim();
   const targetPath=document.getElementById('clone-vhost').value;
+  const force=document.getElementById('clone-force').checked;
   if(!url){alert('Masukkan repository URL');return;}
   if(!targetPath){alert('Pilih virtual host target');return;}
+  if(force && !confirm('Delete existing files in '+targetPath+'?\n\nThis action cannot be undone.')){return;}
   const btn=document.getElementById('clone-btn');
   const out=document.getElementById('clone-out');
   btn.textContent='⏳ Cloning...';btn.disabled=true;
   out.style.display='block';
   out.style.color='var(--accent)';
-  out.textContent=`Cloning ${url}\nke ${targetPath} ...\n`;
-  const r=await api('POST','/api/clone',{repoUrl:url,path:targetPath});
+  out.textContent=`${force?'[FORCE] Deleting existing files...\n':''}Cloning ${url}\nke ${targetPath} ...\n`;
+  const r=await api('POST','/api/clone',{repoUrl:url,path:targetPath,force});
   btn.innerHTML='⬇ &nbsp;Clone Repository';btn.disabled=false;
   if(!r){out.textContent+='[error] No response';out.style.color='var(--danger)';return;}
   out.textContent+=r.output||'';
