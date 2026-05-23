@@ -390,25 +390,45 @@ update_system() {
 install_php() {
   section "PHP 8.3" "~2-3 min"
 
-  if php -v 2>/dev/null | grep -q "8\.3"; then
-    skip "PHP 8.3"; return
+  if php -v 2>/dev/null | grep -q "8\.3" && command -v composer &>/dev/null; then
+    skip "PHP 8.3 + Composer"; return
   fi
 
-  spinner_start "Adding Ondrej PHP PPA..."
-  retry_run "add-apt-repository php" \
-    add-apt-repository -y ppa:ondrej/php
-  retry_run "apt-get update" apt-get update -qq
-  spinner_stop ok
+  if ! php -v 2>/dev/null | grep -q "8\.3"; then
+    spinner_start "Adding Ondrej PHP PPA..."
+    retry_run "add-apt-repository php" \
+      add-apt-repository -y ppa:ondrej/php
+    retry_run "apt-get update" apt-get update -qq
+    spinner_stop ok
 
-  spinner_start "Installing PHP 8.3 extensions... (this may take a while)"
-  apt_install \
-    php8.3 php8.3-cli php8.3-common \
-    php8.3-pgsql php8.3-redis php8.3-curl php8.3-mbstring \
-    php8.3-xml php8.3-zip php8.3-bcmath php8.3-intl \
-    php8.3-gd php8.3-opcache php8.3-tokenizer
-  spinner_stop ok
+    spinner_start "Installing PHP 8.3 extensions... (this may take a while)"
+    apt_install \
+      php8.3 php8.3-cli php8.3-common \
+      php8.3-pgsql php8.3-redis php8.3-curl php8.3-mbstring \
+      php8.3-xml php8.3-zip php8.3-bcmath php8.3-intl \
+      php8.3-gd php8.3-opcache php8.3-tokenizer
+    spinner_stop ok
 
-  log "PHP $(php -r 'echo PHP_VERSION;') installed"
+    log "PHP $(php -r 'echo PHP_VERSION;') installed"
+  fi
+
+  # Install Composer (Laravel & PHP package manager)
+  if ! command -v composer &>/dev/null; then
+    spinner_start "Installing Composer (PHP dependency manager)..."
+    (
+      cd /tmp
+      php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" >> "$LOG_FILE" 2>&1
+      php composer-setup.php --install-dir=/usr/local/bin --filename=composer --quiet >> "$LOG_FILE" 2>&1
+      rm -f composer-setup.php
+    )
+    if command -v composer &>/dev/null; then
+      spinner_stop ok
+      log "Composer $(composer --version --no-ansi 2>/dev/null | head -n1) installed"
+    else
+      spinner_stop fail
+      log "${YELLOW}WARN: Composer installation failed, you may need to install manually${RESET}"
+    fi
+  fi
 }
 
 # ════════════════════════════════════════════════════════════
