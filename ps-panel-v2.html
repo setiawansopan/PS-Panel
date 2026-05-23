@@ -549,6 +549,7 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
             <option value="">-- Select a virtual host --</option>
           </select>
           <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:6px">Path: <span id="dep-path-display">none selected</span></div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px">Repository: <span id="dep-repo-display" style="color:var(--muted)">--</span></div>
         </div>
         <div class="fg"><label class="inp-lbl">Branch</label><input class="inp" id="dep-branch" value="main"></div>
         <div class="fg" style="margin-bottom:16px">
@@ -1429,11 +1430,36 @@ async function cloneRepo(){
   if(!r){out.textContent+='[error] No response';out.style.color='var(--danger)';return;}
   out.textContent+=r.output||'';
   out.style.color=r.ok?'var(--accent)':'var(--danger)';
-  if(r.ok) out.textContent+='\n✓ Clone berhasil! Sekarang bisa deploy via panel.';
+  if(r.ok){
+    out.textContent+='\n✓ Clone berhasil! Sekarang bisa deploy via panel.';
+    // Simpan repository URL ke vhost
+    const vhostSel=document.getElementById('clone-vhost');
+    const domainText=vhostSel.options[vhostSel.selectedIndex]?.text||targetPath;
+    const domain=domainText.split('(')[0].trim()||targetPath;
+    await api('POST',`/api/vhost-repo/${domain}`,{repoUrl:url});
+    console.log('[Clone] Repo URL saved for vhost:',domain);
+  }
 }
-function selectDeployVhost(){
+async function selectDeployVhost(){
   const path=document.getElementById('dep-vhost').value;
   document.getElementById('dep-path-display').textContent=path||'none selected';
+  // Load and display repository URL
+  if(path){
+    const vhostSel=document.getElementById('dep-vhost');
+    const domainText=vhostSel.options[vhostSel.selectedIndex]?.text||path;
+    const domain=domainText.split('(')[0].trim()||path;
+    const r=await api('GET',`/api/vhost-repo/${domain}`);
+    if(r?.repoUrl){
+      document.getElementById('dep-repo-display').textContent=r.repoUrl;
+      document.getElementById('dep-repo-display').style.color='var(--accent)';
+      console.log('[Deploy] Loaded repo URL:',r.repoUrl);
+    } else {
+      document.getElementById('dep-repo-display').textContent='No repository set (use Clone Repository first)';
+      document.getElementById('dep-repo-display').style.color='var(--muted)';
+    }
+  } else {
+    document.getElementById('dep-repo-display').textContent='--';
+  }
 }
 async function openWebhookModal(){
   // Load vhosts into webhook modal dropdown

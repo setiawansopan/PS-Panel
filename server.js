@@ -291,6 +291,34 @@ app.delete('/api/vhosts/:domain', auth,(req,res)=>{
   res.json({ok:true});
 });
 
+// ── Vhost Repository Mapping ──
+const VHOST_REPO_FILE = '/opt/ps-panel/vhost-repos.json';
+function loadVhostRepos(){
+  if(fs.existsSync(VHOST_REPO_FILE)){
+    try{return JSON.parse(fs.readFileSync(VHOST_REPO_FILE,'utf8'));}catch{}
+  }
+  return {};
+}
+function saveVhostRepos(data){
+  fs.mkdirSync(path.dirname(VHOST_REPO_FILE),{recursive:true});
+  fs.writeFileSync(VHOST_REPO_FILE,JSON.stringify(data,null,2));
+}
+
+app.get('/api/vhost-repo/:domain', auth,(req,res)=>{
+  const repos=loadVhostRepos();
+  const repoUrl=repos[req.params.domain]||null;
+  res.json({repoUrl});
+});
+
+app.post('/api/vhost-repo/:domain', auth,(req,res)=>{
+  const {repoUrl}=req.body;
+  if(!repoUrl||repoUrl.length<5) return res.status(400).json({error:'Invalid repo URL'});
+  const repos=loadVhostRepos();
+  repos[req.params.domain]=repoUrl;
+  saveVhostRepos(repos);
+  res.json({ok:true});
+});
+
 // ── Databases ──
 app.get('/api/databases', auth,(req,res)=>{
   exec(`sudo -u postgres psql -c "\\l" --csv 2>/dev/null`,(err,stdout)=>{
