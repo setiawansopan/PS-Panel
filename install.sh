@@ -404,9 +404,11 @@ install_php() {
     spinner_start "Installing PHP 8.3 extensions... (this may take a while)"
     apt_install \
       php8.3 php8.3-cli php8.3-common \
-      php8.3-pgsql php8.3-redis php8.3-curl php8.3-mbstring \
+      php8.3-pgsql php8.3-mysql php8.3-sqlite3 \
+      php8.3-redis php8.3-curl php8.3-mbstring \
       php8.3-xml php8.3-zip php8.3-bcmath php8.3-intl \
-      php8.3-gd php8.3-opcache php8.3-tokenizer
+      php8.3-gd php8.3-opcache php8.3-tokenizer \
+      php8.3-fileinfo php8.3-iconv php8.3-soap
     spinner_stop ok
 
     log "PHP $(php -r 'echo PHP_VERSION;') installed"
