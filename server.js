@@ -343,8 +343,9 @@ app.post('/api/db-users', auth, async(req,res)=>{
       password: creds.PG_PASSWORD||'', database:'postgres',
       connectionTimeoutMillis:3000,
     });
-    const sql = `CREATE USER ${username} WITH PASSWORD $1 LOGIN ${cancreatdb?'CREATEDB':'NOCREATEDB'}`;
-    await pool.query(sql, [password]);
+    const escapedPwd = password.replace(/'/g, "''");
+    const sql = `CREATE USER "${username}" WITH PASSWORD '${escapedPwd}' LOGIN ${cancreatdb?'CREATEDB':'NOCREATEDB'}`;
+    await pool.query(sql);
     await pool.end();
     res.json({ok:true});
   } catch(e){ res.status(500).json({error:e.message}); }
@@ -361,7 +362,7 @@ app.delete('/api/db-users/:username', auth, async(req,res)=>{
       password: creds.PG_PASSWORD||'', database:'postgres',
       connectionTimeoutMillis:3000,
     });
-    await pool.query(`DROP USER IF EXISTS ${username}`);
+    await pool.query(`DROP USER IF EXISTS "${username}"`);
     await pool.end();
     res.json({ok:true});
   } catch(e){ res.status(500).json({error:e.message}); }
@@ -381,7 +382,7 @@ app.post('/api/db-users/:username/grant', auth, async(req,res)=>{
       password: creds.PG_PASSWORD||'', database:'postgres',
       connectionTimeoutMillis:3000,
     });
-    await pool.query(`GRANT ${privStr} ON DATABASE ${database} TO ${username}`);
+    await pool.query(`GRANT ${privStr} ON DATABASE "${database}" TO "${username}"`);
     await pool.end();
     res.json({ok:true});
   } catch(e){ res.status(500).json({error:e.message}); }
