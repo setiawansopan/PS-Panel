@@ -153,6 +153,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
 .btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--line2)}
 .btn-ghost:hover{background:var(--ink3);color:var(--text);opacity:1}
 .btn-red{background:var(--danger);color:#fff}
+.btn-sm{padding:4px 10px;font-size:11px;font-weight:600}
 
 /* ── INPUT ── */
 .inp{width:100%;background:var(--ink3);border:1px solid var(--line2);border-radius:9px;padding:10px 13px;color:var(--text);font-family:var(--mono);font-size:12px;outline:none;transition:border-color .2s,box-shadow .2s}
@@ -438,6 +439,16 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         <div class="card" style="margin-bottom:18px">
           <div class="ct">Connection &amp; Lock History <span class="ct-badge">Live · 30-point window · updates every 5s</span></div>
           <canvas id="pg-chart" style="width:100%;height:200px;display:block"></canvas>
+        </div>
+        <div class="card">
+          <div class="sec-hdr">
+            <div class="ct" style="margin-bottom:0">Database Users</div>
+            <button class="btn" style="font-size:12px;padding:7px 12px" onclick="document.getElementById('m-db-user-add').classList.add('open');document.getElementById('dbu-nm').focus()">+ Add User</button>
+          </div>
+          <div class="tbl-w">
+            <table><thead><tr><th>Username</th><th>Can Login</th><th>Can Create DB</th><th>Action</th></tr></thead>
+            <tbody id="pg-users-tb"><tr><td colspan="4" style="color:var(--muted)">Loading...</td></tr></tbody></table>
+          </div>
         </div>
       </div>
     </div>
@@ -817,6 +828,29 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
   </div>
 </div>
 
+<div class="mbg" id="m-db-user-add">
+  <div class="modal">
+    <h3>New Database User</h3>
+    <div class="fg">
+      <label class="inp-lbl">Username</label>
+      <input class="inp" id="dbu-nm" placeholder="app_user">
+      <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:5px">lowercase · numbers · underscore only</div>
+    </div>
+    <div class="fg">
+      <label class="inp-lbl">Password</label>
+      <input class="inp" id="dbu-pw" type="password" placeholder="secure password">
+      <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:5px">strong password recommended</div>
+    </div>
+    <div class="fg" style="margin-bottom:0">
+      <label class="check-lbl"><input type="checkbox" id="dbu-createdb"> Can Create Databases</label>
+    </div>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="document.getElementById('m-db-user-add').classList.remove('open')">Cancel</button>
+      <button class="btn" onclick="createDbUser()">Create User</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API=''; let TOK=localStorage.getItem('psp_tok');
 const SVC_META={
@@ -1012,6 +1046,9 @@ async function loadPostgres(){
   _pgH.locks.push(d.locks);
   if(_pgH.conns.length>_pgH.MAX){_pgH.conns.shift();_pgH.locks.shift();}
   drawPgChart();
+
+  // Load database users
+  loadDbUsers();
 }
 
 function drawPgChart(){
@@ -1114,6 +1151,54 @@ async function createDb(){
     loadPostgres();
   } else {
     alert('Error: '+(d?.error||'Failed to create database'));
+  }
+}
+
+async function createDbUser(){
+  const username=document.getElementById('dbu-nm').value.trim();
+  const password=document.getElementById('dbu-pw').value;
+  const cancreatdb=document.getElementById('dbu-createdb').checked;
+  if(!username||!password) return;
+  const btn=document.querySelector('#m-db-user-add .btn:not(.btn-ghost)');
+  btn.disabled=true; btn.textContent='Creating...';
+  const d=await api('POST','/api/db-users',{username,password,cancreatdb});
+  btn.disabled=false; btn.textContent='Create User';
+  if(d?.ok){
+    document.getElementById('m-db-user-add').classList.remove('open');
+    document.getElementById('dbu-nm').value='';
+    document.getElementById('dbu-pw').value='';
+    document.getElementById('dbu-createdb').checked=false;
+    loadDbUsers();
+  } else {
+    alert('Error: '+(d?.error||'Failed to create user'));
+  }
+}
+
+async function loadDbUsers(){
+  const d=await api('GET','/api/db-users');
+  if(!d) return;
+  const tb=document.getElementById('pg-users-tb');
+  if(!d.users?.length){
+    tb.innerHTML='<tr><td colspan="4" style="color:var(--muted)">No database users yet</td></tr>';
+    return;
+  }
+  tb.innerHTML=d.users.map(u=>`
+    <tr>
+      <td style="color:var(--accent)">${u.usename}</td>
+      <td><span class="pill ${u.canlogin?'p-on':'p-off'}"><span class="pd"></span>${u.canlogin?'Yes':'No'}</span></td>
+      <td><span class="pill ${u.cancreatdb?'p-on':'p-off'}"><span class="pd"></span>${u.cancreatdb?'Yes':'No'}</span></td>
+      <td><button class="btn btn-sm" onclick="deleteDbUser('${u.usename}')">Remove</button></td>
+    </tr>
+  `).join('');
+}
+
+async function deleteDbUser(username){
+  if(!confirm(`Delete user "${username}"?`)) return;
+  const d=await api('DELETE',`/api/db-users/${username}`);
+  if(d?.ok){
+    loadDbUsers();
+  } else {
+    alert('Error: '+(d?.error||'Failed to delete user'));
   }
 }
 

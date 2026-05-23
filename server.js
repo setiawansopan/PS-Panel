@@ -310,6 +310,83 @@ app.post('/api/databases', auth,(req,res)=>{
   });
 });
 
+// ── Database Users ──
+app.get('/api/db-users', auth, async(req,res)=>{
+  try {
+    const creds = getCreds();
+    const pool = new Pool({
+      host:'localhost', user:'postgres',
+      password: creds.PG_PASSWORD||'', database:'postgres',
+      connectionTimeoutMillis:3000,
+    });
+    const result = await pool.query(
+      `SELECT usename, usecanlogin, usecancreatdb FROM pg_user WHERE usename NOT IN ('pg_database_owner','postgres') ORDER BY usename`
+    );
+    await pool.end();
+    const users = result.rows.map(r=>({
+      usename:r.usename,
+      canlogin:r.usecanlogin,
+      cancreatdb:r.usecancreatdb
+    }));
+    res.json({users});
+  } catch(e){ res.json({users:[],error:e.message}); }
+});
+
+app.post('/api/db-users', auth, async(req,res)=>{
+  const {username,password,cancreatdb}=req.body;
+  if(!username||!/^[a-z0-9_]+$/.test(username)) return res.status(400).json({error:'Invalid username'});
+  if(!password||password.length<1) return res.status(400).json({error:'Password required'});
+  try {
+    const creds = getCreds();
+    const pool = new Pool({
+      host:'localhost', user:'postgres',
+      password: creds.PG_PASSWORD||'', database:'postgres',
+      connectionTimeoutMillis:3000,
+    });
+    const sql = `CREATE USER ${username} WITH PASSWORD $1 LOGIN ${cancreatdb?'CREATEDB':'NOCREATEDB'}`;
+    await pool.query(sql, [password]);
+    await pool.end();
+    res.json({ok:true});
+  } catch(e){ res.status(500).json({error:e.message}); }
+});
+
+app.delete('/api/db-users/:username', auth, async(req,res)=>{
+  const {username}=req.params;
+  if(!/^[a-z0-9_]+$/.test(username)) return res.status(400).json({error:'Invalid username'});
+  if(['postgres','pg_database_owner'].includes(username)) return res.status(400).json({error:'Cannot delete system user'});
+  try {
+    const creds = getCreds();
+    const pool = new Pool({
+      host:'localhost', user:'postgres',
+      password: creds.PG_PASSWORD||'', database:'postgres',
+      connectionTimeoutMillis:3000,
+    });
+    await pool.query(`DROP USER IF EXISTS ${username}`);
+    await pool.end();
+    res.json({ok:true});
+  } catch(e){ res.status(500).json({error:e.message}); }
+});
+
+app.post('/api/db-users/:username/grant', auth, async(req,res)=>{
+  const {username}=req.params;
+  const {database,privileges}=req.body;
+  if(!/^[a-z0-9_]+$/.test(username)) return res.status(400).json({error:'Invalid username'});
+  if(!/^[a-z0-9_]+$/.test(database)) return res.status(400).json({error:'Invalid database'});
+  try {
+    const privList = ['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'].filter(p=>privileges?.includes(p)).join(',');
+    const privStr = privileges?.includes('ALL') ? 'ALL PRIVILEGES' : privList;
+    const creds = getCreds();
+    const pool = new Pool({
+      host:'localhost', user:'postgres',
+      password: creds.PG_PASSWORD||'', database:'postgres',
+      connectionTimeoutMillis:3000,
+    });
+    await pool.query(`GRANT ${privStr} ON DATABASE ${database} TO ${username}`);
+    await pool.end();
+    res.json({ok:true});
+  } catch(e){ res.status(500).json({error:e.message}); }
+});
+
 // ── Settings (PHP.ini + FrankenPHP) ──
 const PHP_INI_PATHS = [
   '/etc/php/8.3/embed/php.ini',
