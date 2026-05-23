@@ -600,8 +600,14 @@ function saveWebhooks(hooks) {
   fs.writeFileSync(WEBHOOKS_FILE, JSON.stringify(hooks, null, 2));
 }
 function runDeploy(hook) {
+  // Setup SSH key environment untuk git operations
+  const sshKey = '/root/.ssh/ps-panel-deploy';
+  const gitEnv = fs.existsSync(sshKey)
+    ? { ...process.env, GIT_SSH_COMMAND: `ssh -i ${sshKey} -o StrictHostKeyChecking=no` }
+    : process.env;
+
   const steps = [
-    { cmd:'git', args:['-C', hook.path, 'pull', 'origin', hook.branch] },
+    { cmd:'git', args:['-C', hook.path, 'pull', 'origin', hook.branch], useGitEnv:true },
     ...(hook.laravel ? [
       { cmd:'composer', args:['install','--optimize-autoloader','--no-dev','--no-interaction'], cwd:hook.path },
       { cmd:'php', args:['artisan','migrate','--force'],  cwd:hook.path },
@@ -613,8 +619,13 @@ function runDeploy(hook) {
   let i = 0;
   function next() {
     if (i >= steps.length) return;
-    const { cmd, args, cwd } = steps[i++];
-    execFile(cmd, args, { cwd: cwd || hook.path, timeout: 300000 }, (err) => { if (!err) next(); });
+    const { cmd, args, cwd, useGitEnv } = steps[i++];
+    const execOpts = {
+      cwd: cwd || hook.path,
+      timeout: 300000,
+      env: useGitEnv ? gitEnv : process.env,
+    };
+    execFile(cmd, args, execOpts, (err) => { if (!err) next(); });
   }
   next();
 }
@@ -759,8 +770,15 @@ app.post('/api/deploy', auth,(req,res)=>{
   const {path:p,branch,laravel}=req.body;
   if(!p||!path.isAbsolute(p)) return res.status(400).json({error:'Absolute path required'});
   const safeBranch=(branch||'main').replace(/[^a-zA-Z0-9._\/-]/g,'');
+
+  // Setup SSH key environment untuk git operations (sama dengan clone endpoint)
+  const sshKey = '/root/.ssh/ps-panel-deploy';
+  const gitEnv = fs.existsSync(sshKey)
+    ? { ...process.env, GIT_SSH_COMMAND: `ssh -i ${sshKey} -o StrictHostKeyChecking=no` }
+    : process.env;
+
   const steps=[
-    {cmd:'git',  args:['-C',p,'pull','origin',safeBranch]},
+    {cmd:'git',  args:['-C',p,'pull','origin',safeBranch], useGitEnv:true},
     ...(laravel?[
       {cmd:'composer',args:['install','--optimize-autoloader','--no-dev','--no-interaction'],cwd:p},
       {cmd:'php',     args:['artisan','migrate','--force'],  cwd:p},
@@ -772,9 +790,14 @@ app.post('/api/deploy', auth,(req,res)=>{
   let out=''; let i=0;
   function next(){
     if(i>=steps.length) return res.json({ok:true, output:out});
-    const {cmd,args,cwd}=steps[i++];
+    const {cmd,args,cwd,useGitEnv}=steps[i++];
     out+=`\n$ ${cmd} ${args.join(' ')}\n`;
-    execFile(cmd,args,{cwd:cwd||p, timeout:300000},(err,stdout,stderr)=>{
+    const execOpts = {
+      cwd: cwd||p,
+      timeout: 300000,
+      env: useGitEnv ? gitEnv : process.env,
+    };
+    execFile(cmd,args,execOpts,(err,stdout,stderr)=>{
       out+=stdout||stderr||'';
       if(err){out+='\n[FAILED]\n'; return res.json({ok:false, output:out});}
       next();
