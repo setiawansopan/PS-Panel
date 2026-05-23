@@ -541,14 +541,79 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
     <!-- ── DEPLOY ── -->
     <div class="page" id="page-deploy">
       <div class="ph"><h1>Deploy</h1><p>// git pull to application directory</p></div>
-      <div class="g2" style="max-width:1040px">
-      <div class="card">
+
+      <!-- Step 1: Private Repository / SSH Deploy Key -->
+      <div class="card" style="max-width:1040px;margin-bottom:18px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <div style="background:var(--accent);color:var(--ink);width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">1</div>
+          <h3 style="margin:0;font-size:16px;font-weight:700">Private Repository</h3>
+          <span class="ct-badge">SSH Deploy Key</span>
+        </div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.9;margin-bottom:16px">
+          Untuk repo <span style="color:var(--warn)">private</span>, tambahkan SSH key server ini ke GitHub repo sebagai Deploy Key agar <code style="color:var(--accent)">git pull</code> bisa berjalan tanpa password.
+        </div>
+        <button class="btn btn-ghost" onclick="loadDeployKey()" id="dk-btn">⚿ &nbsp;Show Deploy Key</button>
+        <div id="dk-out" style="display:none;margin-top:16px">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px">Public Key — copy ke GitHub</div>
+          <div style="background:var(--ink3);border-radius:9px;padding:12px 14px;position:relative">
+            <div style="font-family:var(--mono);font-size:10px;color:var(--accent);word-break:break-all;line-height:1.7;padding-right:52px" id="dk-key"></div>
+            <button onclick="copyDeployKey()" id="dk-copy" style="position:absolute;top:10px;right:10px;background:var(--ink4);border:1px solid var(--line2);color:var(--muted);border-radius:6px;padding:4px 10px;font-size:10px;cursor:pointer;font-family:var(--mono);transition:color .15s">copy</button>
+          </div>
+          <div style="margin-top:14px;background:var(--ink3);border-radius:9px;padding:12px 14px">
+            <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Setup Steps</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--dim);line-height:2.2">
+              1. Copy public key di atas<br>
+              2. GitHub repo → Settings → Deploy keys → Add key<br>
+              3. Paste key → centang Allow write access → Add
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Clone Repository -->
+      <div class="card" style="max-width:1040px;margin-bottom:18px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <div style="background:var(--accent);color:var(--ink);width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">2</div>
+          <h3 style="margin:0;font-size:16px;font-weight:700">Clone Repository</h3>
+          <span class="ct-badge">First-time Setup</span>
+        </div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:16px;line-height:1.7">
+          Clone repo GitHub ke virtual host yang dipilih. Lakukan sekali saja saat pertama setup. URL repository otomatis tersimpan untuk deploy berikutnya.
+        </div>
+        <div class="g2" style="margin-bottom:14px">
+          <div class="fg" style="margin-bottom:0">
+            <label class="inp-lbl">Repository URL</label>
+            <input class="inp" id="clone-url" placeholder="git@github.com:user/repo.git">
+            <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:5px">SSH atau HTTPS format</div>
+          </div>
+          <div class="fg" style="margin-bottom:0">
+            <label class="inp-lbl">Target Virtual Host</label>
+            <select class="inp" id="clone-vhost" onchange="selectCloneVhost()">
+              <option value="">-- Select a virtual host --</option>
+            </select>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:5px">Clone ke: <span id="clone-path-display" style="color:var(--accent)">none selected</span></div>
+          </div>
+        </div>
+        <button class="btn" id="clone-btn" onclick="cloneRepo()">⬇ &nbsp;Clone Repository</button>
+        <div class="term" id="clone-out"></div>
+      </div>
+
+      <!-- Step 3: Deploy -->
+      <div class="card" style="max-width:1040px;margin-bottom:18px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <div style="background:var(--accent);color:var(--ink);width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">3</div>
+          <h3 style="margin:0;font-size:16px;font-weight:700">Deploy</h3>
+          <span class="ct-badge">Manual Pull</span>
+        </div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:16px;line-height:1.7">
+          Pull code terbaru dari repository. Repository URL otomatis muncul setelah clone.
+        </div>
         <div class="fg">
           <label class="inp-lbl">Virtual Host / Application</label>
           <select class="inp" id="dep-vhost" onchange="selectDeployVhost()">
             <option value="">-- Select a virtual host --</option>
           </select>
-          <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:6px">Path: <span id="dep-path-display">none selected</span></div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:6px">Path: <span id="dep-path-display" style="color:var(--muted)">none selected</span></div>
           <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px">Repository: <span id="dep-repo-display" style="color:var(--muted)">--</span></div>
         </div>
         <div class="fg"><label class="inp-lbl">Branch</label><input class="inp" id="dep-branch" value="main"></div>
@@ -569,68 +634,18 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         <div class="term" id="dep-out"></div>
       </div>
 
-      <!-- Private Repo / SSH Deploy Key -->
-      <div class="card">
-        <div class="ct">Private Repository <span class="ct-badge">SSH Deploy Key</span></div>
-        <div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.9;margin-bottom:16px">
-          Untuk repo <span style="color:var(--warn)">private</span>, tambahkan SSH key server ini ke GitHub repo sebagai Deploy Key agar <code style="color:var(--accent)">git pull</code> bisa berjalan tanpa password.
+      <!-- Step 4: Auto Deploy / Webhook -->
+      <div class="card" style="max-width:1040px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <div style="background:var(--accent);color:var(--ink);width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">4</div>
+          <h3 style="margin:0;font-size:16px;font-weight:700">Auto Deploy</h3>
+          <span class="ct-badge">GitHub Webhook</span>
+          <button class="btn" style="padding:5px 13px;font-size:11px;margin-left:auto" onclick="openWebhookModal()">+ Add</button>
         </div>
-        <button class="btn btn-ghost" onclick="loadDeployKey()" id="dk-btn">⚿ &nbsp;Show Deploy Key</button>
-        <div id="dk-out" style="display:none;margin-top:16px">
-          <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px">Public Key — copy ke GitHub</div>
-          <div style="background:var(--ink3);border-radius:9px;padding:12px 14px;position:relative">
-            <div style="font-family:var(--mono);font-size:10px;color:var(--accent);word-break:break-all;line-height:1.7;padding-right:52px" id="dk-key"></div>
-            <button onclick="copyDeployKey()" id="dk-copy" style="position:absolute;top:10px;right:10px;background:var(--ink4);border:1px solid var(--line2);color:var(--muted);border-radius:6px;padding:4px 10px;font-size:10px;cursor:pointer;font-family:var(--mono);transition:color .15s">copy</button>
-          </div>
-          <div style="margin-top:14px;background:var(--ink3);border-radius:9px;padding:12px 14px">
-            <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Langkah setup</div>
-            <div style="font-family:var(--mono);font-size:10px;color:var(--dim);line-height:2.2">
-              1. Copy key di atas<br>
-              2. GitHub repo → <span style="color:var(--text)">Settings → Deploy keys → Add key</span><br>
-              3. Paste key → centang <span style="color:var(--text)">Allow write access</span> (opsional) → Add<br>
-              4. Gunakan fitur <span style="color:var(--accent)">Clone Repository</span> di bawah ↓<br>
-              5. Deploy berikutnya pakai panel seperti biasa ✓
-            </div>
-          </div>
-        </div>
-      </div>
-      </div>
-
-      <!-- Clone Repository -->
-      <div class="card" style="max-width:1040px;margin-top:0">
-        <div class="ct">Clone Repository <span class="ct-badge">First-time Setup</span></div>
         <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:16px;line-height:1.7">
-          Clone repo GitHub ke virtual host yang dipilih. Lakukan sekali saja saat pertama setup. Pastikan SSH Deploy Key sudah ditambahkan ke repo jika private.
+          Setup webhook agar deploy otomatis saat push ke GitHub.
         </div>
-        <div class="g2" style="margin-bottom:14px">
-          <div class="fg" style="margin-bottom:0">
-            <label class="inp-lbl">Repository URL</label>
-            <input class="inp" id="clone-url" placeholder="git@github.com:user/repo.git">
-            <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:5px">
-              SSH: <code style="color:var(--accent)">git@github.com:user/repo.git</code> atau HTTPS: <code style="color:var(--accent)">https://github.com/user/repo.git</code>
-            </div>
-          </div>
-          <div class="fg" style="margin-bottom:0">
-            <label class="inp-lbl">Target Virtual Host</label>
-            <select class="inp" id="clone-vhost" onchange="selectCloneVhost()">
-              <option value="">-- Select a virtual host --</option>
-            </select>
-            <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:5px">Clone ke: <span id="clone-path-display" style="color:var(--accent)">none selected</span></div>
-          </div>
-        </div>
-        <button class="btn" id="clone-btn" onclick="cloneRepo()">⬇ &nbsp;Clone Repository</button>
-        <div class="term" id="clone-out"></div>
-      </div>
-
-      <!-- Auto Deploy / Webhook -->
-      <div class="card" style="max-width:1040px;margin-top:14px">
-        <div class="ct">Auto Deploy
-          <div style="display:flex;align-items:center;gap:10px">
-            <span class="ct-badge">GitHub Webhook</span>
-            <button class="btn" style="padding:5px 13px;font-size:11px" onclick="openWebhookModal()">+ Add</button>
-          </div>
-        </div>
-        <div id="webhook-list"><div style="color:var(--muted);font-size:12px;font-family:var(--mono)">Belum ada webhook. Klik + Add untuk setup auto deploy.</div></div>
+        <div id="webhook-list"><div style="color:var(--muted);font-size:12px;font-family:var(--mono);padding:12px;background:var(--ink3);border-radius:9px">Belum ada webhook. Klik + Add untuk setup auto deploy.</div></div>
       </div>
     </div>
 
