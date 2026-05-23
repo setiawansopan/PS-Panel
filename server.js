@@ -370,23 +370,33 @@ app.post('/api/vhost-env/:domain/clear-cache', auth,(req,res)=>{
   const appPath = `/var/www/${domain}`;
   if(!fs.existsSync(appPath)) return res.status(400).json({error:'Vhost directory not found'});
 
+  // Commands ordered safest first.
+  // - config:clear is safe (file-based)
+  // - view:clear & route:clear are file-based
+  // - cache:clear may fail if DB-backed cache table doesn't exist (non-fatal)
+  // - Manually clear bootstrap/cache/*.php as fallback
   const commands = [
-    'php artisan config:clear',
-    'php artisan cache:clear',
-    'php artisan config:cache',
+    { cmd: 'php artisan config:clear',           fatal: true  },
+    { cmd: 'php artisan view:clear',             fatal: false },
+    { cmd: 'php artisan route:clear',            fatal: false },
+    { cmd: 'php artisan cache:clear',            fatal: false }, // may fail if cache table missing
+    { cmd: `rm -f ${appPath}/bootstrap/cache/config.php ${appPath}/bootstrap/cache/routes-v7.php ${appPath}/bootstrap/cache/services.php`, fatal: false },
   ];
   let output='', i=0;
   function runNext(){
-    if(i>=commands.length) return res.json({ok:true, output});
-    const cmd = commands[i++];
+    if(i>=commands.length) return res.json({ok:true, output: output+'\n✓ Done. Run Deploy or migrations to populate DB tables.'});
+    const {cmd, fatal} = commands[i++];
     output += `$ ${cmd}\n`;
     exec(cmd, {cwd: appPath, timeout: 30000}, (err, stdout, stderr)=>{
       output += stdout || stderr || '';
-      output += '\n';
       if(err){
-        output += '[FAILED]\n';
-        return res.json({ok:false, output});
+        if(fatal){
+          output += '\n[FAILED]\n';
+          return res.json({ok:false, output});
+        }
+        output += '[skipped - non-fatal]\n';
       }
+      output += '\n';
       runNext();
     });
   }
