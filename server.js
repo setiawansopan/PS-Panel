@@ -798,8 +798,17 @@ app.post('/api/deploy', auth,(req,res)=>{
       env: useGitEnv ? gitEnv : process.env,
     };
     execFile(cmd,args,execOpts,(err,stdout,stderr)=>{
-      out+=stdout||stderr||'';
-      if(err){out+='\n[FAILED]\n'; return res.json({ok:false, output:out});}
+      // Capture all output (both stdout and stderr)
+      if(stdout) out+=stdout;
+      if(stderr) out+=stderr;
+      if(err){
+        // Show detailed error info
+        if(err.code==='ENOENT') out+=`\n[ERROR] Command "${cmd}" not found. Please ensure it's installed and in PATH.\n`;
+        else if(err.code) out+=`\n[ERROR] Exit code: ${err.code}\n`;
+        if(err.message && !stderr) out+=`[ERROR] ${err.message}\n`;
+        out+='\n[FAILED]\n';
+        return res.json({ok:false, output:out});
+      }
       next();
     });
   }
