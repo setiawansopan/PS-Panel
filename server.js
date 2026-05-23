@@ -482,39 +482,72 @@ app.delete('/api/db-users/:username', auth, async(req,res)=>{
 
 app.post('/api/db-users/:username/grant', auth, async(req,res)=>{
   const {username}=req.params;
-  const {database,privileges}=req.body;
+  const {database,privileges,makeOwner}=req.body;
   if(!/^[a-z0-9_]+$/.test(username)) return res.status(400).json({error:'Invalid username'});
   if(!/^[a-z0-9_]+$/.test(database)) return res.status(400).json({error:'Invalid database'});
-  try {
-    const creds = getCreds();
-    const pool = new Pool({
-      host:'localhost', user:'postgres',
-      password: creds.PG_PASSWORD||'', database:'postgres',
-      connectionTimeoutMillis:3000,
-    });
 
-    // Database-level privileges
-    const dbPrivs = ['CONNECT','TEMP'].filter(p=>privileges?.includes(p));
-    if(privileges?.includes('ALL')) {
-      await pool.query(`GRANT ALL PRIVILEGES ON DATABASE "${database}" TO "${username}"`);
-    } else if(dbPrivs.length) {
-      await pool.query(`GRANT ${dbPrivs.join(',')} ON DATABASE "${database}" TO "${username}"`);
+  const creds = getCreds();
+  const adminPool = new Pool({
+    host:'localhost', user:'postgres',
+    password: creds.PG_PASSWORD||'', database:'postgres',
+    connectionTimeoutMillis:3000,
+  });
+
+  // Pool ke target database untuk grant schema-level privileges (PG15+ requirement)
+  const targetPool = new Pool({
+    host:'localhost', user:'postgres',
+    password: creds.PG_PASSWORD||'', database: database,
+    connectionTimeoutMillis:3000,
+  });
+
+  try {
+    const hasAll = privileges?.includes('ALL');
+
+    // Optional: Make user the owner of database (gives full access including schema)
+    if(makeOwner){
+      await adminPool.query(`ALTER DATABASE "${database}" OWNER TO "${username}"`);
     }
 
-    // Schema/table-level privileges (for default public schema)
+    // 1. Database-level privileges
+    const dbPrivs = ['CONNECT','TEMP'].filter(p=>privileges?.includes(p));
+    if(hasAll) {
+      await adminPool.query(`GRANT ALL PRIVILEGES ON DATABASE "${database}" TO "${username}"`);
+    } else if(dbPrivs.length) {
+      await adminPool.query(`GRANT ${dbPrivs.join(',')} ON DATABASE "${database}" TO "${username}"`);
+    }
+
+    // 2. Schema-level privileges (PG15+ requirement - new users have NO access to public schema by default)
+    if(hasAll) {
+      await targetPool.query(`GRANT ALL ON SCHEMA public TO "${username}"`);
+    } else {
+      // For granular grants, still need USAGE + CREATE on schema for table operations
+      await targetPool.query(`GRANT USAGE, CREATE ON SCHEMA public TO "${username}"`);
+    }
+
+    // 3. Table & sequence privileges
     const tablePrivs = ['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'].filter(p=>privileges?.includes(p));
-    if(privileges?.includes('ALL')) {
-      await pool.query(`GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "${username}"`);
-      await pool.query(`GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "${username}"`);
+    if(hasAll) {
+      await targetPool.query(`GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "${username}"`);
+      await targetPool.query(`GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "${username}"`);
+      // Default privileges for FUTURE tables/sequences
+      await targetPool.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "${username}"`);
+      await targetPool.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO "${username}"`);
     } else if(tablePrivs.length) {
       const privStr = tablePrivs.join(',');
-      await pool.query(`GRANT ${privStr} ON ALL TABLES IN SCHEMA public TO "${username}"`);
-      await pool.query(`GRANT ${privStr} ON ALL SEQUENCES IN SCHEMA public TO "${username}"`);
+      await targetPool.query(`GRANT ${privStr} ON ALL TABLES IN SCHEMA public TO "${username}"`);
+      await targetPool.query(`GRANT ${privStr} ON ALL SEQUENCES IN SCHEMA public TO "${username}"`);
+      await targetPool.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ${privStr} ON TABLES TO "${username}"`);
+      await targetPool.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ${privStr} ON SEQUENCES TO "${username}"`);
     }
 
-    await pool.end();
+    await adminPool.end();
+    await targetPool.end();
     res.json({ok:true});
-  } catch(e){ res.status(500).json({error:e.message}); }
+  } catch(e){
+    try{await adminPool.end();}catch{}
+    try{await targetPool.end();}catch{}
+    res.status(500).json({error:e.message});
+  }
 });
 
 // ── Settings (PHP.ini + FrankenPHP) ──

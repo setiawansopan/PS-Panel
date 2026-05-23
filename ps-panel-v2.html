@@ -894,6 +894,12 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         <label class="check-lbl"><input type="checkbox" class="grant-priv" value="DELETE"> DELETE</label>
         <label class="check-lbl"><input type="checkbox" class="grant-priv" value="ALL" style="grid-column:1/-1"> ALL PRIVILEGES</label>
       </div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:8px;line-height:1.7">
+        Auto: GRANT USAGE+CREATE on schema public + ALTER DEFAULT for future tables (PG15+ ready)
+      </div>
+    </div>
+    <div class="fg" style="margin-bottom:0">
+      <label class="check-lbl"><input type="checkbox" id="grant-owner"> Make User Owner of Database <span style="color:var(--warn);font-family:var(--mono);font-size:9px;margin-left:6px">(recommended for Laravel apps - full access)</span></label>
     </div>
     <div class="mf">
       <button class="btn btn-ghost" onclick="document.getElementById('m-db-grant').classList.remove('open')">Cancel</button>
@@ -1296,16 +1302,18 @@ async function loadGrantDatabases(){
 async function grantPrivilege(){
   const username=document.getElementById('grant-user').value;
   const database=document.getElementById('grant-db').value;
+  const makeOwner=document.getElementById('grant-owner').checked;
   if(!username||!database) return alert('Select both user and database');
   const privs=Array.from(document.querySelectorAll('.grant-priv:checked')).map(c=>c.value);
-  if(!privs.length) return alert('Select at least one privilege');
+  if(!privs.length && !makeOwner) return alert('Select at least one privilege or check "Make Owner"');
   const btn=document.querySelector('#m-db-grant .btn:not(.btn-ghost)');
   btn.disabled=true; btn.textContent='Assigning...';
-  const d=await api('POST',`/api/db-users/${username}/grant`,{database,privileges:privs});
+  const d=await api('POST',`/api/db-users/${username}/grant`,{database,privileges:privs,makeOwner});
   btn.disabled=false; btn.textContent='Assign';
   if(d?.ok){
     document.getElementById('m-db-grant').classList.remove('open');
-    alert(`Privilege granted to ${username} on ${database}`);
+    document.getElementById('grant-owner').checked=false;
+    alert(`✓ Privileges granted to ${username} on ${database}${makeOwner?' (now owner)':''}\n\nSchema public + future tables also granted (PG15+ compatible)`);
   } else {
     alert('Error: '+(d?.error||'Failed to grant privilege'));
   }
