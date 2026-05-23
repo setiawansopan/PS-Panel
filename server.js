@@ -320,13 +320,13 @@ app.get('/api/db-users', auth, async(req,res)=>{
       connectionTimeoutMillis:3000,
     });
     const result = await pool.query(
-      `SELECT usename, usecanlogin, usecancreatdb FROM pg_user WHERE usename NOT IN ('pg_database_owner','postgres') ORDER BY usename`
+      `SELECT rolname, rolcanlogin, rolcreatedb FROM pg_roles WHERE rolname NOT IN ('pg_database_owner','postgres') AND NOT rolname LIKE 'pg_%' ORDER BY rolname`
     );
     await pool.end();
     const users = result.rows.map(r=>({
-      usename:r.usename,
-      canlogin:r.usecanlogin,
-      cancreatdb:r.usecancreatdb
+      usename:r.rolname,
+      canlogin:r.rolcanlogin,
+      cancreatdb:r.rolcreatedb
     }));
     res.json({users});
   } catch(e){ res.json({users:[],error:e.message}); }
