@@ -1482,10 +1482,15 @@ async function loadDeployKey(){
   document.getElementById('dk-out').style.display='block';
 }
 function copyDeployKey(){
-  navigator.clipboard.writeText(document.getElementById('dk-key').textContent).then(()=>{
+  const text=document.getElementById('dk-key').textContent;
+  if(!text) return;
+  navigator.clipboard.writeText(text).then(()=>{
     const btn=document.getElementById('dk-copy');
-    btn.textContent='copied!';btn.style.color='var(--accent)';
-    setTimeout(()=>{btn.textContent='copy';btn.style.color='';},2000);
+    btn.textContent='✓ copied!';
+    btn.style.color='var(--accent)';
+    setTimeout(()=>{btn.textContent='copy';btn.style.color='var(--muted)';},2000);
+  }).catch(err=>{
+    alert('Copy gagal: '+err.message);
   });
 }
 
