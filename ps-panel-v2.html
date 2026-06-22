@@ -61,6 +61,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .ni-mail .ni-icon{color:#ec4899}
 .ni-deploy .ni-icon{color:#0ea5e9}
 .ni-settings .ni-icon{color:#f59e0b}
+.ni-update .ni-icon{color:#22c55e}
+.ni-badge{margin-left:auto;background:#22c55e;color:#04210f;font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;font-family:var(--mono);letter-spacing:.03em}
 .sb-ft{padding:14px 18px;border-top:1px solid var(--line);display:flex;align-items:center;gap:8px}
 @keyframes lp{0%,100%{opacity:1}50%{opacity:.3}}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:lp 2s ease-in-out infinite;flex-shrink:0}
@@ -298,6 +300,7 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       <div class="ni ni-deploy" onclick="go('deploy')"><span class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg></span>Deploy</div>
       <div class="ns">Configuration</div>
       <div class="ni ni-settings" onclick="go('settings')"><span class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="21" y1="4" x2="14" y2="4"/><line x1="10" y1="4" x2="3" y2="4"/><line x1="21" y1="12" x2="12" y2="12"/><line x1="8" y1="12" x2="3" y2="12"/><line x1="21" y1="20" x2="16" y2="20"/><line x1="12" y1="20" x2="3" y2="20"/><line x1="14" y1="2" x2="14" y2="6"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="16" y1="18" x2="16" y2="22"/></svg></span>Settings</div>
+      <div class="ni ni-update" onclick="go('update')"><span class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg></span>Update<span class="ni-badge" id="nav-update-badge" style="display:none">new</span></div>
     </nav>
     <div class="sb-ft">
       <div class="dot"></div>
@@ -882,6 +885,43 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       <div id="st-result" style="display:none;max-width:1040px;margin-top:14px"></div>
     </div>
 
+    <!-- ── UPDATE ── -->
+    <div class="page" id="page-update">
+      <div class="ph"><h1>Update</h1><p>// cek &amp; pasang versi terbaru PS Panel</p></div>
+
+      <div class="card" style="max-width:760px;margin-bottom:18px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+          <div>
+            <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px">Versi terpasang</div>
+            <div style="font-size:26px;font-weight:700;line-height:1"><span id="up-current">—</span></div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px">Versi terbaru</div>
+            <div style="font-size:26px;font-weight:700;line-height:1;color:var(--accent)"><span id="up-latest">—</span></div>
+          </div>
+          <button class="btn btn-ghost" id="up-check-btn" onclick="checkUpdate()" style="align-self:center">⟳ &nbsp;Cek Update</button>
+        </div>
+        <div id="up-status" style="margin-top:16px;font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.7"></div>
+      </div>
+
+      <div class="card" id="up-changelog-card" style="max-width:760px;margin-bottom:18px;display:none">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <h3 style="margin:0;font-size:15px;font-weight:700">Yang baru</h3>
+          <span class="ct-badge" id="up-changelog-ver"></span>
+        </div>
+        <ul id="up-notes" style="margin:0;padding-left:18px;font-size:13px;line-height:1.9;color:var(--dim)"></ul>
+      </div>
+
+      <div class="card" id="up-apply-card" style="max-width:760px;display:none">
+        <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.7">
+          Update akan mengunduh file terbaru (server.js, UI, install.sh), menjalankan <code style="color:var(--accent)">npm install</code>, lalu <span style="color:var(--warn)">restart panel otomatis</span>.<br>
+          File lama dibackup sebagai <code style="color:var(--accent)">.bak</code>. Konfigurasi vhost, database, dan .env tidak tersentuh.
+        </div>
+        <button class="btn" id="up-apply-btn" onclick="applyUpdate()">▲ &nbsp;Update Sekarang</button>
+        <div class="term" id="up-out"></div>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -1150,6 +1190,7 @@ function go(name){
   if(name==='frankenphp') loadFrankenphp();
   if(name==='deploy'){loadWebhookList();loadDeployVhosts();}
   if(name==='settings')  loadSettings();
+  if(name==='update')    checkUpdate();
 }
 
 // ── Helpers ──
@@ -2272,6 +2313,68 @@ function init(){
   setInterval(()=>{
     if(document.getElementById('pg-chart')?.closest('.page.on')) loadPostgres();
   },5000);
+  updateBadgeCheck();
+}
+
+// ── UPDATE ──
+let _upLatest=null;
+async function checkUpdate(){
+  const btn=document.getElementById('up-check-btn');
+  const status=document.getElementById('up-status');
+  const orig=btn.innerHTML; btn.disabled=true; btn.innerHTML='⟳ &nbsp;Mengecek...';
+  status.style.color='var(--muted)'; status.textContent='Menghubungi server update...';
+  const r=await api('GET','/api/update/check');
+  btn.disabled=false; btn.innerHTML=orig;
+  const badge=document.getElementById('nav-update-badge');
+  const clog=document.getElementById('up-changelog-card');
+  const apply=document.getElementById('up-apply-card');
+  if(!r){ status.style.color='var(--danger)'; status.textContent='Gagal menghubungi panel.'; return; }
+  document.getElementById('up-current').textContent='v'+(r.current||'?');
+  if(r.error){
+    document.getElementById('up-latest').textContent='—';
+    status.style.color='var(--warn)'; status.textContent='⚠ '+r.error;
+    clog.style.display='none'; apply.style.display='none'; return;
+  }
+  document.getElementById('up-latest').textContent='v'+(r.latest||'?');
+  _upLatest=r.latest;
+  if(r.notes&&r.notes.length){
+    document.getElementById('up-changelog-ver').textContent='v'+r.latest+(r.released?' · '+r.released:'');
+    document.getElementById('up-notes').innerHTML=r.notes.map(n=>`<li>${esc(n)}</li>`).join('');
+    clog.style.display='';
+  } else clog.style.display='none';
+  if(r.updateAvailable){
+    status.style.color='var(--accent)';
+    status.innerHTML=`✦ Versi baru <b>v${esc(r.latest)}</b> tersedia! Versi terpasang v${esc(r.current)}.`;
+    apply.style.display=''; badge.style.display='';
+  } else {
+    status.style.color='#22c55e';
+    status.textContent='✓ Panel sudah versi terbaru.';
+    apply.style.display='none'; badge.style.display='none';
+  }
+}
+async function applyUpdate(){
+  if(!confirm('Update panel ke v'+(_upLatest||'terbaru')+'?\nPanel akan restart otomatis setelah selesai.')) return;
+  const btn=document.getElementById('up-apply-btn');
+  const out=document.getElementById('up-out');
+  const orig=btn.innerHTML; btn.disabled=true; btn.innerHTML='⟳ &nbsp;Updating...';
+  out.style.display='block'; out.textContent='Memulai update...\n';
+  const r=await api('POST','/api/update/apply',{});
+  if(!r){ out.textContent+='\n[ERROR] Tidak ada respons dari panel.'; btn.disabled=false; btn.innerHTML=orig; return; }
+  out.textContent=r.output||''; out.scrollTop=out.scrollHeight;
+  if(r.ok&&r.restarting){
+    btn.innerHTML='✓ &nbsp;Restarting...';
+    let n=14;
+    const tick=setInterval(()=>{
+      out.textContent=(r.output||'')+`\n⏳ Menunggu panel restart, reload dalam ${n}s...`;
+      out.scrollTop=out.scrollHeight;
+      if(--n<0){clearInterval(tick); location.reload();}
+    },1000);
+  } else { btn.disabled=false; btn.innerHTML=orig; }
+}
+// Silent check on load → light up the sidebar badge if an update exists.
+async function updateBadgeCheck(){
+  const r=await api('GET','/api/update/check');
+  if(r&&r.updateAvailable) document.getElementById('nav-update-badge').style.display='';
 }
 
 // ── THEME ──

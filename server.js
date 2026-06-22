@@ -19,6 +19,12 @@ const SECRET = process.env.PANEL_SECRET || require('crypto').randomBytes(32).toS
 const PORT = process.env.PANEL_PORT || 8765;
 const CREDS_FILE = '/root/.pspanel_credentials';
 
+// ── Self-update config ──
+const https = require('https');
+const PANEL_DIR = __dirname;
+// Raw GitHub base used to check for / download new panel versions.
+const GITHUB_RAW = process.env.PANEL_UPDATE_URL || 'https://raw.githubusercontent.com/setiawansopan/PS-Panel/main';
+
 app.use(express.json({ limit: '100mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -1182,6 +1188,155 @@ app.post('/api/mail/:domain/save', auth, (req,res)=>{
     try { fs.chmodSync(envPath, 0o644); } catch {}
     res.json({ ok:true });
   } catch(e){ res.status(500).json({error:'Cannot save .env: '+e.message}); }
+});
+
+// ── Self-update ──
+// Standard installs are NOT git repos (install.sh wget's individual files), so
+// updates work by downloading the latest files over HTTPS from GITHUB_RAW and
+// comparing a version manifest (version.json) rather than using `git pull`.
+
+// Files refreshed during an update, relative to PANEL_DIR.
+const UPDATE_FILES = ['server.js', 'public/index.html', 'install.sh', 'version.json'];
+
+// Read the locally-installed version (version.json → package.json → unknown).
+function localVersion(){
+  try { return JSON.parse(fs.readFileSync(path.join(PANEL_DIR,'version.json'),'utf8')); }
+  catch {}
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(PANEL_DIR,'package.json'),'utf8'));
+    return { version: pkg.version || '0.0.0', notes: [] };
+  } catch {}
+  return { version: '0.0.0', notes: [] };
+}
+
+// Compare two dotted version strings → 1 / 0 / -1.
+function cmpVer(a,b){
+  const pa = String(a).split('.').map(n=>parseInt(n,10)||0);
+  const pb = String(b).split('.').map(n=>parseInt(n,10)||0);
+  for(let i=0;i<3;i++){ if((pa[i]||0)>(pb[i]||0)) return 1; if((pa[i]||0)<(pb[i]||0)) return -1; }
+  return 0;
+}
+
+// GET a URL, returning the body as a string (follows one redirect).
+function httpsGet(url, redirects=2){
+  return new Promise((resolve,reject)=>{
+    const req = https.get(url, { timeout: 20000, headers:{'User-Agent':'PS-Panel'} }, res=>{
+      if(res.statusCode>=300 && res.statusCode<400 && res.headers.location && redirects>0){
+        res.resume(); return resolve(httpsGet(res.headers.location, redirects-1));
+      }
+      if(res.statusCode!==200){ res.resume(); return reject(new Error('HTTP '+res.statusCode+' for '+url)); }
+      let data=''; res.setEncoding('utf8');
+      res.on('data',c=>data+=c); res.on('end',()=>resolve(data));
+    });
+    req.on('timeout',()=>req.destroy(new Error('Request timeout')));
+    req.on('error',reject);
+  });
+}
+
+// Download a URL to a destination file (follows one redirect).
+function httpsDownload(url, dest, redirects=2){
+  return new Promise((resolve,reject)=>{
+    const file = fs.createWriteStream(dest);
+    const req = https.get(url, { timeout: 60000, headers:{'User-Agent':'PS-Panel'} }, res=>{
+      if(res.statusCode>=300 && res.statusCode<400 && res.headers.location && redirects>0){
+        res.resume(); file.close(); fs.unlink(dest,()=>{});
+        return resolve(httpsDownload(res.headers.location, dest, redirects-1));
+      }
+      if(res.statusCode!==200){ res.resume(); file.close(); fs.unlink(dest,()=>{}); return reject(new Error('HTTP '+res.statusCode+' for '+url)); }
+      res.pipe(file);
+      file.on('finish',()=>file.close(()=>resolve()));
+    });
+    req.on('timeout',()=>req.destroy(new Error('Request timeout')));
+    req.on('error',e=>{ file.close(); fs.unlink(dest,()=>{}); reject(e); });
+  });
+}
+
+// Run a command, resolving with {err,stdout,stderr} (never rejects).
+function runCmd(cmd, args, opts={}){
+  return new Promise(resolve=>{
+    execFile(cmd, args, { timeout: 60000, ...opts }, (err,stdout,stderr)=>{
+      resolve({ err, stdout:(stdout||'').toString(), stderr:(stderr||'').toString() });
+    });
+  });
+}
+
+// Check whether a newer panel version is available.
+app.get('/api/update/check', auth, async (req,res)=>{
+  const local = localVersion();
+  try {
+    const raw = await httpsGet(`${GITHUB_RAW}/version.json?t=${Date.now()}`);
+    let remote;
+    try { remote = JSON.parse(raw); } catch { return res.status(502).json({error:'Manifest versi remote tidak valid'}); }
+    const updateAvailable = cmpVer(remote.version, local.version) > 0;
+    res.json({
+      current: local.version,
+      latest:  remote.version,
+      released: remote.released || null,
+      notes:   Array.isArray(remote.notes) ? remote.notes : [],
+      updateAvailable,
+    });
+  } catch(e){
+    res.status(502).json({ error:'Tidak bisa cek update: '+e.message, current: local.version });
+  }
+});
+
+// Download latest files, npm install, then restart via PM2.
+app.post('/api/update/apply', auth, async (req,res)=>{
+  let out='';
+  const tmpDir = path.join(PANEL_DIR, '.update-tmp');
+  try {
+    // 1. Download every file to a temp dir first (so a failed download can't leave a half-updated panel).
+    fs.mkdirSync(tmpDir, { recursive: true });
+    out += '── Downloading latest files ──\n';
+    for(const rel of UPDATE_FILES){
+      const url = `${GITHUB_RAW}/${rel}?t=${Date.now()}`;
+      const tmp = path.join(tmpDir, rel.replace(/[\/]/g,'__'));
+      try { await httpsDownload(url, tmp); out += `  ✓ ${rel}\n`; }
+      catch(e){
+        // version.json may not exist on very old branches — skip it, fail hard on the rest.
+        if(rel==='version.json'){ out += `  • ${rel} (lewati, opsional)\n`; continue; }
+        out += `  ✗ ${rel} — ${e.message}\n[GAGAL] Download dibatalkan, tidak ada file yang diubah.\n`;
+        fs.rmSync(tmpDir,{recursive:true,force:true});
+        return res.json({ ok:false, output:out });
+      }
+    }
+    // 2. Move downloaded files into place (backup .bak of the existing one).
+    out += '\n── Applying ──\n';
+    for(const rel of UPDATE_FILES){
+      const tmp = path.join(tmpDir, rel.replace(/[\/]/g,'__'));
+      if(!fs.existsSync(tmp)) continue;
+      const target = path.join(PANEL_DIR, rel);
+      fs.mkdirSync(path.dirname(target),{recursive:true});
+      try { if(fs.existsSync(target)) fs.copyFileSync(target, target+'.bak'); } catch {}
+      fs.copyFileSync(tmp, target);
+      out += `  ✓ ${rel}\n`;
+    }
+    fs.rmSync(tmpDir,{recursive:true,force:true});
+
+    // 3. Ensure dependencies are installed (nodemailer, etc.).
+    out += '\n── npm install ──\n';
+    const npm = await runCmd('npm', ['install','--no-audit','--no-fund','--omit=dev'], { cwd: PANEL_DIR, timeout: 300000 });
+    out += (npm.stdout||'') + (npm.stderr||'');
+    if(npm.err && npm.err.code==='ENOENT'){
+      out += '\n[ERROR] npm tidak ditemukan di PATH. Jalankan "npm install" manual lalu restart.\n';
+      return res.json({ ok:false, output:out });
+    }
+
+    out += '\n✓ Update selesai. Panel akan restart dalam beberapa detik...\n';
+    res.json({ ok:true, output:out, restarting:true });
+
+    // 4. Restart after the response is flushed. PM2 will respawn the process.
+    setTimeout(()=>{
+      exec('pm2 restart ps-panel --update-env', (err)=>{
+        // If not under PM2 (dev mode), just exit and let any supervisor restart us.
+        if(err) process.exit(0);
+      });
+    }, 1500);
+  } catch(e){
+    try { fs.rmSync(tmpDir,{recursive:true,force:true}); } catch {}
+    out += '\n[ERROR] '+e.message+'\n';
+    res.json({ ok:false, output:out });
+  }
 });
 
 // ── WebSocket real-time ──

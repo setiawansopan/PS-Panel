@@ -1,0 +1,10 @@
+{
+  "version": "2.1.0",
+  "released": "2026-06-23",
+  "notes": [
+    "Self-update: cek & pasang versi terbaru langsung dari panel",
+    "File Manager: browse, edit, upload, download, chmod",
+    "Mail / SMTP: konfigurasi & test email untuk reset password / OTP",
+    "Sidebar pakai icon SVG + tema default light"
+  ]
+}

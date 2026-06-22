@@ -758,11 +758,17 @@ install_panel() {
     || warn "server.js download failed — copy server.js manually later."
   spinner_stop ok
 
+  spinner_start "Downloading version manifest..."
+  wget_download "${GITHUB_RAW}/version.json" \
+    "${PANEL_DIR}/version.json" \
+    || warn "version.json download failed — self-update check may show outdated version."
+  spinner_stop ok
+
   spinner_start "Writing package.json..."
   cat > "${PANEL_DIR}/package.json" << 'PKGJSON'
 {
   "name": "ps-panel",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "main": "server.js",
   "dependencies": {
     "express": "^4.18.2",
