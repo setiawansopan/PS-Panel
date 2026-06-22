@@ -49,14 +49,17 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .ni:hover{background:var(--ink3);color:var(--text)}
 .ni.on{background:rgba(110,231,183,.1);color:var(--accent)}
 .ni.on::before{content:'';position:absolute;left:-10px;top:25%;bottom:25%;width:3px;border-radius:0 3px 3px 0;background:var(--accent)}
-.ni-icon{font-size:18px;display:flex;align-items:center;justify-content:center;width:24px;flex-shrink:0}
-.ni-dashboard .ni-icon{color:#6ee7b7}
+.ni-icon{display:flex;align-items:center;justify-content:center;width:22px;height:22px;flex-shrink:0}
+.ni-icon svg{width:18px;height:18px;stroke-width:2;display:block}
+.ni-dashboard .ni-icon{color:#10b981}
 .ni-frankenphp .ni-icon{color:#f97316}
 .ni-redis .ni-icon{color:#ef4444}
 .ni-postgres .ni-icon{color:#3b82f6}
 .ni-services .ni-icon{color:#8b5cf6}
 .ni-vhosts .ni-icon{color:#06b6d4}
-.ni-deploy .ni-icon{color:#10b981}
+.ni-files .ni-icon{color:#eab308}
+.ni-mail .ni-icon{color:#ec4899}
+.ni-deploy .ni-icon{color:#0ea5e9}
 .ni-settings .ni-icon{color:#f59e0b}
 .sb-ft{padding:14px 18px;border-top:1px solid var(--line);display:flex;align-items:center;gap:8px}
 @keyframes lp{0%,100%{opacity:1}50%{opacity:.3}}
@@ -254,7 +257,7 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
 .logout-btn:hover{background:rgba(248,113,113,.08);color:var(--danger);border-color:var(--danger)}
 </style>
 </head>
-<body>
+<body class="light">
 
 <!-- LOGIN -->
 <div id="login-screen">
@@ -281,19 +284,20 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
     </div>
     <nav class="nav">
       <div class="ns">Overview</div>
-      <div class="ni ni-dashboard on" onclick="go('dashboard')"><span class="ni-icon">◈</span>Dashboard</div>
+      <div class="ni ni-dashboard on" onclick="go('dashboard')"><span class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></span>Dashboard</div>
       <div class="ns">Applications</div>
-      <div class="ni ni-frankenphp" onclick="go('frankenphp')"><span class="ni-icon">⚡</span>FrankenPHP</div>
-      <div class="ni ni-redis" onclick="go('redis')"><span class="ni-icon">⬡</span>Redis</div>
-      <div class="ni ni-postgres" onclick="go('postgres')"><span class="ni-icon">◫</span>PostgreSQL</div>
+      <div class="ni ni-frankenphp" onclick="go('frankenphp')"><span class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>FrankenPHP</div>
+      <div class="ni ni-redis" onclick="go('redis')"><span class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>Redis</div>
+      <div class="ni ni-postgres" onclick="go('postgres')"><span class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg></span>PostgreSQL</div>
       <div class="ns">Server</div>
-      <div class="ni ni-services" onclick="go('services')"><span class="ni-icon">⚙</span>Services</div>
-      <div class="ni ni-vhosts" onclick="go('vhosts')"><span class="ni-icon">◉</span>Virtual Hosts</div>
-      <div class="ni ni-files" onclick="go('files')"><span class="ni-icon">▦</span>File Manager</div>
+      <div class="ni ni-services" onclick="go('services')"><span class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><line x1="6" y1="7" x2="6.01" y2="7"/><line x1="6" y1="17" x2="6.01" y2="17"/></svg></span>Services</div>
+      <div class="ni ni-vhosts" onclick="go('vhosts')"><span class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span>Virtual Hosts</div>
+      <div class="ni ni-files" onclick="go('files')"><span class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h5l2 3h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg></span>File Manager</div>
+      <div class="ni ni-mail" onclick="go('mail')"><span class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 6 10-6"/></svg></span>Mail / SMTP</div>
       <div class="ns">Deploy</div>
-      <div class="ni ni-deploy" onclick="go('deploy')"><span class="ni-icon">▲</span>Deploy</div>
+      <div class="ni ni-deploy" onclick="go('deploy')"><span class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg></span>Deploy</div>
       <div class="ns">Configuration</div>
-      <div class="ni ni-settings" onclick="go('settings')"><span class="ni-icon">⚒</span>Settings</div>
+      <div class="ni ni-settings" onclick="go('settings')"><span class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="21" y1="4" x2="14" y2="4"/><line x1="10" y1="4" x2="3" y2="4"/><line x1="21" y1="12" x2="12" y2="12"/><line x1="8" y1="12" x2="3" y2="12"/><line x1="21" y1="20" x2="16" y2="20"/><line x1="12" y1="20" x2="3" y2="20"/><line x1="14" y1="2" x2="14" y2="6"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="16" y1="18" x2="16" y2="22"/></svg></span>Settings</div>
     </nav>
     <div class="sb-ft">
       <div class="dot"></div>
@@ -598,6 +602,96 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       </div>
 
       <input type="file" id="fm-upload-input" style="display:none" multiple onchange="fmUploadFiles(this.files)">
+    </div>
+
+    <!-- ── MAIL / SMTP ── -->
+    <div class="page" id="page-mail">
+      <div class="ph"><h1>Mail / SMTP</h1><p>// outgoing email — reset password, OTP, notifikasi</p></div>
+
+      <!-- SMTP config -->
+      <div class="card" style="max-width:1040px;margin-bottom:18px">
+        <div class="ct">SMTP Configuration</div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:16px;line-height:1.7">
+          Pilih virtual host, isi kredensial SMTP dari provider eksternal, lalu <span style="color:var(--accent)">test</span> sebelum simpan ke <code style="color:var(--accent)">.env</code>.
+        </div>
+
+        <div class="fg">
+          <label class="inp-lbl">Virtual Host / Application</label>
+          <select class="inp" id="mail-vhost" onchange="loadMailConfig()">
+            <option value="">-- Select a virtual host --</option>
+          </select>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:6px">.env: <span id="mail-env-path" style="color:var(--accent)">--</span></div>
+        </div>
+
+        <div class="fg">
+          <label class="inp-lbl">Quick Preset</label>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="mailPreset('gmail')">Gmail</button>
+            <button class="btn btn-ghost btn-sm" onclick="mailPreset('mailgun')">Mailgun</button>
+            <button class="btn btn-ghost btn-sm" onclick="mailPreset('ses')">Amazon SES</button>
+            <button class="btn btn-ghost btn-sm" onclick="mailPreset('brevo')">Brevo</button>
+            <button class="btn btn-ghost btn-sm" onclick="mailPreset('sendgrid')">SendGrid</button>
+            <button class="btn btn-ghost btn-sm" onclick="mailPreset('postmark')">Postmark</button>
+            <button class="btn btn-ghost btn-sm" onclick="mailPreset('mailtrap')">Mailtrap</button>
+          </div>
+        </div>
+
+        <div class="g2">
+          <div class="fg"><label class="inp-lbl">SMTP Host</label><input class="inp" id="mail-host" placeholder="smtp.gmail.com"></div>
+          <div class="fg"><label class="inp-lbl">Port</label><input class="inp" id="mail-port" placeholder="587"></div>
+        </div>
+        <div class="g2">
+          <div class="fg"><label class="inp-lbl">Username</label><input class="inp" id="mail-user" placeholder="you@gmail.com" autocomplete="off"></div>
+          <div class="fg">
+            <label class="inp-lbl">Password / API Key</label>
+            <div style="position:relative">
+              <input class="inp" id="mail-pass" type="password" placeholder="••••••••" autocomplete="new-password" style="padding-right:54px">
+              <button onclick="mailTogglePass()" id="mail-pass-tg" style="position:absolute;top:50%;right:8px;transform:translateY(-50%);background:var(--ink4);border:1px solid var(--line2);color:var(--muted);border-radius:6px;padding:3px 9px;font-size:10px;cursor:pointer;font-family:var(--mono)">show</button>
+            </div>
+          </div>
+        </div>
+        <div class="g2">
+          <div class="fg">
+            <label class="inp-lbl">Encryption</label>
+            <select class="inp" id="mail-enc">
+              <option value="tls">TLS / STARTTLS (port 587)</option>
+              <option value="ssl">SSL (port 465)</option>
+              <option value="none">None</option>
+            </select>
+          </div>
+          <div class="fg"><label class="inp-lbl">From Address</label><input class="inp" id="mail-from" placeholder="noreply@domain.com"></div>
+        </div>
+        <div class="fg"><label class="inp-lbl">From Name</label><input class="inp" id="mail-fromname" placeholder="App Name"></div>
+
+        <button class="btn" id="mail-save-btn" onclick="saveMailConfig()">💾 &nbsp;Save to .env</button>
+      </div>
+
+      <!-- Test email -->
+      <div class="card" style="max-width:1040px">
+        <div class="ct">Send Test Email</div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.7">
+          Kirim email test pakai konfigurasi di atas (tanpa harus simpan). Verifikasi kredensial benar sebelum deploy.
+        </div>
+        <div class="g2">
+          <div class="fg" style="margin-bottom:0"><label class="inp-lbl">Send To</label><input class="inp" id="mail-test-to" placeholder="email-anda@gmail.com"></div>
+          <div class="fg" style="margin-bottom:0;display:flex;align-items:flex-end">
+            <button class="btn" id="mail-test-btn" onclick="sendTestMail()" style="width:100%">✉ &nbsp;Send Test Email</button>
+          </div>
+        </div>
+        <div class="term" id="mail-test-out"></div>
+      </div>
+
+      <!-- Provider notes -->
+      <div class="card" style="max-width:1040px;margin-top:18px">
+        <div class="ct">Catatan Provider</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--dim);line-height:2.1">
+          • <span style="color:var(--accent)">Gmail</span> — aktifkan 2FA lalu buat <span style="color:var(--text)">App Password</span> (bukan password biasa). User = email, Pass = app password.<br>
+          • <span style="color:var(--accent)">SendGrid</span> — Username = <code>apikey</code> (literal), Password = API key Anda.<br>
+          • <span style="color:var(--accent)">SES / Mailgun / Brevo / Postmark</span> — pakai SMTP credentials dari dashboard provider.<br>
+          • <span style="color:var(--accent)">Mailtrap</span> — untuk testing (email tidak benar-benar terkirim ke user).<br>
+          • Setelah Save, jalankan <code style="color:var(--warn)">php artisan config:clear</code> (atau Clear Cache di ENV editor) agar config baru kepakai.
+        </div>
+      </div>
     </div>
 
     <!-- ── DEPLOY ── -->
@@ -1050,6 +1144,7 @@ function go(name){
   if(name==='services')  loadServices();
   if(name==='vhosts')    loadVhosts();
   if(name==='files')     loadFiles(_fmPath);
+  if(name==='mail')      loadMailVhosts();
   if(name==='redis')     loadRedis();
   if(name==='postgres')  loadPostgres();
   if(name==='frankenphp') loadFrankenphp();
@@ -1731,6 +1826,104 @@ async function saveFile(){
   else alert('Error: '+(r?.error||'Failed to save'));
 }
 
+// ── Mail / SMTP ──
+const MAIL_PRESETS={
+  gmail:{host:'smtp.gmail.com',port:587,enc:'tls'},
+  mailgun:{host:'smtp.mailgun.org',port:587,enc:'tls'},
+  ses:{host:'email-smtp.us-east-1.amazonaws.com',port:587,enc:'tls'},
+  brevo:{host:'smtp-relay.brevo.com',port:587,enc:'tls'},
+  sendgrid:{host:'smtp.sendgrid.net',port:587,enc:'tls'},
+  postmark:{host:'smtp.postmarkapp.com',port:587,enc:'tls'},
+  mailtrap:{host:'sandbox.smtp.mailtrap.io',port:2525,enc:'tls'},
+};
+async function loadMailVhosts(){
+  const v=await api('GET','/api/vhosts');if(!v)return;
+  const sel=document.getElementById('mail-vhost');
+  const cur=sel.value;
+  sel.innerHTML='<option value="">-- Select a virtual host --</option>';
+  v.forEach(vh=>{
+    const opt=document.createElement('option');
+    opt.value=vh.domain;opt.textContent=vh.domain;
+    sel.appendChild(opt);
+  });
+  if(cur)sel.value=cur;
+}
+function mailPreset(name){
+  const p=MAIL_PRESETS[name];if(!p)return;
+  document.getElementById('mail-host').value=p.host;
+  document.getElementById('mail-port').value=p.port;
+  document.getElementById('mail-enc').value=p.enc;
+  if(name==='sendgrid')document.getElementById('mail-user').value='apikey';
+}
+function mailTogglePass(){
+  const i=document.getElementById('mail-pass'),b=document.getElementById('mail-pass-tg');
+  if(i.type==='password'){i.type='text';b.textContent='hide';}else{i.type='password';b.textContent='show';}
+}
+async function loadMailConfig(){
+  const domain=document.getElementById('mail-vhost').value;
+  document.getElementById('mail-env-path').textContent=domain?`/var/www/${domain}/.env`:'--';
+  if(!domain)return;
+  const r=await api('GET','/api/mail/'+encodeURIComponent(domain));
+  if(!r)return;
+  const m=r.mail||{};
+  document.getElementById('mail-host').value=m.MAIL_HOST||'';
+  document.getElementById('mail-port').value=m.MAIL_PORT||'';
+  document.getElementById('mail-user').value=m.MAIL_USERNAME||'';
+  document.getElementById('mail-pass').value=m.MAIL_PASSWORD||'';
+  document.getElementById('mail-from').value=m.MAIL_FROM_ADDRESS||'';
+  document.getElementById('mail-fromname').value=m.MAIL_FROM_NAME||'';
+  const enc=(m.MAIL_ENCRYPTION||'tls').toLowerCase();
+  document.getElementById('mail-enc').value=(enc==='ssl'||enc==='tls')?enc:'none';
+}
+function mailPayload(){
+  return {
+    host:document.getElementById('mail-host').value.trim(),
+    port:document.getElementById('mail-port').value.trim(),
+    username:document.getElementById('mail-user').value.trim(),
+    password:document.getElementById('mail-pass').value,
+    encryption:document.getElementById('mail-enc').value,
+    fromAddress:document.getElementById('mail-from').value.trim(),
+    fromName:document.getElementById('mail-fromname').value.trim(),
+  };
+}
+async function sendTestMail(){
+  const to=document.getElementById('mail-test-to').value.trim();
+  if(!to)return alert('Masukkan email tujuan test');
+  const p=mailPayload();
+  if(!p.host||!p.port)return alert('Isi SMTP host & port dulu');
+  const btn=document.getElementById('mail-test-btn'),out=document.getElementById('mail-test-out');
+  btn.disabled=true;btn.textContent='⏳ Sending...';
+  out.style.display='block';out.style.color='var(--accent)';
+  out.textContent=`Connecting to ${p.host}:${p.port} (${p.encryption})...\nSending test email to ${to}...\n`;
+  const r=await api('POST','/api/mail/test',{...p,to});
+  btn.disabled=false;btn.innerHTML='✉ &nbsp;Send Test Email';
+  if(!r){out.textContent+='[error] No response from panel';out.style.color='var(--danger)';return;}
+  if(r.ok){
+    out.style.color='var(--accent)';
+    out.textContent+=`\n✓ BERHASIL! Email terkirim ke ${to}\n`;
+    if(r.response)out.textContent+='Server: '+r.response+'\n';
+    out.textContent+='\nCek inbox (atau folder spam). Kalau masuk, SMTP siap dipakai.';
+  }else{
+    out.style.color='var(--danger)';
+    out.textContent+='\n✗ GAGAL: '+(r.error||'Unknown error')+'\n\nCek host/port/kredensial. Untuk Gmail wajib pakai App Password.';
+  }
+}
+async function saveMailConfig(){
+  const domain=document.getElementById('mail-vhost').value;
+  if(!domain)return alert('Pilih virtual host dulu');
+  const p=mailPayload();
+  if(!p.host||!p.port)return alert('Isi SMTP host & port dulu');
+  const btn=document.getElementById('mail-save-btn');
+  btn.disabled=true;btn.textContent='Saving...';
+  const r=await api('POST','/api/mail/'+encodeURIComponent(domain)+'/save',p);
+  btn.disabled=false;btn.innerHTML='💾 &nbsp;Save to .env';
+  const out=document.getElementById('mail-test-out');
+  if(r?.ok){
+    out.style.display='block';out.style.color='var(--accent)';
+    out.textContent=`✓ MAIL_* tersimpan ke /var/www/${domain}/.env (backup .bak dibuat).\nJalankan "php artisan config:clear" agar config baru kepakai.`;
+  }else alert('Error: '+(r?.error||'Gagal simpan ke .env'));
+}
+
 // ── Webhooks ──
 async function loadWebhookList(){
   // Load webhooks for the webhook list
@@ -2091,7 +2284,7 @@ function toggleTheme(){
   localStorage.setItem('psp_theme',light?'light':'dark');
   applyTheme(light);
 }
-applyTheme(localStorage.getItem('psp_theme')==='light');
+applyTheme(localStorage.getItem('psp_theme')!=='dark');
 
 if(TOK){document.getElementById('login-screen').style.display='none';document.getElementById('app').style.display='block';init();}
 </script>

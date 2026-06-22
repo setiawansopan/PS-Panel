@@ -771,7 +771,8 @@ install_panel() {
     "ioredis": "^5.3.2",
     "ws": "^8.14.2",
     "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^6.9.13"
   }
 }
 PKGJSON

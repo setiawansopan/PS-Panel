@@ -1082,6 +1082,108 @@ app.get('/api/files/download', (req,res)=>{
   } catch(e){ res.status(400).json({error:e.message}); }
 });
 
+// ── Mail / SMTP ──
+// App-level outgoing email: panel stores SMTP creds in each vhost's Laravel .env
+// and can send a test email to verify credentials before deploy.
+
+// Quote an .env value only when it contains spaces/special chars.
+function envQuote(v){
+  v = String(v == null ? '' : v);
+  if(v === '') return '';
+  if(/^[A-Za-z0-9_.\-:\/@]+$/.test(v)) return v;          // simple → no quotes
+  return '"' + v.replace(/\\/g,'\\\\').replace(/"/g,'\\"') + '"';
+}
+// Replace existing KEY= lines, append the rest — preserves the rest of the file.
+function updateEnvVars(content, vars){
+  const keys = Object.keys(vars);
+  const seen = {};
+  let lines = content.split('\n').map(line=>{
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=/);
+    if(m && keys.includes(m[1])){ seen[m[1]] = true; return `${m[1]}=${vars[m[1]]}`; }
+    return line;
+  });
+  keys.forEach(k=>{ if(!seen[k]) lines.push(`${k}=${vars[k]}`); });
+  return lines.join('\n');
+}
+
+// Read current MAIL_* values from a vhost .env (to pre-fill the form)
+app.get('/api/mail/:domain', auth, (req,res)=>{
+  const envPath = getVhostEnvPath(req.params.domain);
+  if(!envPath) return res.status(400).json({error:'Invalid domain'});
+  const out = { exists:false, path:envPath, mail:{} };
+  try {
+    if(fs.existsSync(envPath)){
+      out.exists = true;
+      fs.readFileSync(envPath,'utf8').split('\n').forEach(line=>{
+        const m = line.match(/^\s*(MAIL_[A-Z_]+)\s*=\s*(.*)$/);
+        if(m){
+          let v = m[2].trim();
+          if((v.startsWith('"')&&v.endsWith('"'))||(v.startsWith("'")&&v.endsWith("'"))) v = v.slice(1,-1);
+          out.mail[m[1]] = v;
+        }
+      });
+    }
+    res.json(out);
+  } catch(e){ res.status(500).json({error:'Cannot read .env: '+e.message}); }
+});
+
+// Send a test email using the supplied SMTP settings (not yet saved)
+app.post('/api/mail/test', auth, async (req,res)=>{
+  let nodemailer;
+  try { nodemailer = require('nodemailer'); }
+  catch { return res.status(500).json({error:'nodemailer belum terinstall. Jalankan: cd /opt/ps-panel && npm install nodemailer, lalu pm2 restart ps-panel'}); }
+  const { host, port, username, password, encryption, fromAddress, fromName, to } = req.body || {};
+  if(!host || !port || !to) return res.status(400).json({error:'host, port, dan email tujuan wajib diisi'});
+  const portNum = Number(port);
+  const secure = encryption === 'ssl' || portNum === 465;   // SSL on 465, STARTTLS otherwise
+  try {
+    const transporter = nodemailer.createTransport({
+      host, port: portNum, secure,
+      auth: (username || password) ? { user: username, pass: password } : undefined,
+      tls: { rejectUnauthorized: false }, // diagnostic test tool → accept self-signed (does not affect the app's own sending)
+      connectionTimeout: 15000, greetingTimeout: 15000,
+    });
+    const from = fromName ? `"${fromName}" <${fromAddress || username}>` : (fromAddress || username);
+    const info = await transporter.sendMail({
+      from, to,
+      subject: 'PS Panel — Test Email ✓',
+      text: 'Konfigurasi SMTP Anda berhasil. Email ini dikirim dari PS Panel sebagai test. Aplikasi siap mengirim reset password, OTP, dll.',
+      html: '<div style="font-family:sans-serif;line-height:1.6"><h2 style="color:#10b981;margin:0 0 8px">✓ SMTP Berhasil!</h2><p>Konfigurasi SMTP Anda <b>berhasil</b>. Email ini dikirim dari <b>PS Panel</b> sebagai test.</p><p>Aplikasi Anda siap mengirim <b>reset password</b>, <b>OTP</b>, dan notifikasi lainnya.</p></div>',
+    });
+    res.json({ ok:true, messageId: info.messageId, response: info.response });
+  } catch(e){
+    res.status(400).json({ ok:false, error: e.message });
+  }
+});
+
+// Write MAIL_* into a vhost's .env (backup .bak, preserve other keys)
+app.post('/api/mail/:domain/save', auth, (req,res)=>{
+  const envPath = getVhostEnvPath(req.params.domain);
+  if(!envPath) return res.status(400).json({error:'Invalid domain'});
+  const parentDir = path.dirname(envPath);
+  if(!fs.existsSync(parentDir)) return res.status(400).json({error:'Vhost directory not found: '+parentDir});
+  const { host, port, username, password, encryption, fromAddress, fromName } = req.body || {};
+  if(!host || !port) return res.status(400).json({error:'SMTP host & port wajib diisi'});
+  const vars = {
+    MAIL_MAILER:       'smtp',
+    MAIL_HOST:         envQuote(host),
+    MAIL_PORT:         envQuote(String(port)),
+    MAIL_USERNAME:     envQuote(username || ''),
+    MAIL_PASSWORD:     envQuote(password || ''),
+    MAIL_ENCRYPTION:   encryption === 'none' ? 'null' : envQuote(encryption || 'tls'),
+    MAIL_FROM_ADDRESS: envQuote(fromAddress || username || ''),
+    MAIL_FROM_NAME:    envQuote(fromName || '${APP_NAME}'),
+  };
+  try {
+    let content = fs.existsSync(envPath) ? fs.readFileSync(envPath,'utf8') : '';
+    if(fs.existsSync(envPath)) fs.copyFileSync(envPath, envPath + '.bak');
+    content = updateEnvVars(content, vars);
+    fs.writeFileSync(envPath, content);
+    try { fs.chmodSync(envPath, 0o644); } catch {}
+    res.json({ ok:true });
+  } catch(e){ res.status(500).json({error:'Cannot save .env: '+e.message}); }
+});
+
 // ── WebSocket real-time ──
 wss.on('connection', (ws, req)=>{
   const url = new URL(req.url, 'http://localhost');
