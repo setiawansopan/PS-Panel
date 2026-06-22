@@ -45,10 +45,19 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .logo-s{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.2em;text-transform:uppercase;margin-top:4px}
 .nav{padding:14px 10px;flex:1;overflow-y:auto}
 .ns{font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:.15em;text-transform:uppercase;padding:0 8px;margin:14px 0 5px}
-.ni{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:9px;cursor:pointer;color:var(--muted);font-size:13px;font-weight:600;transition:all .15s;margin-bottom:1px;position:relative}
+.ni{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:9px;cursor:pointer;color:var(--muted);font-size:13px;font-weight:600;transition:all .15s;margin-bottom:2px;position:relative}
 .ni:hover{background:var(--ink3);color:var(--text)}
 .ni.on{background:rgba(110,231,183,.1);color:var(--accent)}
 .ni.on::before{content:'';position:absolute;left:-10px;top:25%;bottom:25%;width:3px;border-radius:0 3px 3px 0;background:var(--accent)}
+.ni-icon{font-size:18px;display:flex;align-items:center;justify-content:center;width:24px;flex-shrink:0}
+.ni-dashboard .ni-icon{color:#6ee7b7}
+.ni-frankenphp .ni-icon{color:#f97316}
+.ni-redis .ni-icon{color:#ef4444}
+.ni-postgres .ni-icon{color:#3b82f6}
+.ni-services .ni-icon{color:#8b5cf6}
+.ni-vhosts .ni-icon{color:#06b6d4}
+.ni-deploy .ni-icon{color:#10b981}
+.ni-settings .ni-icon{color:#f59e0b}
 .sb-ft{padding:14px 18px;border-top:1px solid var(--line);display:flex;align-items:center;gap:8px}
 @keyframes lp{0%,100%{opacity:1}50%{opacity:.3}}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:lp 2s ease-in-out infinite;flex-shrink:0}
@@ -144,6 +153,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
 .btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--line2)}
 .btn-ghost:hover{background:var(--ink3);color:var(--text);opacity:1}
 .btn-red{background:var(--danger);color:#fff}
+.btn-sm{padding:4px 10px;font-size:11px;font-weight:600}
 
 /* ── INPUT ── */
 .inp{width:100%;background:var(--ink3);border:1px solid var(--line2);border-radius:9px;padding:10px 13px;color:var(--text);font-family:var(--mono);font-size:12px;outline:none;transition:border-color .2s,box-shadow .2s}
@@ -184,6 +194,23 @@ tr:hover td{background:rgba(255,255,255,.015)}
 .check-lbl{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px}
 .check-lbl input{accent-color:var(--accent);width:14px;height:14px}
 
+/* ── FILE MANAGER ── */
+.fm-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.fm-crumbs{display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;background:var(--ink3);padding:9px 13px;border-radius:9px;flex:1;min-width:200px}
+.fm-crumb{color:var(--accent);cursor:pointer}
+.fm-crumb:hover{text-decoration:underline}
+.fm-sep{color:var(--muted)}
+.fm-name{cursor:pointer;display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--text)}
+.fm-name.fm-dir{color:var(--accent2);font-weight:600}
+.fm-name:hover{color:var(--accent)}
+.fm-link{color:var(--warn);font-size:10px}
+.fm-actions{display:flex;gap:3px;justify-content:flex-end}
+.fm-act{background:transparent;border:1px solid var(--line2);color:var(--muted);border-radius:6px;width:27px;height:27px;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all .15s;padding:0}
+.fm-act:hover{background:var(--ink3);color:var(--text);border-color:var(--accent)}
+.fm-act-red:hover{color:var(--danger);border-color:var(--danger)}
+.fm-mode{cursor:pointer;color:var(--muted)}
+.fm-mode:hover{color:var(--accent)}
+
 /* ── LIGHT THEME ── */
 body.light {
   --ink:#f4f6fb;--ink2:#ffffff;--ink3:#eef0f7;--ink4:#e4e7f1;
@@ -208,13 +235,23 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
 
 /* theme toggle button */
 .theme-btn{
-  margin-left:auto;background:none;border:1px solid var(--line2);
+  background:none;border:1px solid var(--line2);
   border-radius:7px;cursor:pointer;color:var(--muted);
   font-size:13px;padding:4px 8px;line-height:1;
   transition:color .15s,border-color .15s,background .15s;
   flex-shrink:0;
 }
 .theme-btn:hover{background:var(--ink3);color:var(--text);border-color:var(--line2)}
+
+/* logout button */
+.logout-btn{
+  background:none;border:1px solid var(--line2);
+  border-radius:7px;cursor:pointer;color:var(--muted);
+  font-size:13px;padding:4px 8px;line-height:1;
+  transition:color .15s,border-color .15s,background .15s;
+  flex-shrink:0;
+}
+.logout-btn:hover{background:rgba(248,113,113,.08);color:var(--danger);border-color:var(--danger)}
 </style>
 </head>
 <body>
@@ -244,21 +281,25 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
     </div>
     <nav class="nav">
       <div class="ns">Overview</div>
-      <div class="ni on" onclick="go('dashboard')">◈ &nbsp;Dashboard</div>
+      <div class="ni ni-dashboard on" onclick="go('dashboard')"><span class="ni-icon">◈</span>Dashboard</div>
       <div class="ns">Applications</div>
-      <div class="ni" onclick="go('frankenphp')">⚡ &nbsp;FrankenPHP</div>
-      <div class="ni" onclick="go('redis')">⬡ &nbsp;Redis</div>
-      <div class="ni" onclick="go('postgres')">◫ &nbsp;PostgreSQL</div>
+      <div class="ni ni-frankenphp" onclick="go('frankenphp')"><span class="ni-icon">⚡</span>FrankenPHP</div>
+      <div class="ni ni-redis" onclick="go('redis')"><span class="ni-icon">⬡</span>Redis</div>
+      <div class="ni ni-postgres" onclick="go('postgres')"><span class="ni-icon">◫</span>PostgreSQL</div>
       <div class="ns">Server</div>
-      <div class="ni" onclick="go('services')">⚙ &nbsp;Services</div>
-      <div class="ni" onclick="go('vhosts')">◉ &nbsp;Virtual Hosts</div>
+      <div class="ni ni-services" onclick="go('services')"><span class="ni-icon">⚙</span>Services</div>
+      <div class="ni ni-vhosts" onclick="go('vhosts')"><span class="ni-icon">◉</span>Virtual Hosts</div>
+      <div class="ni ni-files" onclick="go('files')"><span class="ni-icon">▦</span>File Manager</div>
       <div class="ns">Deploy</div>
-      <div class="ni" onclick="go('deploy')">▲ &nbsp;Deploy</div>
+      <div class="ni ni-deploy" onclick="go('deploy')"><span class="ni-icon">▲</span>Deploy</div>
+      <div class="ns">Configuration</div>
+      <div class="ni ni-settings" onclick="go('settings')"><span class="ni-icon">⚒</span>Settings</div>
     </nav>
     <div class="sb-ft">
       <div class="dot"></div>
       <span class="lt">live · 5s refresh</span>
       <button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle theme"></button>
+      <button class="logout-btn" onclick="logout()" title="Logout">⤴</button>
     </div>
   </aside>
 
@@ -417,6 +458,16 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
           <div class="ct">Connection &amp; Lock History <span class="ct-badge">Live · 30-point window · updates every 5s</span></div>
           <canvas id="pg-chart" style="width:100%;height:200px;display:block"></canvas>
         </div>
+        <div class="card">
+          <div class="sec-hdr">
+            <div class="ct" style="margin-bottom:0">Database Users</div>
+            <button class="btn" style="font-size:12px;padding:7px 12px" onclick="document.getElementById('m-db-user-add').classList.add('open');document.getElementById('dbu-nm').focus()">+ Add User</button>
+          </div>
+          <div class="tbl-w">
+            <table><thead><tr><th>Username</th><th>Can Login</th><th>Can Create DB</th><th>Action</th></tr></thead>
+            <tbody id="pg-users-tb"><tr><td colspan="4" style="color:var(--muted)">Loading...</td></tr></tbody></table>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -500,17 +551,137 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         </div>
       </div>
       <div class="card tbl-w">
-        <table><thead><tr><th>Domain</th><th>SSL</th><th>Config File</th><th>Action</th></tr></thead>
-        <tbody id="vhost-tb"><tr><td colspan="3" style="color:var(--muted)">Loading...</td></tr></tbody></table>
+        <table><thead><tr><th>Domain</th><th>Document Root</th><th>PHP</th><th>SSL</th><th>Created</th><th>Size</th><th>Action</th></tr></thead>
+        <tbody id="vhost-tb"><tr><td colspan="7" style="color:var(--muted)">Loading...</td></tr></tbody></table>
       </div>
+    </div>
+
+    <!-- ── FILE MANAGER ── -->
+    <div class="page" id="page-files">
+      <div class="ph">
+        <div class="sec-hdr">
+          <div><h1>File Manager</h1><p>// browse & manage server files</p></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-ghost" onclick="fmNewFolder()">+ Folder</button>
+            <button class="btn btn-ghost" onclick="fmNewFile()">+ File</button>
+            <button class="btn btn-ghost" onclick="fmUpload()">⬆ Upload</button>
+            <button class="btn btn-ghost" onclick="loadFiles(_fmPath)" title="Refresh">⟳</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+        <span style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em">QUICK</span>
+        <button class="btn btn-ghost btn-sm" onclick="fmGo('/var/www')">/var/www</button>
+        <button class="btn btn-ghost btn-sm" onclick="fmGo('/etc/frankenphp')">/etc/frankenphp</button>
+        <button class="btn btn-ghost btn-sm" onclick="fmGo('/opt/ps-panel')">/opt/ps-panel</button>
+        <button class="btn btn-ghost btn-sm" onclick="fmGo('/root')">/root</button>
+      </div>
+
+      <div class="fm-bar">
+        <button class="btn btn-ghost btn-sm" id="fm-up" onclick="fmUp()" title="Parent directory">↑ Up</button>
+        <div class="fm-crumbs" id="fm-crumbs"></div>
+      </div>
+
+      <div class="fm-bar">
+        <input class="inp" id="fm-pathinput" placeholder="/var/www" onkeydown="fmGoInput(event)" style="flex:1">
+        <button class="btn btn-ghost" onclick="fmGoInput()">Go</button>
+      </div>
+
+      <div id="fm-upload-status" style="display:none;font-family:var(--mono);font-size:11px;color:var(--accent);background:var(--ink3);padding:9px 13px;border-radius:9px;margin-bottom:10px"></div>
+
+      <div class="card tbl-w">
+        <table>
+          <thead><tr><th>Name</th><th style="text-align:right">Size</th><th>Perms</th><th>Modified</th><th style="text-align:right">Actions</th></tr></thead>
+          <tbody id="fm-tb"><tr><td colspan="5" style="color:var(--muted)">Loading...</td></tr></tbody>
+        </table>
+      </div>
+
+      <input type="file" id="fm-upload-input" style="display:none" multiple onchange="fmUploadFiles(this.files)">
     </div>
 
     <!-- ── DEPLOY ── -->
     <div class="page" id="page-deploy">
       <div class="ph"><h1>Deploy</h1><p>// git pull to application directory</p></div>
-      <div class="g2" style="max-width:1040px">
-      <div class="card">
-        <div class="fg"><label class="inp-lbl">Application Path</label><input class="inp" id="dep-path" placeholder="/var/www/myapp"></div>
+
+      <!-- Step 1: Private Repository / SSH Deploy Key -->
+      <div class="card" style="max-width:1040px;margin-bottom:18px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <div style="background:var(--accent);color:var(--ink);width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">1</div>
+          <h3 style="margin:0;font-size:16px;font-weight:700">Private Repository</h3>
+          <span class="ct-badge">SSH Deploy Key</span>
+        </div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.9;margin-bottom:16px">
+          Untuk repo <span style="color:var(--warn)">private</span>, tambahkan SSH key server ini ke GitHub repo sebagai Deploy Key agar <code style="color:var(--accent)">git pull</code> bisa berjalan tanpa password.
+        </div>
+        <button class="btn btn-ghost" onclick="loadDeployKey()" id="dk-btn">⚿ &nbsp;Show Deploy Key</button>
+        <div id="dk-out" style="display:none;margin-top:16px">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px">Public Key — copy ke GitHub</div>
+          <div style="background:var(--ink3);border-radius:9px;padding:12px 14px;position:relative">
+            <div style="font-family:var(--mono);font-size:10px;color:var(--accent);word-break:break-all;line-height:1.7;padding-right:52px" id="dk-key"></div>
+            <button onclick="copyDeployKey()" id="dk-copy" style="position:absolute;top:10px;right:10px;background:var(--ink4);border:1px solid var(--line2);color:var(--muted);border-radius:6px;padding:4px 10px;font-size:10px;cursor:pointer;font-family:var(--mono);transition:color .15s">copy</button>
+          </div>
+          <div style="margin-top:14px;background:var(--ink3);border-radius:9px;padding:12px 14px">
+            <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Setup Steps</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--dim);line-height:2.2">
+              1. Copy public key di atas<br>
+              2. GitHub repo → Settings → Deploy keys → Add key<br>
+              3. Paste key → centang Allow write access → Add
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Clone Repository -->
+      <div class="card" style="max-width:1040px;margin-bottom:18px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <div style="background:var(--accent);color:var(--ink);width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">2</div>
+          <h3 style="margin:0;font-size:16px;font-weight:700">Clone Repository</h3>
+          <span class="ct-badge">First-time Setup</span>
+        </div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:16px;line-height:1.7">
+          Clone repo GitHub ke virtual host yang dipilih. Lakukan sekali saja saat pertama setup. URL repository otomatis tersimpan untuk deploy berikutnya.
+        </div>
+        <div class="g2" style="margin-bottom:14px">
+          <div class="fg" style="margin-bottom:0">
+            <label class="inp-lbl">Repository URL</label>
+            <input class="inp" id="clone-url" placeholder="git@github.com:user/repo.git">
+            <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:5px">SSH atau HTTPS format</div>
+          </div>
+          <div class="fg" style="margin-bottom:0">
+            <label class="inp-lbl">Target Virtual Host</label>
+            <select class="inp" id="clone-vhost" onchange="selectCloneVhost()">
+              <option value="">-- Select a virtual host --</option>
+            </select>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:5px">Clone ke: <span id="clone-path-display" style="color:var(--accent)">none selected</span></div>
+          </div>
+        </div>
+        <div style="margin-bottom:16px">
+          <label class="check-lbl"><input type="checkbox" id="clone-force"> Force (delete existing files first)</label>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--warn);margin-top:6px">⚠️ Akan menghapus folder yang ada sebelum clone</div>
+        </div>
+        <button class="btn" id="clone-btn" onclick="cloneRepo()">⬇ &nbsp;Clone Repository</button>
+        <div class="term" id="clone-out"></div>
+      </div>
+
+      <!-- Step 3: Deploy -->
+      <div class="card" style="max-width:1040px;margin-bottom:18px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <div style="background:var(--accent);color:var(--ink);width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">3</div>
+          <h3 style="margin:0;font-size:16px;font-weight:700">Deploy</h3>
+          <span class="ct-badge">Manual Pull</span>
+        </div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:16px;line-height:1.7">
+          Pull code terbaru dari repository. Repository URL otomatis muncul setelah clone.
+        </div>
+        <div class="fg">
+          <label class="inp-lbl">Virtual Host / Application</label>
+          <select class="inp" id="dep-vhost" onchange="selectDeployVhost()">
+            <option value="">-- Select a virtual host --</option>
+          </select>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:6px">Path: <span id="dep-path-display" style="color:var(--muted)">none selected</span></div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px">Repository: <span id="dep-repo-display" style="color:var(--muted)">--</span></div>
+        </div>
         <div class="fg"><label class="inp-lbl">Branch</label><input class="inp" id="dep-branch" value="main"></div>
         <div class="fg" style="margin-bottom:16px">
           <label class="check-lbl"><input type="checkbox" id="dep-laravel" onchange="toggleLaravelSteps()"> Laravel App</label>
@@ -529,56 +700,139 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         <div class="term" id="dep-out"></div>
       </div>
 
-      <!-- Private Repo / SSH Deploy Key -->
-      <div class="card">
-        <div class="ct">Private Repository <span class="ct-badge">SSH Deploy Key</span></div>
-        <div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.9;margin-bottom:16px">
-          Untuk repo <span style="color:var(--warn)">private</span>, tambahkan SSH key server ini ke GitHub repo sebagai Deploy Key agar <code style="color:var(--accent)">git pull</code> bisa berjalan tanpa password.
+      <!-- Step 4: Auto Deploy / Webhook -->
+      <div class="card" style="max-width:1040px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <div style="background:var(--accent);color:var(--ink);width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">4</div>
+          <h3 style="margin:0;font-size:16px;font-weight:700">Auto Deploy</h3>
+          <span class="ct-badge">GitHub Webhook</span>
+          <button class="btn" style="padding:5px 13px;font-size:11px;margin-left:auto" onclick="openWebhookModal()">+ Add</button>
         </div>
-        <button class="btn btn-ghost" onclick="loadDeployKey()" id="dk-btn">⚿ &nbsp;Show Deploy Key</button>
-        <div id="dk-out" style="display:none;margin-top:16px">
-          <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px">Public Key — copy ke GitHub</div>
-          <div style="background:var(--ink3);border-radius:9px;padding:12px 14px;position:relative">
-            <div style="font-family:var(--mono);font-size:10px;color:var(--accent);word-break:break-all;line-height:1.7;padding-right:52px" id="dk-key"></div>
-            <button onclick="copyDeployKey()" id="dk-copy" style="position:absolute;top:10px;right:10px;background:var(--ink4);border:1px solid var(--line2);color:var(--muted);border-radius:6px;padding:4px 10px;font-size:10px;cursor:pointer;font-family:var(--mono);transition:color .15s">copy</button>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:16px;line-height:1.7">
+          Setup webhook agar deploy otomatis saat push ke GitHub.
+        </div>
+        <div id="webhook-list"><div style="color:var(--muted);font-size:12px;font-family:var(--mono);padding:12px;background:var(--ink3);border-radius:9px">Belum ada webhook. Klik + Add untuk setup auto deploy.</div></div>
+      </div>
+    </div>
+
+    <!-- ── SETTINGS ── -->
+    <div class="page" id="page-settings">
+      <div class="ph">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <h1>Settings</h1>
+            <p>// konfigurasi PHP & FrankenPHP</p>
           </div>
-          <div style="margin-top:14px;background:var(--ink3);border-radius:9px;padding:12px 14px">
-            <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Langkah setup</div>
-            <div style="font-family:var(--mono);font-size:10px;color:var(--dim);line-height:2.2">
-              1. Copy key di atas<br>
-              2. GitHub repo → <span style="color:var(--text)">Settings → Deploy keys → Add key</span><br>
-              3. Paste key → centang <span style="color:var(--text)">Allow write access</span> (opsional) → Add<br>
-              4. Clone repo via SSH (sekali saja):<br>
-              <span style="color:var(--accent);padding-left:12px">git clone git@github.com:user/repo.git /var/www/app</span><br>
-              5. Deploy berikutnya pakai panel seperti biasa ✓
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost" id="st-cancel" onclick="cancelSettingsEdit()" style="display:none">Cancel</button>
+            <button class="btn" id="st-edit-btn" onclick="unlockSettingsEdit()">⚿ &nbsp;Unlock Edit</button>
+            <button class="btn" id="st-save-btn" onclick="saveSettings()" style="display:none">✓ &nbsp;Save Changes</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="st-banner" style="display:none;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:var(--warn);font-family:var(--mono);font-size:11px;padding:10px 14px;border-radius:9px;margin-bottom:14px">
+        <span>⚿ Edit mode aktif — perubahan akan otomatis restart FrankenPHP service. Konfigurasi lama dibackup sebagai .bak.</span>
+      </div>
+
+      <div class="g2" style="max-width:1040px">
+        <!-- PHP.ini Settings -->
+        <div class="card">
+          <div class="ct">PHP Configuration <span class="ct-badge" id="st-php-path">php.ini</span></div>
+          <div class="fg">
+            <label class="inp-lbl">upload_max_filesize <span style="color:var(--dim);text-transform:none;letter-spacing:0">— max upload (e.g. 10M, 100M, 1G)</span></label>
+            <input class="inp" id="st-upload_max_filesize" disabled>
+          </div>
+          <div class="fg">
+            <label class="inp-lbl">post_max_size <span style="color:var(--dim);text-transform:none;letter-spacing:0">— max POST body (≥ upload size)</span></label>
+            <input class="inp" id="st-post_max_size" disabled>
+          </div>
+          <div class="fg">
+            <label class="inp-lbl">memory_limit <span style="color:var(--dim);text-transform:none;letter-spacing:0">— PHP memory per script (e.g. 256M, -1 = unlimited)</span></label>
+            <input class="inp" id="st-memory_limit" disabled>
+          </div>
+          <div class="fg">
+            <label class="inp-lbl">max_execution_time <span style="color:var(--dim);text-transform:none;letter-spacing:0">— seconds (0 = unlimited)</span></label>
+            <input class="inp" id="st-max_execution_time" disabled>
+          </div>
+          <div class="fg">
+            <label class="inp-lbl">max_input_time <span style="color:var(--dim);text-transform:none;letter-spacing:0">— input parse time (seconds)</span></label>
+            <input class="inp" id="st-max_input_time" disabled>
+          </div>
+          <div class="fg" style="margin-bottom:0">
+            <label class="inp-lbl">max_input_vars <span style="color:var(--dim);text-transform:none;letter-spacing:0">— max GET/POST/COOKIE vars</span></label>
+            <input class="inp" id="st-max_input_vars" disabled>
+          </div>
+        </div>
+
+        <!-- FrankenPHP Settings -->
+        <div class="card">
+          <div class="ct">FrankenPHP Configuration <span class="ct-badge">Caddyfile</span></div>
+          <div class="fg">
+            <label class="inp-lbl">num_threads <span style="color:var(--dim);text-transform:none;letter-spacing:0">— worker threads (1-256, default = CPU cores)</span></label>
+            <input class="inp" id="st-num_threads" disabled placeholder="default">
+          </div>
+          <div style="background:var(--ink3);border-radius:9px;padding:14px;margin-top:6px">
+            <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Tips</div>
+            <div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.9">
+              • Set <span style="color:var(--accent)">num_threads</span> = jumlah CPU cores untuk performa optimal<br>
+              • Kosongkan untuk pakai default (auto-detect)<br>
+              • <span style="color:var(--warn)">upload_max_filesize</span> harus ≤ <span style="color:var(--warn)">post_max_size</span><br>
+              • Restart FrankenPHP otomatis setelah save<br>
+              • Konfigurasi lama otomatis dibackup
             </div>
           </div>
         </div>
       </div>
-      </div>
 
-      <!-- Auto Deploy / Webhook -->
-      <div class="card" style="max-width:1040px;margin-top:0">
-        <div class="ct">Auto Deploy
-          <div style="display:flex;align-items:center;gap:10px">
-            <span class="ct-badge">GitHub Webhook</span>
-            <button class="btn" style="padding:5px 13px;font-size:11px" onclick="document.getElementById('m-webhook').classList.add('open')">+ Add</button>
-          </div>
-        </div>
-        <div id="webhook-list"><div style="color:var(--muted);font-size:12px;font-family:var(--mono)">Belum ada webhook. Klik + Add untuk setup auto deploy.</div></div>
-      </div>
+      <div id="st-result" style="display:none;max-width:1040px;margin-top:14px"></div>
     </div>
 
   </main>
+</div>
+
+<!-- Modal Password Confirmation -->
+<div class="mbg" id="m-pw-confirm">
+  <div class="modal" style="width:380px">
+    <h3>Confirm Password</h3>
+    <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.6">
+      Masukkan password PS Panel untuk membuka edit mode.
+    </div>
+    <div class="fg" style="margin-bottom:0">
+      <label class="inp-lbl">PS Panel Password</label>
+      <input type="password" class="inp" id="pw-confirm-input" placeholder="••••••••••" onkeydown="if(event.key==='Enter')confirmPassword()">
+      <div style="color:var(--danger);font-size:11px;font-family:var(--mono);margin-top:8px;display:none" id="pw-confirm-err"></div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="closePwModal()">Cancel</button>
+      <button class="btn" onclick="confirmPassword()">Unlock</button>
+    </div>
+  </div>
 </div>
 
 <!-- Modal vhost -->
 <div class="mbg" id="m-vhost">
   <div class="modal">
     <h3>Add Virtual Host</h3>
-    <div class="fg"><label class="inp-lbl">Domain</label><input class="inp" id="v-domain" placeholder="example.com"></div>
-    <div class="fg"><label class="inp-lbl">Document Root (optional)</label><input class="inp" id="v-root" placeholder="/var/www/example.com"></div>
-    <label class="check-lbl" style="margin-top:2px;margin-bottom:8px"><input type="checkbox" id="v-php" checked> Enable PHP</label>
+    <div class="fg">
+      <label class="inp-lbl">Domain</label>
+      <input class="inp" id="v-domain" placeholder="example.com" onkeyup="updateVhostPreview()">
+    </div>
+    <div class="fg">
+      <label class="inp-lbl">Document Root <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+      <input class="inp" id="v-root" placeholder="/var/www/example.com" onkeyup="updateVhostPreview()">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px;line-height:1.6">
+        <div style="color:var(--dim);margin-bottom:4px">📍 Path yang akan digunakan:</div>
+        <div style="background:var(--ink3);padding:8px 10px;border-radius:6px;color:var(--accent)">
+          <span id="vhost-path-preview">/var/www/example.com</span>
+        </div>
+        <div style="margin-top:6px;color:var(--muted)">
+          • Kosongkan untuk default: <code style="background:var(--ink3);padding:2px 6px;border-radius:4px">/var/www/{domain}</code><br>
+          • Isi manual jika ingin path berbeda atau folder sudah ada
+        </div>
+      </div>
+    </div>
+    <label class="check-lbl" style="margin-top:12px;margin-bottom:8px"><input type="checkbox" id="v-php" checked> Enable PHP</label>
     <label class="check-lbl" style="margin-top:6px"><input type="checkbox" id="v-ssl"> Enable SSL (Let's Encrypt)</label>
     <div class="mf">
       <button class="btn btn-ghost" onclick="document.getElementById('m-vhost').classList.remove('open')">Cancel</button>
@@ -591,7 +845,12 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
 <div class="mbg" id="m-webhook">
   <div class="modal">
     <h3>Add Auto Deploy</h3>
-    <div class="fg"><label class="inp-lbl">Application Path</label><input class="inp" id="wh-path" placeholder="/var/www/myapp"></div>
+    <div class="fg">
+      <label class="inp-lbl">Virtual Host / Application</label>
+      <select class="inp" id="wh-vhost">
+        <option value="">-- Select a virtual host --</option>
+      </select>
+    </div>
     <div class="fg"><label class="inp-lbl">Branch</label><input class="inp" id="wh-branch" value="main"></div>
     <label class="check-lbl" style="margin-bottom:4px"><input type="checkbox" id="wh-laravel"> Laravel App (composer + artisan)</label>
     <div class="mf">
@@ -651,6 +910,108 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
   </div>
 </div>
 
+<div class="mbg" id="m-db-user-add">
+  <div class="modal">
+    <h3>New Database User</h3>
+    <div class="fg">
+      <label class="inp-lbl">Username</label>
+      <input class="inp" id="dbu-nm" placeholder="app_user">
+      <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:5px">lowercase · numbers · underscore only</div>
+    </div>
+    <div class="fg">
+      <label class="inp-lbl">Password</label>
+      <input class="inp" id="dbu-pw" type="password" placeholder="secure password">
+      <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:5px">strong password recommended</div>
+    </div>
+    <div class="fg" style="margin-bottom:0">
+      <label class="check-lbl"><input type="checkbox" id="dbu-createdb"> Can Create Databases</label>
+    </div>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="document.getElementById('m-db-user-add').classList.remove('open')">Cancel</button>
+      <button class="btn" onclick="createDbUser()">Create User</button>
+    </div>
+  </div>
+</div>
+
+<div class="mbg" id="m-db-grant">
+  <div class="modal">
+    <h3>Assign Database to User</h3>
+    <div class="fg">
+      <label class="inp-lbl">Username</label>
+      <input class="inp" id="grant-user" disabled style="background:var(--ink3);opacity:.6">
+    </div>
+    <div class="fg">
+      <label class="inp-lbl">Database</label>
+      <select class="inp" id="grant-db">
+        <option value="">-- Select database --</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label class="inp-lbl">Privileges</label>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
+        <label class="check-lbl"><input type="checkbox" class="grant-priv" value="CONNECT"> CONNECT</label>
+        <label class="check-lbl"><input type="checkbox" class="grant-priv" value="SELECT"> SELECT</label>
+        <label class="check-lbl"><input type="checkbox" class="grant-priv" value="INSERT"> INSERT</label>
+        <label class="check-lbl"><input type="checkbox" class="grant-priv" value="UPDATE"> UPDATE</label>
+        <label class="check-lbl"><input type="checkbox" class="grant-priv" value="DELETE"> DELETE</label>
+        <label class="check-lbl"><input type="checkbox" class="grant-priv" value="ALL" style="grid-column:1/-1"> ALL PRIVILEGES</label>
+      </div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:8px;line-height:1.7">
+        Auto: GRANT USAGE+CREATE on schema public + ALTER DEFAULT for future tables (PG15+ ready)
+      </div>
+    </div>
+    <div class="fg" style="margin-bottom:0">
+      <label class="check-lbl"><input type="checkbox" id="grant-owner"> Make User Owner of Database <span style="color:var(--warn);font-family:var(--mono);font-size:9px;margin-left:6px">(recommended for Laravel apps - full access)</span></label>
+    </div>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="document.getElementById('m-db-grant').classList.remove('open')">Cancel</button>
+      <button class="btn" onclick="grantPrivilege()">Assign</button>
+    </div>
+  </div>
+</div>
+
+<div class="mbg" id="m-env-edit">
+  <div class="modal" style="max-width:780px;width:90vw">
+    <h3 style="display:flex;align-items:center;justify-content:space-between">
+      <span>Edit Environment <span id="env-domain" style="color:var(--accent);font-size:14px;font-weight:400"></span></span>
+      <span id="env-status" style="font-family:var(--mono);font-size:10px;color:var(--muted);font-weight:400"></span>
+    </h3>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:10px;line-height:1.7">
+      File: <code id="env-path" style="color:var(--accent)">/var/www/&lt;domain&gt;/.env</code><br>
+      <span style="color:var(--warn)">⚠️ Backup .bak otomatis dibuat sebelum simpan. Setelah save, klik "Clear Cache" untuk apply.</span>
+    </div>
+    <div class="fg">
+      <textarea class="inp" id="env-content" spellcheck="false" style="min-height:380px;max-height:55vh;font-family:var(--mono);font-size:11px;line-height:1.7;resize:vertical;white-space:pre;overflow:auto" placeholder="DB_CONNECTION=pgsql&#10;DB_HOST=127.0.0.1&#10;..."></textarea>
+    </div>
+    <div class="term" id="env-out" style="display:none;max-height:140px"></div>
+    <div class="mf" style="gap:8px">
+      <button class="btn btn-ghost" onclick="document.getElementById('m-env-edit').classList.remove('open')">Close</button>
+      <button class="btn btn-ghost" id="env-cache-btn" onclick="clearEnvCache()" style="display:none">⟳ Clear Laravel Cache</button>
+      <button class="btn" id="env-save-btn" onclick="saveEnv()">💾 Save .env</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal file editor -->
+<div class="mbg" id="m-file-edit">
+  <div class="modal" style="max-width:920px;width:92vw">
+    <h3 style="display:flex;align-items:center;justify-content:space-between">
+      <span>Edit File <span id="fe-name" style="color:var(--accent);font-size:13px;font-weight:400"></span></span>
+      <span id="fe-status" style="font-family:var(--mono);font-size:10px;color:var(--muted);font-weight:400"></span>
+    </h3>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:10px">
+      Path: <code id="fe-path" style="color:var(--accent)"></code>
+    </div>
+    <div class="fg">
+      <textarea class="inp" id="fe-content" spellcheck="false" style="min-height:430px;max-height:60vh;font-family:var(--mono);font-size:11px;line-height:1.7;resize:vertical;white-space:pre;overflow:auto"></textarea>
+    </div>
+    <div class="mf" style="gap:8px">
+      <button class="btn btn-ghost" onclick="document.getElementById('m-file-edit').classList.remove('open')">Close</button>
+      <button class="btn" id="fe-save-btn" onclick="saveFile()">💾 Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API=''; let TOK=localStorage.getItem('psp_tok');
 const SVC_META={
@@ -688,10 +1049,12 @@ function go(name){
   document.querySelector(`[onclick="go('${name}')"]`).classList.add('on');
   if(name==='services')  loadServices();
   if(name==='vhosts')    loadVhosts();
+  if(name==='files')     loadFiles(_fmPath);
   if(name==='redis')     loadRedis();
   if(name==='postgres')  loadPostgres();
   if(name==='frankenphp') loadFrankenphp();
-  if(name==='deploy')    loadWebhookList();
+  if(name==='deploy'){loadWebhookList();loadDeployVhosts();}
+  if(name==='settings')  loadSettings();
 }
 
 // ── Helpers ──
@@ -845,6 +1208,9 @@ async function loadPostgres(){
   _pgH.locks.push(d.locks);
   if(_pgH.conns.length>_pgH.MAX){_pgH.conns.shift();_pgH.locks.shift();}
   drawPgChart();
+
+  // Load database users
+  loadDbUsers();
 }
 
 function drawPgChart(){
@@ -950,6 +1316,92 @@ async function createDb(){
   }
 }
 
+async function createDbUser(){
+  const username=document.getElementById('dbu-nm').value.trim();
+  const password=document.getElementById('dbu-pw').value;
+  const cancreatdb=document.getElementById('dbu-createdb').checked;
+  if(!username||!password) return;
+  const btn=document.querySelector('#m-db-user-add .btn:not(.btn-ghost)');
+  btn.disabled=true; btn.textContent='Creating...';
+  const d=await api('POST','/api/db-users',{username,password,cancreatdb});
+  btn.disabled=false; btn.textContent='Create User';
+  if(d?.ok){
+    document.getElementById('m-db-user-add').classList.remove('open');
+    document.getElementById('dbu-nm').value='';
+    document.getElementById('dbu-pw').value='';
+    document.getElementById('dbu-createdb').checked=false;
+    loadDbUsers();
+  } else {
+    alert('Error: '+(d?.error||'Failed to create user'));
+  }
+}
+
+async function loadDbUsers(){
+  const d=await api('GET','/api/db-users');
+  if(!d) return;
+  const tb=document.getElementById('pg-users-tb');
+  if(!d.users?.length){
+    tb.innerHTML='<tr><td colspan="4" style="color:var(--muted)">No database users yet</td></tr>';
+    return;
+  }
+  tb.innerHTML=d.users.map(u=>`
+    <tr>
+      <td style="color:var(--accent)">${u.usename}</td>
+      <td><span class="pill ${u.canlogin?'p-on':'p-off'}"><span class="pd"></span>${u.canlogin?'Yes':'No'}</span></td>
+      <td><span class="pill ${u.cancreatdb?'p-on':'p-off'}"><span class="pd"></span>${u.cancreatdb?'Yes':'No'}</span></td>
+      <td style="display:flex;gap:6px">
+        <button class="btn btn-sm" onclick="openGrantModal('${u.usename}')">Grant DB</button>
+        <button class="btn btn-sm" onclick="deleteDbUser('${u.usename}')">Remove</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function deleteDbUser(username){
+  if(!confirm(`Delete user "${username}"?`)) return;
+  const d=await api('DELETE',`/api/db-users/${username}`);
+  if(d?.ok){
+    loadDbUsers();
+  } else {
+    alert('Error: '+(d?.error||'Failed to delete user'));
+  }
+}
+
+async function openGrantModal(username){
+  document.getElementById('grant-user').value=username;
+  document.getElementById('m-db-grant').classList.add('open');
+  document.querySelectorAll('.grant-priv').forEach(c=>c.checked=false);
+  await loadGrantDatabases();
+}
+
+async function loadGrantDatabases(){
+  const d=await api('GET','/api/databases');
+  if(!d?.databases) return;
+  const sel=document.getElementById('grant-db');
+  const userDbs=d.databases.filter(db=>!['postgres','template0','template1'].includes(db));
+  sel.innerHTML='<option value="">-- Select database --</option>'+userDbs.map(db=>`<option value="${db}">${db}</option>`).join('');
+}
+
+async function grantPrivilege(){
+  const username=document.getElementById('grant-user').value;
+  const database=document.getElementById('grant-db').value;
+  const makeOwner=document.getElementById('grant-owner').checked;
+  if(!username||!database) return alert('Select both user and database');
+  const privs=Array.from(document.querySelectorAll('.grant-priv:checked')).map(c=>c.value);
+  if(!privs.length && !makeOwner) return alert('Select at least one privilege or check "Make Owner"');
+  const btn=document.querySelector('#m-db-grant .btn:not(.btn-ghost)');
+  btn.disabled=true; btn.textContent='Assigning...';
+  const d=await api('POST',`/api/db-users/${username}/grant`,{database,privileges:privs,makeOwner});
+  btn.disabled=false; btn.textContent='Assign';
+  if(d?.ok){
+    document.getElementById('m-db-grant').classList.remove('open');
+    document.getElementById('grant-owner').checked=false;
+    alert(`✓ Privileges granted to ${username} on ${database}${makeOwner?' (now owner)':''}\n\nSchema public + future tables also granted (PG15+ compatible)`);
+  } else {
+    alert('Error: '+(d?.error||'Failed to grant privilege'));
+  }
+}
+
 // ── FrankenPHP ──
 async function loadFrankenphp(){
   const d=await api('GET','/api/frankenphp');
@@ -1033,8 +1485,25 @@ async function svcAct(name,action){await api('POST',`/api/services/${name}/${act
 async function loadVhosts(){
   const d=await api('GET','/api/vhosts');if(!d)return;
   document.getElementById('vhost-tb').innerHTML=d.length
-    ?d.map(v=>{const ssl=!v.content.trimStart().startsWith('http://');return`<tr><td style="font-weight:600">${v.file.replace('.conf','')}</td><td><span class="pill ${ssl?'p-on':'p-unk'}" style="font-size:9px">${ssl?'🔒 HTTPS':'HTTP'}</span></td><td class="td-mono">${v.file}</td><td><button class="btn btn-red" style="padding:4px 11px;font-size:11px" onclick="delVhost('${v.file.replace('.conf','')}')">Remove</button></td></tr>`;}).join('')
-    :'<tr><td colspan="4" style="color:var(--muted)">No virtual hosts configured</td></tr>';
+    ?d.map(v=>`<tr>
+      <td style="font-weight:600">${v.domain}</td>
+      <td class="td-mono" style="font-size:11px;max-width:300px;overflow:hidden;text-overflow:ellipsis">${v.docroot}</td>
+      <td><span class="pill ${v.phpEnabled?'p-on':'p-unk'}" style="font-size:9px">${v.phpEnabled?'✓ Enabled':'—'}</span></td>
+      <td><span class="pill ${v.ssl==='HTTPS'?'p-on':'p-unk'}" style="font-size:9px">${v.ssl==='HTTPS'?'🔒 HTTPS':'HTTP'}</span></td>
+      <td style="font-size:11px;color:var(--muted)">${v.created}</td>
+      <td style="font-size:11px;color:var(--muted);text-align:right">${v.size}</td>
+      <td style="display:flex;gap:5px;justify-content:flex-end">
+        <button class="btn btn-ghost" style="padding:4px 11px;font-size:11px" onclick="openEnvEditor('${v.domain}')">⚙ ENV</button>
+        <button class="btn btn-red" style="padding:4px 11px;font-size:11px" onclick="delVhost('${v.domain}')">Remove</button>
+      </td>
+    </tr>`).join('')
+    :'<tr><td colspan="7" style="color:var(--muted)">No virtual hosts configured</td></tr>';
+}
+function updateVhostPreview(){
+  const domain=document.getElementById('v-domain').value.trim();
+  const root=document.getElementById('v-root').value.trim();
+  const finalPath=root||(domain?`/var/www/${domain}`:'/var/www/example.com');
+  document.getElementById('vhost-path-preview').textContent=finalPath;
 }
 async function addVhost(){
   const domain=document.getElementById('v-domain').value.trim();if(!domain)return;
@@ -1044,8 +1513,227 @@ async function addVhost(){
 }
 async function delVhost(domain){if(!confirm(`Remove vhost: ${domain}?`))return;await api('DELETE',`/api/vhosts/${domain}`);loadVhosts();}
 
+// ── ENV Editor ──
+let _envDomain=null;
+async function openEnvEditor(domain){
+  _envDomain=domain;
+  document.getElementById('env-domain').textContent=`— ${domain}`;
+  document.getElementById('env-content').value='Loading...';
+  document.getElementById('env-status').textContent='';
+  document.getElementById('env-out').style.display='none';
+  document.getElementById('env-out').textContent='';
+  document.getElementById('env-cache-btn').style.display='none';
+  document.getElementById('m-env-edit').classList.add('open');
+
+  const r=await api('GET',`/api/vhost-env/${domain}`);
+  if(!r){
+    document.getElementById('env-content').value='// Error loading .env';
+    return;
+  }
+  document.getElementById('env-path').textContent=r.path||`/var/www/${domain}/.env`;
+  if(!r.exists){
+    document.getElementById('env-content').value='# .env file does not exist yet\n# Add your environment variables here\n\nAPP_NAME=Laravel\nAPP_ENV=production\nAPP_DEBUG=false\nAPP_URL=https://'+domain+'\n\nDB_CONNECTION=pgsql\nDB_HOST=127.0.0.1\nDB_PORT=5432\nDB_DATABASE=\nDB_USERNAME=\nDB_PASSWORD=\n';
+    document.getElementById('env-status').textContent='new file';
+    document.getElementById('env-status').style.color='var(--warn)';
+  } else {
+    document.getElementById('env-content').value=r.content;
+    const lines=r.content.split('\n').length;
+    document.getElementById('env-status').textContent=`${lines} lines · ${r.content.length} chars`;
+    document.getElementById('env-status').style.color='var(--muted)';
+  }
+}
+
+async function saveEnv(){
+  if(!_envDomain) return;
+  const content=document.getElementById('env-content').value;
+  const btn=document.getElementById('env-save-btn');
+  btn.disabled=true; btn.textContent='Saving...';
+  const r=await api('POST',`/api/vhost-env/${_envDomain}`,{content});
+  btn.disabled=false; btn.innerHTML='💾 Save .env';
+  if(r?.ok){
+    document.getElementById('env-status').textContent='✓ saved · backup .bak created';
+    document.getElementById('env-status').style.color='var(--accent)';
+    document.getElementById('env-cache-btn').style.display='inline-flex';
+  } else {
+    alert('Error: '+(r?.error||'Failed to save .env'));
+  }
+}
+
+async function clearEnvCache(){
+  if(!_envDomain) return;
+  const btn=document.getElementById('env-cache-btn');
+  btn.disabled=true; btn.textContent='Clearing...';
+  const out=document.getElementById('env-out');
+  out.style.display='block';
+  out.style.color='var(--accent)';
+  out.textContent='Clearing Laravel config cache...\n';
+  const r=await api('POST',`/api/vhost-env/${_envDomain}/clear-cache`);
+  btn.disabled=false; btn.innerHTML='⟳ Clear Laravel Cache';
+  if(!r){out.textContent+='[error] No response';out.style.color='var(--danger)';return;}
+  out.textContent+=r.output||'';
+  out.style.color=r.ok?'var(--accent)':'var(--danger)';
+  if(r.ok) out.textContent+='\n✓ Cache cleared! Aplikasi sekarang pakai config terbaru.';
+}
+
+// ── File Manager ──
+let _fmPath='/var/www';
+let _fmEntries=[];
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function jsAttr(s){return esc(JSON.stringify(s));}
+function fmJoin(dir,name){return dir==='/'?'/'+name:dir.replace(/\/+$/,'')+'/'+name;}
+function fmDate(d){if(!d)return'';const dt=new Date(d);return dt.toLocaleDateString()+' '+dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
+function fmIcon(name){
+  const n=name.toLowerCase();
+  if(n.startsWith('.env'))return'🔑';
+  if(n==='.gitignore'||n==='.git')return'🌿';
+  const ext=n.includes('.')?n.split('.').pop():'';
+  const map={php:'🐘',js:'📜',mjs:'📜',ts:'📜',json:'🔧',html:'🌐',htm:'🌐',css:'🎨',scss:'🎨',
+    md:'📝',txt:'📄',sql:'🗄️',sh:'⚙️',bash:'⚙️',yml:'🔧',yaml:'🔧',xml:'🔧',ini:'🔧',conf:'🔧',
+    png:'🖼️',jpg:'🖼️',jpeg:'🖼️',gif:'🖼️',svg:'🖼️',ico:'🖼️',webp:'🖼️',
+    zip:'📦',gz:'📦',tar:'📦',rar:'📦','7z':'📦',pdf:'📕',log:'📋',lock:'🔒',key:'🔐',pem:'🔐'};
+  return map[ext]||'📄';
+}
+
+async function loadFiles(p){
+  if(p)_fmPath=p;
+  const tb=document.getElementById('fm-tb');
+  const r=await api('GET','/api/files?path='+encodeURIComponent(_fmPath));
+  if(!r){tb.innerHTML='<tr><td colspan="5" style="color:var(--danger)">Error loading directory</td></tr>';return;}
+  if(r.error){tb.innerHTML=`<tr><td colspan="5" style="color:var(--danger)">⚠ ${esc(r.error)}</td></tr>`;
+    document.getElementById('fm-crumbs').innerHTML=fmBreadcrumb(_fmPath);
+    document.getElementById('fm-pathinput').value=_fmPath;return;}
+  _fmPath=r.path;_fmEntries=r.entries;
+  document.getElementById('fm-crumbs').innerHTML=fmBreadcrumb(r.path);
+  document.getElementById('fm-pathinput').value=r.path;
+  const up=document.getElementById('fm-up');
+  up.disabled=!r.parent;up.dataset.parent=r.parent||'';
+  if(!r.entries.length){tb.innerHTML='<tr><td colspan="5" style="color:var(--muted)">Empty directory</td></tr>';return;}
+  tb.innerHTML=r.entries.map((e,i)=>{
+    const icon=e.type==='dir'?'📁':fmIcon(e.name);
+    const link=e.isLink?' <span class="fm-link">↪</span>':'';
+    const name=`<span class="fm-name ${e.type==='dir'?'fm-dir':''}" onclick="fmClick(${i})">${icon} ${esc(e.name)}${link}</span>`;
+    const size=e.type==='dir'?'<span style="color:var(--muted)">—</span>':fmt(e.size);
+    const acts=`<div class="fm-actions">
+      ${e.type==='file'?`<button class="fm-act" title="Edit" onclick="fmClick(${i})">✎</button>`:''}
+      ${e.type==='file'?`<button class="fm-act" title="Download" onclick="fmDownload(${i})">⬇</button>`:''}
+      <button class="fm-act" title="Rename" onclick="fmRename(${i})">⇄</button>
+      <button class="fm-act" title="Permissions" onclick="fmChmod(${i})">⚿</button>
+      <button class="fm-act fm-act-red" title="Delete" onclick="fmDelete(${i})">✕</button>
+    </div>`;
+    return `<tr>
+      <td>${name}</td>
+      <td class="td-mono" style="text-align:right">${size}</td>
+      <td class="td-mono"><span class="fm-mode" onclick="fmChmod(${i})">${e.mode}</span></td>
+      <td class="td-mono" style="font-size:10px">${fmDate(e.mtime)}</td>
+      <td>${acts}</td>
+    </tr>`;
+  }).join('');
+}
+
+function fmBreadcrumb(p){
+  let html=`<span class="fm-crumb" onclick="fmGo('/')">root</span>`;
+  let cum='';
+  p.split('/').filter(Boolean).forEach(part=>{
+    cum+='/'+part;
+    html+=`<span class="fm-sep">/</span><span class="fm-crumb" onclick="fmGo(${jsAttr(cum)})">${esc(part)}</span>`;
+  });
+  return html;
+}
+function fmGo(p){loadFiles(p);}
+function fmUp(){const par=document.getElementById('fm-up').dataset.parent;if(par)loadFiles(par);}
+function fmGoInput(ev){if(ev&&ev.key&&ev.key!=='Enter')return;const v=document.getElementById('fm-pathinput').value.trim();if(v)loadFiles(v);}
+function fmClick(i){const e=_fmEntries[i];const full=fmJoin(_fmPath,e.name);if(e.type==='dir')loadFiles(full);else openFileEditor(full);}
+
+async function fmNewFolder(){
+  const name=prompt('New folder name:');if(!name)return;
+  const r=await api('POST','/api/files/mkdir',{path:fmJoin(_fmPath,name.trim())});
+  if(!r?.ok)return alert('Error: '+(r?.error||'Failed'));
+  loadFiles(_fmPath);
+}
+async function fmNewFile(){
+  const name=prompt('New file name:');if(!name)return;
+  const r=await api('POST','/api/files/create',{path:fmJoin(_fmPath,name.trim())});
+  if(!r?.ok)return alert('Error: '+(r?.error||'Failed'));
+  loadFiles(_fmPath);
+}
+async function fmRename(i){
+  const e=_fmEntries[i];
+  const name=prompt('Rename to:',e.name);if(!name||name===e.name)return;
+  const r=await api('POST','/api/files/rename',{path:fmJoin(_fmPath,e.name),newPath:fmJoin(_fmPath,name.trim())});
+  if(!r?.ok)return alert('Error: '+(r?.error||'Failed'));
+  loadFiles(_fmPath);
+}
+async function fmDelete(i){
+  const e=_fmEntries[i];
+  if(!confirm(`Delete ${e.type==='dir'?'folder':'file'} "${e.name}"?`+(e.type==='dir'?'\nAll contents will be removed!':'')))return;
+  const r=await api('POST','/api/files/delete',{path:fmJoin(_fmPath,e.name)});
+  if(!r?.ok)return alert('Error: '+(r?.error||'Failed'));
+  loadFiles(_fmPath);
+}
+async function fmChmod(i){
+  const e=_fmEntries[i];
+  const mode=prompt(`Permissions for "${e.name}" (octal, e.g. 644 file / 755 dir):`,e.mode);
+  if(!mode||mode===e.mode)return;
+  const r=await api('POST','/api/files/chmod',{path:fmJoin(_fmPath,e.name),mode:mode.trim()});
+  if(!r?.ok)return alert('Error: '+(r?.error||'Failed'));
+  loadFiles(_fmPath);
+}
+function fmDownload(i){
+  const e=_fmEntries[i];
+  const url='/api/files/download?path='+encodeURIComponent(fmJoin(_fmPath,e.name))+'&token='+encodeURIComponent(TOK);
+  window.open(url,'_blank');
+}
+function fmUpload(){document.getElementById('fm-upload-input').click();}
+async function fmUploadFiles(files){
+  if(!files||!files.length)return;
+  const status=document.getElementById('fm-upload-status');
+  for(let i=0;i<files.length;i++){
+    const file=files[i];
+    status.style.display='block';status.textContent=`Uploading ${i+1}/${files.length}: ${file.name} (${fmt(file.size)})...`;
+    try{
+      const data=await new Promise((resolve,reject)=>{const fr=new FileReader();fr.onload=()=>resolve(fr.result.split(',')[1]);fr.onerror=reject;fr.readAsDataURL(file);});
+      const r=await api('POST','/api/files/upload',{path:_fmPath,name:file.name,data});
+      if(!r?.ok)alert('Upload failed: '+file.name+' — '+(r?.error||''));
+    }catch(err){alert('Upload error: '+file.name+' — '+err.message);}
+  }
+  status.style.display='none';
+  document.getElementById('fm-upload-input').value='';
+  loadFiles(_fmPath);
+}
+
+// File editor
+let _fePath=null;
+async function openFileEditor(full){
+  _fePath=full;
+  document.getElementById('fe-name').textContent='— '+full.split('/').pop();
+  document.getElementById('fe-path').textContent=full;
+  document.getElementById('fe-content').value='Loading...';
+  document.getElementById('fe-status').textContent='';
+  document.getElementById('m-file-edit').classList.add('open');
+  const r=await api('GET','/api/files/read?path='+encodeURIComponent(full));
+  if(!r){document.getElementById('fe-content').value='';return;}
+  if(r.error){document.getElementById('m-file-edit').classList.remove('open');alert('Cannot open: '+r.error);return;}
+  document.getElementById('fe-content').value=r.content;
+  const lines=r.content.split('\n').length;
+  const st=document.getElementById('fe-status');
+  st.textContent=`${lines} lines · ${fmt(r.size)} · mode ${r.mode}`;
+  st.style.color='var(--muted)';
+}
+async function saveFile(){
+  if(!_fePath)return;
+  const content=document.getElementById('fe-content').value;
+  const btn=document.getElementById('fe-save-btn');
+  btn.disabled=true;btn.textContent='Saving...';
+  const r=await api('POST','/api/files/write',{path:_fePath,content});
+  btn.disabled=false;btn.innerHTML='💾 Save';
+  const st=document.getElementById('fe-status');
+  if(r?.ok){st.textContent='✓ saved';st.style.color='var(--accent)';}
+  else alert('Error: '+(r?.error||'Failed to save'));
+}
+
 // ── Webhooks ──
 async function loadWebhookList(){
+  // Load webhooks for the webhook list
   const d=await api('GET','/api/webhooks');if(!d)return;
   const el=document.getElementById('webhook-list');
   if(!d.length){el.innerHTML='<div style="color:var(--muted);font-size:12px;font-family:var(--mono)">Belum ada webhook. Klik + Add untuk setup auto deploy.</div>';return;}
@@ -1058,16 +1746,100 @@ async function loadWebhookList(){
       <td><button class="btn btn-red" style="padding:4px 11px;font-size:11px" onclick="deleteWebhook('${h.id}')">Remove</button></td>
     </tr>`).join('')+
   '</tbody></table>';
+  // Also load vhosts for deploy dropdown
+  loadDeployVhosts();
+}
+async function loadDeployVhosts(){
+  const v=await api('GET','/api/vhosts');if(!v)return;
+  ['dep-vhost','clone-vhost'].forEach(id=>{
+    const sel=document.getElementById(id);
+    if(!sel)return;
+    sel.innerHTML='<option value="">-- Select a virtual host --</option>';
+    v.forEach(vhost=>{
+      const opt=document.createElement('option');
+      opt.value=vhost.docroot;
+      opt.textContent=vhost.domain+' ('+vhost.docroot+')';
+      sel.appendChild(opt);
+    });
+  });
+}
+function selectCloneVhost(){
+  const p=document.getElementById('clone-vhost').value;
+  document.getElementById('clone-path-display').textContent=p||'none selected';
+}
+async function cloneRepo(){
+  const url=document.getElementById('clone-url').value.trim();
+  const targetPath=document.getElementById('clone-vhost').value;
+  const force=document.getElementById('clone-force').checked;
+  if(!url){alert('Masukkan repository URL');return;}
+  if(!targetPath){alert('Pilih virtual host target');return;}
+  if(force && !confirm('Delete existing files in '+targetPath+'?\n\nThis action cannot be undone.')){return;}
+  const btn=document.getElementById('clone-btn');
+  const out=document.getElementById('clone-out');
+  btn.textContent='⏳ Cloning...';btn.disabled=true;
+  out.style.display='block';
+  out.style.color='var(--accent)';
+  out.textContent=`${force?'[FORCE] Deleting existing files...\n':''}Cloning ${url}\nke ${targetPath} ...\n`;
+  const r=await api('POST','/api/clone',{repoUrl:url,path:targetPath,force});
+  btn.innerHTML='⬇ &nbsp;Clone Repository';btn.disabled=false;
+  if(!r){out.textContent+='[error] No response';out.style.color='var(--danger)';return;}
+  out.textContent+=r.output||'';
+  out.style.color=r.ok?'var(--accent)':'var(--danger)';
+  if(r.ok){
+    out.textContent+='\n✓ Clone berhasil! Sekarang bisa deploy via panel.';
+    // Simpan repository URL ke vhost
+    const vhostSel=document.getElementById('clone-vhost');
+    const domainText=vhostSel.options[vhostSel.selectedIndex]?.text||targetPath;
+    const domain=domainText.split('(')[0].trim()||targetPath;
+    await api('POST',`/api/vhost-repo/${domain}`,{repoUrl:url});
+    console.log('[Clone] Repo URL saved for vhost:',domain);
+  }
+}
+async function selectDeployVhost(){
+  const path=document.getElementById('dep-vhost').value;
+  document.getElementById('dep-path-display').textContent=path||'none selected';
+  // Load and display repository URL
+  if(path){
+    const vhostSel=document.getElementById('dep-vhost');
+    const domainText=vhostSel.options[vhostSel.selectedIndex]?.text||path;
+    const domain=domainText.split('(')[0].trim()||path;
+    const r=await api('GET',`/api/vhost-repo/${domain}`);
+    if(r?.repoUrl){
+      document.getElementById('dep-repo-display').textContent=r.repoUrl;
+      document.getElementById('dep-repo-display').style.color='var(--accent)';
+      console.log('[Deploy] Loaded repo URL:',r.repoUrl);
+    } else {
+      document.getElementById('dep-repo-display').textContent='No repository set (use Clone Repository first)';
+      document.getElementById('dep-repo-display').style.color='var(--muted)';
+    }
+  } else {
+    document.getElementById('dep-repo-display').textContent='--';
+  }
+}
+async function openWebhookModal(){
+  // Load vhosts into webhook modal dropdown
+  const v=await api('GET','/api/vhosts');
+  const sel=document.getElementById('wh-vhost');
+  sel.innerHTML='<option value="">-- Select a virtual host --</option>';
+  if(v){
+    v.forEach(vhost=>{
+      const opt=document.createElement('option');
+      opt.value=vhost.docroot;
+      opt.textContent=vhost.domain+' ('+vhost.docroot+')';
+      sel.appendChild(opt);
+    });
+  }
+  document.getElementById('m-webhook').classList.add('open');
 }
 async function addWebhook(){
-  const p=document.getElementById('wh-path').value.trim();if(!p)return;
+  const p=document.getElementById('wh-vhost').value.trim();if(!p){alert('Pilih virtual host terlebih dahulu');return;}
   const r=await api('POST','/api/webhooks',{path:p,branch:document.getElementById('wh-branch').value||'main',laravel:document.getElementById('wh-laravel').checked});
   if(!r?.ok){alert(r?.error||'Failed');return;}
   document.getElementById('m-webhook').classList.remove('open');
   document.getElementById('wi-url').textContent=location.origin+'/api/webhook/'+r.id;
   document.getElementById('wi-secret').textContent=r.secret;
   document.getElementById('m-webhook-info').classList.add('open');
-  document.getElementById('wh-path').value='';
+  document.getElementById('wh-vhost').value='';
 }
 async function deleteWebhook(id){
   if(!confirm('Hapus webhook ini?'))return;
@@ -1084,18 +1856,67 @@ function copyWI(elId,btn){
 async function loadDeployKey(){
   const btn=document.getElementById('dk-btn');
   btn.textContent='Generating...';btn.disabled=true;
-  const r=await api('GET','/api/deploy-key');
-  btn.innerHTML='⚿ &nbsp;Regenerate Key';btn.disabled=false;
-  if(!r||!r.key){alert('Failed to generate key');return;}
-  document.getElementById('dk-key').textContent=r.key;
-  document.getElementById('dk-out').style.display='block';
+  try{
+    const r=await api('GET','/api/deploy-key');
+    if(!r){alert('Server error: no response');btn.textContent='⚿ &nbsp;Show Deploy Key';btn.disabled=false;return;}
+    if(r.error){alert('Error: '+r.error);btn.textContent='⚿ &nbsp;Show Deploy Key';btn.disabled=false;return;}
+    if(!r.key){alert('Failed: no key in response');btn.textContent='⚿ &nbsp;Show Deploy Key';btn.disabled=false;return;}
+    btn.innerHTML='⚿ &nbsp;Regenerate Key';
+    document.getElementById('dk-key').textContent=r.key;
+    document.getElementById('dk-out').style.display='block';
+    console.log('[Deploy Key] Loaded successfully, length:',r.key.length);
+  }catch(err){
+    alert('Error loading key: '+err.message);
+    console.error('[Deploy Key]',err);
+  }finally{
+    btn.disabled=false;
+  }
 }
 function copyDeployKey(){
-  navigator.clipboard.writeText(document.getElementById('dk-key').textContent).then(()=>{
-    const btn=document.getElementById('dk-copy');
-    btn.textContent='copied!';btn.style.color='var(--accent)';
-    setTimeout(()=>{btn.textContent='copy';btn.style.color='';},2000);
-  });
+  const text=document.getElementById('dk-key').textContent;
+  console.log('[Copy Key] Text length:',text?.length);
+  if(!text||text.length<10){alert('No valid key to copy');return;}
+
+  // Try modern Clipboard API first
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(text).then(()=>{
+      showCopiedFeedback();
+      console.log('[Copy Key] Success (Clipboard API)');
+    }).catch(err=>{
+      console.warn('[Copy Key] Clipboard API failed, trying fallback...',err);
+      copyFallback(text);
+    });
+  } else {
+    // Fallback untuk browser lama atau HTTP
+    copyFallback(text);
+  }
+}
+
+function copyFallback(text){
+  // Buat temporary textarea
+  const ta=document.createElement('textarea');
+  ta.value=text;
+  ta.style.position='fixed';ta.style.top='-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  try{
+    document.execCommand('copy');
+    showCopiedFeedback();
+    console.log('[Copy Key] Success (Fallback)');
+  }catch(err){
+    alert('Copy gagal: '+err.message+'\n\nGunakan manual copy atau pakai browser modern dengan HTTPS');
+    console.error('[Copy Key]',err);
+  }finally{
+    document.body.removeChild(ta);
+  }
+}
+
+function showCopiedFeedback(){
+  const btn=document.getElementById('dk-copy');
+  const orig=btn.textContent;
+  btn.textContent='✓ copied!';
+  btn.style.color='var(--accent)';
+  setTimeout(()=>{btn.textContent=orig;btn.style.color='var(--muted)';},2000);
 }
 
 // ── Deploy ──
@@ -1104,7 +1925,7 @@ function toggleLaravelSteps(){
     document.getElementById('dep-laravel').checked?'block':'none';
 }
 async function deploy(){
-  const p=document.getElementById('dep-path').value.trim();if(!p)return;
+  const p=document.getElementById('dep-vhost').value.trim();if(!p){alert('Pilih virtual host terlebih dahulu');return;}
   const btn=document.getElementById('dep-btn'),out=document.getElementById('dep-out');
   const isLaravel=document.getElementById('dep-laravel').checked;
   const branch=document.getElementById('dep-branch').value||'main';
@@ -1116,6 +1937,138 @@ async function deploy(){
   btn.innerHTML='▲ &nbsp;Run Deploy';btn.disabled=false;
   out.textContent=r?r.output:'[error] No response';
   out.style.color=r?.ok?'var(--accent)':'var(--danger)';
+}
+
+// ── Settings ──
+const ST_PHP_KEYS=['upload_max_filesize','post_max_size','memory_limit','max_execution_time','max_input_time','max_input_vars'];
+let stOriginal={};       // snapshot of current values for cancel/revert
+let stUnlocked=false;    // edit mode flag
+let stPassword='';       // verified password (held in memory while editing)
+
+async function loadSettings(){
+  const d=await api('GET','/api/settings');
+  if(!d||!d.ok){
+    document.getElementById('st-result').style.display='block';
+    document.getElementById('st-result').innerHTML='<div class="card" style="color:var(--danger);font-family:var(--mono);font-size:12px">Failed to load settings: '+(d?.error||'unknown')+'</div>';
+    return;
+  }
+  // Populate PHP fields
+  for(const k of ST_PHP_KEYS){
+    const el=document.getElementById('st-'+k);
+    el.value=d.php[k]||'';
+    stOriginal[k]=d.php[k]||'';
+  }
+  document.getElementById('st-php-path').textContent=d.phpIniPath?d.phpIniPath.split('/').pop():'php.ini';
+  // Populate FrankenPHP fields
+  const nt=document.getElementById('st-num_threads');
+  nt.value=d.frankenphp?.num_threads||'';
+  stOriginal['num_threads']=d.frankenphp?.num_threads||'';
+  // Reset UI to view mode
+  lockSettingsEdit();
+}
+
+function lockSettingsEdit(){
+  stUnlocked=false; stPassword='';
+  [...ST_PHP_KEYS,'num_threads'].forEach(k=>{
+    document.getElementById('st-'+k).disabled=true;
+  });
+  document.getElementById('st-edit-btn').style.display='inline-flex';
+  document.getElementById('st-save-btn').style.display='none';
+  document.getElementById('st-cancel').style.display='none';
+  document.getElementById('st-banner').style.display='none';
+}
+
+function unlockSettingsEdit(){
+  document.getElementById('pw-confirm-input').value='';
+  document.getElementById('pw-confirm-err').style.display='none';
+  document.getElementById('m-pw-confirm').classList.add('open');
+  setTimeout(()=>document.getElementById('pw-confirm-input').focus(),100);
+}
+
+function closePwModal(){
+  document.getElementById('m-pw-confirm').classList.remove('open');
+}
+
+async function confirmPassword(){
+  const pw=document.getElementById('pw-confirm-input').value;
+  const err=document.getElementById('pw-confirm-err');
+  if(!pw){err.textContent='Password required';err.style.display='block';return;}
+  // Verify by attempting login (lightweight check)
+  try{
+    const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
+    if(!r.ok){err.textContent='Wrong password';err.style.display='block';return;}
+    stPassword=pw; stUnlocked=true;
+    closePwModal();
+    [...ST_PHP_KEYS,'num_threads'].forEach(k=>{
+      document.getElementById('st-'+k).disabled=false;
+    });
+    document.getElementById('st-edit-btn').style.display='none';
+    document.getElementById('st-save-btn').style.display='inline-flex';
+    document.getElementById('st-cancel').style.display='inline-flex';
+    document.getElementById('st-banner').style.display='block';
+  }catch(e){err.textContent='Network error';err.style.display='block';}
+}
+
+function cancelSettingsEdit(){
+  // Restore original values
+  for(const k of ST_PHP_KEYS) document.getElementById('st-'+k).value=stOriginal[k]||'';
+  document.getElementById('st-num_threads').value=stOriginal['num_threads']||'';
+  lockSettingsEdit();
+  document.getElementById('st-result').style.display='none';
+}
+
+async function saveSettings(){
+  if(!stUnlocked||!stPassword){alert('Edit mode not active');return;}
+  // Collect changed PHP values
+  const phpChanges={};
+  for(const k of ST_PHP_KEYS){
+    const v=document.getElementById('st-'+k).value.trim();
+    if(v && v!==(stOriginal[k]||'')) phpChanges[k]=v;
+  }
+  const ntVal=document.getElementById('st-num_threads').value.trim();
+  const fpChanges={};
+  if(ntVal && ntVal!==String(stOriginal['num_threads']||'')) fpChanges.num_threads=parseInt(ntVal);
+
+  if(!Object.keys(phpChanges).length && !Object.keys(fpChanges).length){
+    showSettingsResult('info','Tidak ada perubahan untuk disimpan.');
+    return;
+  }
+
+  const btn=document.getElementById('st-save-btn');
+  btn.textContent='⏳ Saving...'; btn.disabled=true;
+  showSettingsResult('info','Menyimpan & restart FrankenPHP...');
+
+  const body={password:stPassword};
+  if(Object.keys(phpChanges).length) body.php=phpChanges;
+  if(Object.keys(fpChanges).length) body.frankenphp=fpChanges;
+
+  try{
+    const r=await fetch('/api/settings/update',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOK},body:JSON.stringify(body)});
+    const d=await r.json();
+    btn.innerHTML='✓ &nbsp;Save Changes'; btn.disabled=false;
+    if(!r.ok){showSettingsResult('error',d.error||'Save failed');return;}
+    let msg='Settings tersimpan. ';
+    if(d.phpIniPath) msg+=`PHP: ${d.phpIniPath}. `;
+    if(d.frankenphpUpdated) msg+='FrankenPHP config updated. ';
+    if(d.restartOk) msg+='Service restarted ✓';
+    else msg+=`Restart failed: ${d.restartError||'unknown'}`;
+    showSettingsResult(d.restartOk?'ok':'warn',msg);
+    // Refresh original snapshot
+    Object.assign(stOriginal,phpChanges);
+    if(fpChanges.num_threads!=null) stOriginal['num_threads']=fpChanges.num_threads;
+    lockSettingsEdit();
+  }catch(e){
+    btn.innerHTML='✓ &nbsp;Save Changes'; btn.disabled=false;
+    showSettingsResult('error','Network error: '+e.message);
+  }
+}
+
+function showSettingsResult(type,msg){
+  const el=document.getElementById('st-result');
+  const colors={ok:'var(--accent)',warn:'var(--warn)',error:'var(--danger)',info:'var(--accent2)'};
+  const bgs  ={ok:'rgba(110,231,183,.08)',warn:'rgba(251,191,36,.08)',error:'rgba(248,113,113,.08)',info:'rgba(129,140,248,.08)'};
+  el.style.display='block';
+  el.innerHTML=`<div class="card" style="background:${bgs[type]};border-color:${colors[type]};color:${colors[type]};font-family:var(--mono);font-size:12px;line-height:1.7">${msg}</div>`;
 }
 
 // ── Init ──

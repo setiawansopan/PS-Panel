@@ -19,7 +19,7 @@ const SECRET = process.env.PANEL_SECRET || require('crypto').randomBytes(32).toS
 const PORT = process.env.PANEL_PORT || 8765;
 const CREDS_FILE = '/root/.pspanel_credentials';
 
-app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
+app.use(express.json({ limit: '100mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Credentials ──
@@ -930,6 +930,156 @@ app.post('/api/deploy', auth,(req,res)=>{
     });
   }
   next();
+});
+
+// ── File Manager ──
+// Admin panel runs as root → full filesystem access (like cPanel File Manager).
+const FM_MAX_EDIT = 2 * 1024 * 1024; // 2MB max for in-browser text editing
+
+// Resolve + normalize an absolute path; reject null bytes / non-absolute input.
+function fmResolve(p){
+  if(typeof p !== 'string' || !p || p.includes('\0')) return null;
+  const resolved = path.resolve(p);
+  if(!path.isAbsolute(resolved)) return null;
+  return resolved;
+}
+// Build a metadata object for a directory entry (handles symlinks).
+function fmStat(full){
+  const st = fs.lstatSync(full);
+  const isLink = st.isSymbolicLink();
+  let real = st;
+  if(isLink){ try { real = fs.statSync(full); } catch { real = st; } }
+  return {
+    type: real.isDirectory() ? 'dir' : 'file',
+    isLink,
+    size: st.size,
+    mtime: st.mtime,
+    mode: (st.mode & 0o777).toString(8).padStart(3,'0'),
+  };
+}
+
+// List a directory
+app.get('/api/files', auth, (req,res)=>{
+  const dir = fmResolve(req.query.path || '/var/www');
+  if(!dir) return res.status(400).json({error:'Invalid path'});
+  try {
+    if(!fs.statSync(dir).isDirectory()) return res.status(400).json({error:'Not a directory'});
+    const entries = fs.readdirSync(dir).map(name=>{
+      const full = path.join(dir, name);
+      try { return { name, ...fmStat(full) }; }
+      catch { return { name, type:'file', size:0, mode:'---', error:true }; }
+    });
+    // Folders first, then alphabetical (case-insensitive)
+    entries.sort((a,b)=> a.type===b.type
+      ? a.name.toLowerCase().localeCompare(b.name.toLowerCase())
+      : (a.type==='dir'?-1:1));
+    res.json({ path: dir, parent: dir==='/'?null:path.dirname(dir), entries });
+  } catch(e){ res.status(400).json({error:e.message}); }
+});
+
+// Read a text file for editing
+app.get('/api/files/read', auth, (req,res)=>{
+  const f = fmResolve(req.query.path);
+  if(!f) return res.status(400).json({error:'Invalid path'});
+  try {
+    const st = fs.statSync(f);
+    if(st.isDirectory()) return res.status(400).json({error:'Is a directory'});
+    if(st.size > FM_MAX_EDIT)
+      return res.status(413).json({error:`File too large to edit (${(st.size/1048576).toFixed(1)}MB > 2MB). Download instead.`});
+    const buf = fs.readFileSync(f);
+    if(buf.subarray(0, 8000).includes(0))
+      return res.status(415).json({error:'Binary file — cannot edit as text. Download instead.'});
+    res.json({ path:f, content: buf.toString('utf8'), size: st.size, mode:(st.mode&0o777).toString(8).padStart(3,'0') });
+  } catch(e){ res.status(400).json({error:e.message}); }
+});
+
+// Write/save a text file
+app.post('/api/files/write', auth, (req,res)=>{
+  const f = fmResolve(req.body?.path);
+  if(!f) return res.status(400).json({error:'Invalid path'});
+  if(typeof req.body.content !== 'string') return res.status(400).json({error:'content required'});
+  try { fs.writeFileSync(f, req.body.content, 'utf8'); res.json({ok:true}); }
+  catch(e){ res.status(400).json({error:e.message}); }
+});
+
+// Create a directory
+app.post('/api/files/mkdir', auth, (req,res)=>{
+  const f = fmResolve(req.body?.path);
+  if(!f) return res.status(400).json({error:'Invalid path'});
+  try {
+    if(fs.existsSync(f)) return res.status(400).json({error:'Already exists'});
+    fs.mkdirSync(f, {recursive:true});
+    res.json({ok:true});
+  } catch(e){ res.status(400).json({error:e.message}); }
+});
+
+// Create an empty file
+app.post('/api/files/create', auth, (req,res)=>{
+  const f = fmResolve(req.body?.path);
+  if(!f) return res.status(400).json({error:'Invalid path'});
+  try { fs.writeFileSync(f, '', {flag:'wx'}); res.json({ok:true}); }
+  catch(e){ res.status(400).json({error: e.code==='EEXIST'?'Already exists':e.message}); }
+});
+
+// Rename / move
+app.post('/api/files/rename', auth, (req,res)=>{
+  const from = fmResolve(req.body?.path);
+  const to   = fmResolve(req.body?.newPath);
+  if(!from || !to) return res.status(400).json({error:'Invalid path'});
+  try {
+    if(!fs.existsSync(from)) return res.status(404).json({error:'Source not found'});
+    if(fs.existsSync(to)) return res.status(400).json({error:'Destination already exists'});
+    fs.renameSync(from, to);
+    res.json({ok:true});
+  } catch(e){ res.status(400).json({error:e.message}); }
+});
+
+// Delete file or directory (recursive)
+app.post('/api/files/delete', auth, (req,res)=>{
+  const f = fmResolve(req.body?.path);
+  if(!f) return res.status(400).json({error:'Invalid path'});
+  if(f === '/') return res.status(400).json({error:'Refusing to delete /'});
+  try {
+    if(fs.lstatSync(f).isDirectory()) fs.rmSync(f, {recursive:true, force:true});
+    else fs.unlinkSync(f);
+    res.json({ok:true});
+  } catch(e){ res.status(400).json({error:e.message}); }
+});
+
+// Change permissions (octal)
+app.post('/api/files/chmod', auth, (req,res)=>{
+  const f = fmResolve(req.body?.path);
+  if(!f) return res.status(400).json({error:'Invalid path'});
+  if(!/^[0-7]{3,4}$/.test(req.body?.mode||'')) return res.status(400).json({error:'Invalid mode (use octal e.g. 644, 755)'});
+  try { fs.chmodSync(f, parseInt(req.body.mode, 8)); res.json({ok:true}); }
+  catch(e){ res.status(400).json({error:e.message}); }
+});
+
+// Upload a file (base64 body). Token via header (auth middleware).
+app.post('/api/files/upload', auth, (req,res)=>{
+  const dir  = fmResolve(req.body?.path);
+  const name = req.body?.name;
+  const data = req.body?.data;
+  if(!dir || !name || typeof data !== 'string') return res.status(400).json({error:'path, name, data required'});
+  if(/[\/\\\0]/.test(name)) return res.status(400).json({error:'Invalid file name'});
+  try {
+    if(!fs.statSync(dir).isDirectory()) return res.status(400).json({error:'Target is not a directory'});
+    const buf = Buffer.from(data, 'base64');
+    fs.writeFileSync(path.join(dir, name), buf);
+    res.json({ok:true, name, size:buf.length});
+  } catch(e){ res.status(400).json({error:e.message}); }
+});
+
+// Download a file. Token via query param so a plain browser link works (same as WebSocket).
+app.get('/api/files/download', (req,res)=>{
+  try { jwt.verify(req.query.token, SECRET); }
+  catch { return res.status(401).json({error:'Unauthorized'}); }
+  const f = fmResolve(req.query.path);
+  if(!f) return res.status(400).json({error:'Invalid path'});
+  try {
+    if(fs.statSync(f).isDirectory()) return res.status(400).json({error:'Cannot download a directory'});
+    res.download(f);
+  } catch(e){ res.status(400).json({error:e.message}); }
 });
 
 // ── WebSocket real-time ──

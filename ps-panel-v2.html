@@ -194,6 +194,23 @@ tr:hover td{background:rgba(255,255,255,.015)}
 .check-lbl{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px}
 .check-lbl input{accent-color:var(--accent);width:14px;height:14px}
 
+/* ── FILE MANAGER ── */
+.fm-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.fm-crumbs{display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;background:var(--ink3);padding:9px 13px;border-radius:9px;flex:1;min-width:200px}
+.fm-crumb{color:var(--accent);cursor:pointer}
+.fm-crumb:hover{text-decoration:underline}
+.fm-sep{color:var(--muted)}
+.fm-name{cursor:pointer;display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--text)}
+.fm-name.fm-dir{color:var(--accent2);font-weight:600}
+.fm-name:hover{color:var(--accent)}
+.fm-link{color:var(--warn);font-size:10px}
+.fm-actions{display:flex;gap:3px;justify-content:flex-end}
+.fm-act{background:transparent;border:1px solid var(--line2);color:var(--muted);border-radius:6px;width:27px;height:27px;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all .15s;padding:0}
+.fm-act:hover{background:var(--ink3);color:var(--text);border-color:var(--accent)}
+.fm-act-red:hover{color:var(--danger);border-color:var(--danger)}
+.fm-mode{cursor:pointer;color:var(--muted)}
+.fm-mode:hover{color:var(--accent)}
+
 /* ── LIGHT THEME ── */
 body.light {
   --ink:#f4f6fb;--ink2:#ffffff;--ink3:#eef0f7;--ink4:#e4e7f1;
@@ -272,6 +289,7 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       <div class="ns">Server</div>
       <div class="ni ni-services" onclick="go('services')"><span class="ni-icon">⚙</span>Services</div>
       <div class="ni ni-vhosts" onclick="go('vhosts')"><span class="ni-icon">◉</span>Virtual Hosts</div>
+      <div class="ni ni-files" onclick="go('files')"><span class="ni-icon">▦</span>File Manager</div>
       <div class="ns">Deploy</div>
       <div class="ni ni-deploy" onclick="go('deploy')"><span class="ni-icon">▲</span>Deploy</div>
       <div class="ns">Configuration</div>
@@ -536,6 +554,50 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         <table><thead><tr><th>Domain</th><th>Document Root</th><th>PHP</th><th>SSL</th><th>Created</th><th>Size</th><th>Action</th></tr></thead>
         <tbody id="vhost-tb"><tr><td colspan="7" style="color:var(--muted)">Loading...</td></tr></tbody></table>
       </div>
+    </div>
+
+    <!-- ── FILE MANAGER ── -->
+    <div class="page" id="page-files">
+      <div class="ph">
+        <div class="sec-hdr">
+          <div><h1>File Manager</h1><p>// browse & manage server files</p></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-ghost" onclick="fmNewFolder()">+ Folder</button>
+            <button class="btn btn-ghost" onclick="fmNewFile()">+ File</button>
+            <button class="btn btn-ghost" onclick="fmUpload()">⬆ Upload</button>
+            <button class="btn btn-ghost" onclick="loadFiles(_fmPath)" title="Refresh">⟳</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+        <span style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em">QUICK</span>
+        <button class="btn btn-ghost btn-sm" onclick="fmGo('/var/www')">/var/www</button>
+        <button class="btn btn-ghost btn-sm" onclick="fmGo('/etc/frankenphp')">/etc/frankenphp</button>
+        <button class="btn btn-ghost btn-sm" onclick="fmGo('/opt/ps-panel')">/opt/ps-panel</button>
+        <button class="btn btn-ghost btn-sm" onclick="fmGo('/root')">/root</button>
+      </div>
+
+      <div class="fm-bar">
+        <button class="btn btn-ghost btn-sm" id="fm-up" onclick="fmUp()" title="Parent directory">↑ Up</button>
+        <div class="fm-crumbs" id="fm-crumbs"></div>
+      </div>
+
+      <div class="fm-bar">
+        <input class="inp" id="fm-pathinput" placeholder="/var/www" onkeydown="fmGoInput(event)" style="flex:1">
+        <button class="btn btn-ghost" onclick="fmGoInput()">Go</button>
+      </div>
+
+      <div id="fm-upload-status" style="display:none;font-family:var(--mono);font-size:11px;color:var(--accent);background:var(--ink3);padding:9px 13px;border-radius:9px;margin-bottom:10px"></div>
+
+      <div class="card tbl-w">
+        <table>
+          <thead><tr><th>Name</th><th style="text-align:right">Size</th><th>Perms</th><th>Modified</th><th style="text-align:right">Actions</th></tr></thead>
+          <tbody id="fm-tb"><tr><td colspan="5" style="color:var(--muted)">Loading...</td></tr></tbody>
+        </table>
+      </div>
+
+      <input type="file" id="fm-upload-input" style="display:none" multiple onchange="fmUploadFiles(this.files)">
     </div>
 
     <!-- ── DEPLOY ── -->
@@ -930,6 +992,26 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
   </div>
 </div>
 
+<!-- Modal file editor -->
+<div class="mbg" id="m-file-edit">
+  <div class="modal" style="max-width:920px;width:92vw">
+    <h3 style="display:flex;align-items:center;justify-content:space-between">
+      <span>Edit File <span id="fe-name" style="color:var(--accent);font-size:13px;font-weight:400"></span></span>
+      <span id="fe-status" style="font-family:var(--mono);font-size:10px;color:var(--muted);font-weight:400"></span>
+    </h3>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:10px">
+      Path: <code id="fe-path" style="color:var(--accent)"></code>
+    </div>
+    <div class="fg">
+      <textarea class="inp" id="fe-content" spellcheck="false" style="min-height:430px;max-height:60vh;font-family:var(--mono);font-size:11px;line-height:1.7;resize:vertical;white-space:pre;overflow:auto"></textarea>
+    </div>
+    <div class="mf" style="gap:8px">
+      <button class="btn btn-ghost" onclick="document.getElementById('m-file-edit').classList.remove('open')">Close</button>
+      <button class="btn" id="fe-save-btn" onclick="saveFile()">💾 Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API=''; let TOK=localStorage.getItem('psp_tok');
 const SVC_META={
@@ -967,6 +1049,7 @@ function go(name){
   document.querySelector(`[onclick="go('${name}')"]`).classList.add('on');
   if(name==='services')  loadServices();
   if(name==='vhosts')    loadVhosts();
+  if(name==='files')     loadFiles(_fmPath);
   if(name==='redis')     loadRedis();
   if(name==='postgres')  loadPostgres();
   if(name==='frankenphp') loadFrankenphp();
@@ -1490,6 +1573,162 @@ async function clearEnvCache(){
   out.textContent+=r.output||'';
   out.style.color=r.ok?'var(--accent)':'var(--danger)';
   if(r.ok) out.textContent+='\n✓ Cache cleared! Aplikasi sekarang pakai config terbaru.';
+}
+
+// ── File Manager ──
+let _fmPath='/var/www';
+let _fmEntries=[];
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function jsAttr(s){return esc(JSON.stringify(s));}
+function fmJoin(dir,name){return dir==='/'?'/'+name:dir.replace(/\/+$/,'')+'/'+name;}
+function fmDate(d){if(!d)return'';const dt=new Date(d);return dt.toLocaleDateString()+' '+dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
+function fmIcon(name){
+  const n=name.toLowerCase();
+  if(n.startsWith('.env'))return'🔑';
+  if(n==='.gitignore'||n==='.git')return'🌿';
+  const ext=n.includes('.')?n.split('.').pop():'';
+  const map={php:'🐘',js:'📜',mjs:'📜',ts:'📜',json:'🔧',html:'🌐',htm:'🌐',css:'🎨',scss:'🎨',
+    md:'📝',txt:'📄',sql:'🗄️',sh:'⚙️',bash:'⚙️',yml:'🔧',yaml:'🔧',xml:'🔧',ini:'🔧',conf:'🔧',
+    png:'🖼️',jpg:'🖼️',jpeg:'🖼️',gif:'🖼️',svg:'🖼️',ico:'🖼️',webp:'🖼️',
+    zip:'📦',gz:'📦',tar:'📦',rar:'📦','7z':'📦',pdf:'📕',log:'📋',lock:'🔒',key:'🔐',pem:'🔐'};
+  return map[ext]||'📄';
+}
+
+async function loadFiles(p){
+  if(p)_fmPath=p;
+  const tb=document.getElementById('fm-tb');
+  const r=await api('GET','/api/files?path='+encodeURIComponent(_fmPath));
+  if(!r){tb.innerHTML='<tr><td colspan="5" style="color:var(--danger)">Error loading directory</td></tr>';return;}
+  if(r.error){tb.innerHTML=`<tr><td colspan="5" style="color:var(--danger)">⚠ ${esc(r.error)}</td></tr>`;
+    document.getElementById('fm-crumbs').innerHTML=fmBreadcrumb(_fmPath);
+    document.getElementById('fm-pathinput').value=_fmPath;return;}
+  _fmPath=r.path;_fmEntries=r.entries;
+  document.getElementById('fm-crumbs').innerHTML=fmBreadcrumb(r.path);
+  document.getElementById('fm-pathinput').value=r.path;
+  const up=document.getElementById('fm-up');
+  up.disabled=!r.parent;up.dataset.parent=r.parent||'';
+  if(!r.entries.length){tb.innerHTML='<tr><td colspan="5" style="color:var(--muted)">Empty directory</td></tr>';return;}
+  tb.innerHTML=r.entries.map((e,i)=>{
+    const icon=e.type==='dir'?'📁':fmIcon(e.name);
+    const link=e.isLink?' <span class="fm-link">↪</span>':'';
+    const name=`<span class="fm-name ${e.type==='dir'?'fm-dir':''}" onclick="fmClick(${i})">${icon} ${esc(e.name)}${link}</span>`;
+    const size=e.type==='dir'?'<span style="color:var(--muted)">—</span>':fmt(e.size);
+    const acts=`<div class="fm-actions">
+      ${e.type==='file'?`<button class="fm-act" title="Edit" onclick="fmClick(${i})">✎</button>`:''}
+      ${e.type==='file'?`<button class="fm-act" title="Download" onclick="fmDownload(${i})">⬇</button>`:''}
+      <button class="fm-act" title="Rename" onclick="fmRename(${i})">⇄</button>
+      <button class="fm-act" title="Permissions" onclick="fmChmod(${i})">⚿</button>
+      <button class="fm-act fm-act-red" title="Delete" onclick="fmDelete(${i})">✕</button>
+    </div>`;
+    return `<tr>
+      <td>${name}</td>
+      <td class="td-mono" style="text-align:right">${size}</td>
+      <td class="td-mono"><span class="fm-mode" onclick="fmChmod(${i})">${e.mode}</span></td>
+      <td class="td-mono" style="font-size:10px">${fmDate(e.mtime)}</td>
+      <td>${acts}</td>
+    </tr>`;
+  }).join('');
+}
+
+function fmBreadcrumb(p){
+  let html=`<span class="fm-crumb" onclick="fmGo('/')">root</span>`;
+  let cum='';
+  p.split('/').filter(Boolean).forEach(part=>{
+    cum+='/'+part;
+    html+=`<span class="fm-sep">/</span><span class="fm-crumb" onclick="fmGo(${jsAttr(cum)})">${esc(part)}</span>`;
+  });
+  return html;
+}
+function fmGo(p){loadFiles(p);}
+function fmUp(){const par=document.getElementById('fm-up').dataset.parent;if(par)loadFiles(par);}
+function fmGoInput(ev){if(ev&&ev.key&&ev.key!=='Enter')return;const v=document.getElementById('fm-pathinput').value.trim();if(v)loadFiles(v);}
+function fmClick(i){const e=_fmEntries[i];const full=fmJoin(_fmPath,e.name);if(e.type==='dir')loadFiles(full);else openFileEditor(full);}
+
+async function fmNewFolder(){
+  const name=prompt('New folder name:');if(!name)return;
+  const r=await api('POST','/api/files/mkdir',{path:fmJoin(_fmPath,name.trim())});
+  if(!r?.ok)return alert('Error: '+(r?.error||'Failed'));
+  loadFiles(_fmPath);
+}
+async function fmNewFile(){
+  const name=prompt('New file name:');if(!name)return;
+  const r=await api('POST','/api/files/create',{path:fmJoin(_fmPath,name.trim())});
+  if(!r?.ok)return alert('Error: '+(r?.error||'Failed'));
+  loadFiles(_fmPath);
+}
+async function fmRename(i){
+  const e=_fmEntries[i];
+  const name=prompt('Rename to:',e.name);if(!name||name===e.name)return;
+  const r=await api('POST','/api/files/rename',{path:fmJoin(_fmPath,e.name),newPath:fmJoin(_fmPath,name.trim())});
+  if(!r?.ok)return alert('Error: '+(r?.error||'Failed'));
+  loadFiles(_fmPath);
+}
+async function fmDelete(i){
+  const e=_fmEntries[i];
+  if(!confirm(`Delete ${e.type==='dir'?'folder':'file'} "${e.name}"?`+(e.type==='dir'?'\nAll contents will be removed!':'')))return;
+  const r=await api('POST','/api/files/delete',{path:fmJoin(_fmPath,e.name)});
+  if(!r?.ok)return alert('Error: '+(r?.error||'Failed'));
+  loadFiles(_fmPath);
+}
+async function fmChmod(i){
+  const e=_fmEntries[i];
+  const mode=prompt(`Permissions for "${e.name}" (octal, e.g. 644 file / 755 dir):`,e.mode);
+  if(!mode||mode===e.mode)return;
+  const r=await api('POST','/api/files/chmod',{path:fmJoin(_fmPath,e.name),mode:mode.trim()});
+  if(!r?.ok)return alert('Error: '+(r?.error||'Failed'));
+  loadFiles(_fmPath);
+}
+function fmDownload(i){
+  const e=_fmEntries[i];
+  const url='/api/files/download?path='+encodeURIComponent(fmJoin(_fmPath,e.name))+'&token='+encodeURIComponent(TOK);
+  window.open(url,'_blank');
+}
+function fmUpload(){document.getElementById('fm-upload-input').click();}
+async function fmUploadFiles(files){
+  if(!files||!files.length)return;
+  const status=document.getElementById('fm-upload-status');
+  for(let i=0;i<files.length;i++){
+    const file=files[i];
+    status.style.display='block';status.textContent=`Uploading ${i+1}/${files.length}: ${file.name} (${fmt(file.size)})...`;
+    try{
+      const data=await new Promise((resolve,reject)=>{const fr=new FileReader();fr.onload=()=>resolve(fr.result.split(',')[1]);fr.onerror=reject;fr.readAsDataURL(file);});
+      const r=await api('POST','/api/files/upload',{path:_fmPath,name:file.name,data});
+      if(!r?.ok)alert('Upload failed: '+file.name+' — '+(r?.error||''));
+    }catch(err){alert('Upload error: '+file.name+' — '+err.message);}
+  }
+  status.style.display='none';
+  document.getElementById('fm-upload-input').value='';
+  loadFiles(_fmPath);
+}
+
+// File editor
+let _fePath=null;
+async function openFileEditor(full){
+  _fePath=full;
+  document.getElementById('fe-name').textContent='— '+full.split('/').pop();
+  document.getElementById('fe-path').textContent=full;
+  document.getElementById('fe-content').value='Loading...';
+  document.getElementById('fe-status').textContent='';
+  document.getElementById('m-file-edit').classList.add('open');
+  const r=await api('GET','/api/files/read?path='+encodeURIComponent(full));
+  if(!r){document.getElementById('fe-content').value='';return;}
+  if(r.error){document.getElementById('m-file-edit').classList.remove('open');alert('Cannot open: '+r.error);return;}
+  document.getElementById('fe-content').value=r.content;
+  const lines=r.content.split('\n').length;
+  const st=document.getElementById('fe-status');
+  st.textContent=`${lines} lines · ${fmt(r.size)} · mode ${r.mode}`;
+  st.style.color='var(--muted)';
+}
+async function saveFile(){
+  if(!_fePath)return;
+  const content=document.getElementById('fe-content').value;
+  const btn=document.getElementById('fe-save-btn');
+  btn.disabled=true;btn.textContent='Saving...';
+  const r=await api('POST','/api/files/write',{path:_fePath,content});
+  btn.disabled=false;btn.innerHTML='💾 Save';
+  const st=document.getElementById('fe-status');
+  if(r?.ok){st.textContent='✓ saved';st.style.color='var(--accent)';}
+  else alert('Error: '+(r?.error||'Failed to save'));
 }
 
 // ── Webhooks ──
