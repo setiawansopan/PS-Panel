@@ -389,8 +389,52 @@ section { position:relative; z-index:1; padding:100px 24px; }
 }
 .note-box strong { color:var(--accent); font-weight:500; }
 
+/* ── DOCS ── */
+#docs { background:var(--ink2); }
+#docs::before { content:''; position:absolute; top:0; left:0; right:0; height:1px; background:linear-gradient(90deg,transparent,var(--accent),transparent); }
+.docs-layout { display:flex; gap:52px; align-items:flex-start; }
+.docs-sidebar { width:210px; flex-shrink:0; position:sticky; top:90px; }
+.docs-sidebar-title { font-family:var(--mono); font-size:9px; color:var(--accent); letter-spacing:.18em; text-transform:uppercase; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid var(--line); }
+.docs-nav-link { display:flex; align-items:center; gap:9px; padding:7px 10px; border-radius:8px; color:var(--muted); text-decoration:none; font-size:13px; font-weight:600; transition:all .15s; margin-bottom:1px; }
+.docs-nav-link:hover,.docs-nav-link.active { background:var(--ink3); color:var(--text); }
+.docs-nav-link.active { color:var(--accent); }
+.docs-nav-icon { font-size:13px; flex-shrink:0; width:18px; text-align:center; }
+.docs-body { flex:1; min-width:0; }
+.doc-sec { padding:40px 0; border-bottom:1px solid var(--line); scroll-margin-top:90px; }
+.doc-sec:first-child { padding-top:0; }
+.doc-sec:last-child { border-bottom:none; padding-bottom:0; }
+.doc-sec-head { display:flex; align-items:center; gap:14px; margin-bottom:14px; flex-wrap:wrap; }
+.doc-icon-wrap { width:40px; height:40px; border-radius:10px; background:var(--ink3); border:1px solid var(--line2); display:flex; align-items:center; justify-content:center; font-size:19px; flex-shrink:0; }
+.doc-title { font-size:19px; font-weight:800; letter-spacing:-.4px; }
+.doc-badge { font-family:var(--mono); font-size:9px; background:var(--ink3); border:1px solid var(--line2); color:var(--muted); padding:2px 9px; border-radius:20px; white-space:nowrap; }
+.doc-desc { font-family:var(--mono); font-size:11px; color:var(--muted); line-height:1.9; margin-bottom:18px; max-width:640px; }
+.doc-items { display:flex; flex-direction:column; gap:8px; margin-bottom:16px; max-width:640px; }
+.doc-item { display:flex; gap:10px; font-size:13px; color:var(--text); line-height:1.6; }
+.doc-arrow { color:var(--accent); font-family:var(--mono); font-size:11px; margin-top:2px; flex-shrink:0; }
+.doc-tip { background:rgba(5,150,105,.06); border-left:3px solid var(--accent); border-radius:0 8px 8px 0; padding:11px 15px; font-family:var(--mono); font-size:11px; color:var(--muted); line-height:1.9; max-width:640px; margin-bottom:14px; }
+.doc-tip strong { color:var(--accent); font-weight:500; }
+.doc-tip code { color:var(--accent2); }
+.doc-warn { background:rgba(217,119,6,.06); border-left:3px solid var(--warn); border-radius:0 8px 8px 0; padding:11px 15px; font-family:var(--mono); font-size:11px; color:var(--muted); line-height:1.9; max-width:640px; margin-bottom:14px; }
+.doc-warn strong { color:var(--warn); font-weight:500; }
+.doc-steps { display:flex; flex-direction:column; gap:12px; max-width:640px; margin-bottom:18px; }
+.doc-step { display:flex; gap:14px; align-items:flex-start; }
+.doc-step-n { width:24px; height:24px; border-radius:7px; background:var(--accent); color:#fff; font-family:var(--mono); font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px; }
+.doc-step-title { font-size:13px; font-weight:700; margin-bottom:3px; }
+.doc-step-desc { font-family:var(--mono); font-size:11px; color:var(--muted); line-height:1.8; }
+.doc-2col { display:grid; grid-template-columns:1fr 1fr; gap:10px; max-width:640px; margin-bottom:16px; }
+.doc-card { background:var(--ink); border:1px solid var(--line2); border-radius:10px; padding:14px; }
+.doc-card-label { font-family:var(--mono); font-size:9px; color:var(--accent); letter-spacing:.1em; text-transform:uppercase; margin-bottom:5px; }
+.doc-card-title { font-size:13px; font-weight:700; margin-bottom:5px; }
+.doc-card-desc { font-family:var(--mono); font-size:10px; color:var(--muted); line-height:1.75; }
+@media(max-width:768px){
+  .docs-layout{flex-direction:column;gap:0}
+  .docs-sidebar{width:100%;position:static;margin-bottom:32px}
+  .docs-sidebar .docs-nav-link{display:inline-flex;padding:5px 10px;font-size:11px}
+  .doc-2col{grid-template-columns:1fr}
+}
+
 /* ── FAQ ── */
-#faq { background:var(--ink2); }
+#faq { background:var(--ink); }
 #faq::before {
   content:''; position:absolute; top:0; left:0; right:0; height:1px;
   background:linear-gradient(90deg,transparent,var(--accent2),transparent);
@@ -477,6 +521,7 @@ footer {
     <li><a href="#stack">Stack</a></li>
     <li><a href="#preview">Preview</a></li>
     <li><a href="#install">Install</a></li>
+    <li><a href="#docs">Docs</a></li>
     <li><a href="#faq">FAQ</a></li>
   </ul>
   <a class="btn-gh" href="https://github.com/setiawansopan/PS-Panel" target="_blank" rel="noopener">
@@ -789,6 +834,297 @@ footer {
   </div>
 </section>
 
+<!-- ── DOCS ── -->
+<section id="docs">
+  <div class="container">
+    <div class="sec-label fade-up">// documentation</div>
+    <h2 class="sec-title fade-up delay-1">User Guide</h2>
+    <p class="sec-sub fade-up delay-2">Panduan lengkap penggunaan setiap fitur PS Panel.</p>
+
+    <div class="docs-layout">
+
+      <!-- Sidebar nav -->
+      <div class="docs-sidebar fade-up">
+        <div class="docs-sidebar-title">Halaman Panel</div>
+        <a class="docs-nav-link active" href="#doc-dashboard"><span class="docs-nav-icon">📊</span>Dashboard</a>
+        <a class="docs-nav-link" href="#doc-vhosts"><span class="docs-nav-icon">🌐</span>Virtual Hosts</a>
+        <a class="docs-nav-link" href="#doc-files"><span class="docs-nav-icon">📁</span>File Manager</a>
+        <a class="docs-nav-link" href="#doc-mail"><span class="docs-nav-icon">✉️</span>Mail / SMTP</a>
+        <a class="docs-nav-link" href="#doc-deploy"><span class="docs-nav-icon">▲</span>Deploy</a>
+        <a class="docs-nav-link" href="#doc-postgres"><span class="docs-nav-icon">🗄️</span>PostgreSQL</a>
+        <a class="docs-nav-link" href="#doc-redis"><span class="docs-nav-icon">🔴</span>Redis</a>
+        <a class="docs-nav-link" href="#doc-services"><span class="docs-nav-icon">⚙️</span>Services</a>
+        <a class="docs-nav-link" href="#doc-settings"><span class="docs-nav-icon">🔧</span>Settings</a>
+        <a class="docs-nav-link" href="#doc-update"><span class="docs-nav-icon">⬆️</span>Update</a>
+      </div>
+
+      <!-- Doc content -->
+      <div class="docs-body fade-up delay-1">
+
+        <!-- DASHBOARD -->
+        <div class="doc-sec" id="doc-dashboard">
+          <div class="doc-sec-head">
+            <div class="doc-icon-wrap">📊</div>
+            <div class="doc-title">Dashboard</div>
+            <span class="doc-badge">Real-time Monitoring</span>
+          </div>
+          <p class="doc-desc">Halaman utama yang menampilkan kondisi server secara real-time. Data diperbarui otomatis setiap 5 detik via WebSocket.</p>
+          <div class="doc-2col">
+            <div class="doc-card">
+              <div class="doc-card-label">Metric Cards</div>
+              <div class="doc-card-title">CPU · RAM · Disk · Load</div>
+              <div class="doc-card-desc">Bar progress warna menunjukkan persentase penggunaan. Load average ditampilkan untuk 1m / 5m / 15m.</div>
+            </div>
+            <div class="doc-card">
+              <div class="doc-card-label">Network I/O</div>
+              <div class="doc-card-title">Download · Upload Speed</div>
+              <div class="doc-card-desc">Kecepatan transfer per detik pada interface aktif (bukan lo). Grafik 30-detik terakhir.</div>
+            </div>
+            <div class="doc-card">
+              <div class="doc-card-label">Services</div>
+              <div class="doc-card-title">Status Layanan</div>
+              <div class="doc-card-desc">Status aktif/tidak aktif semua layanan (FrankenPHP, PostgreSQL, Redis, PHP-FPM, Node.js) dalam satu pandangan.</div>
+            </div>
+            <div class="doc-card">
+              <div class="doc-card-label">Top Processes</div>
+              <div class="doc-card-title">5 Proses Teratas</div>
+              <div class="doc-card-desc">Proses dengan penggunaan CPU tertinggi. Berguna untuk mendeteksi proses yang mencurigakan atau boros resource.</div>
+            </div>
+          </div>
+          <div class="doc-tip"><strong>Tip:</strong> Jika CPU atau RAM terus 100%, cek bagian Top Processes untuk mencari proses penyebabnya, lalu gunakan halaman Services untuk restart layanan terkait.</div>
+        </div>
+
+        <!-- VIRTUAL HOSTS -->
+        <div class="doc-sec" id="doc-vhosts">
+          <div class="doc-sec-head">
+            <div class="doc-icon-wrap">🌐</div>
+            <div class="doc-title">Virtual Hosts</div>
+            <span class="doc-badge">Domain & SSL</span>
+          </div>
+          <p class="doc-desc">Kelola domain yang di-serve oleh FrankenPHP. Setiap virtual host menghasilkan file konfigurasi di <code style="color:var(--accent2)">/etc/frankenphp/sites/</code>.</p>
+          <div class="doc-steps">
+            <div class="doc-step">
+              <div class="doc-step-n">1</div>
+              <div><div class="doc-step-title">Tambah Domain</div><div class="doc-step-desc">Klik tombol <strong>+ Add Domain</strong>. Isi nama domain (contoh: <code>myapp.com</code>), document root (default: <code>/var/www/myapp.com</code>), centang PHP jika aplikasi PHP, dan SSL jika ingin HTTPS.</div></div>
+            </div>
+            <div class="doc-step">
+              <div class="doc-step-n">2</div>
+              <div><div class="doc-step-title">SSL Otomatis</div><div class="doc-step-desc">Jika SSL diaktifkan, FrankenPHP (Caddy) akan otomatis request sertifikat dari Let's Encrypt. Pastikan domain sudah diarahkan ke IP server dan port 80 terbuka sebelum mengaktifkan SSL.</div></div>
+            </div>
+            <div class="doc-step">
+              <div class="doc-step-n">3</div>
+              <div><div class="doc-step-title">Edit Environment (.env)</div><div class="doc-step-desc">Klik tombol <strong>⚙ ENV</strong> pada domain untuk edit file <code>.env</code> aplikasi langsung dari browser. File lama otomatis di-backup sebagai <code>.env.bak</code>.</div></div>
+            </div>
+            <div class="doc-step">
+              <div class="doc-step-n">4</div>
+              <div><div class="doc-step-title">Buka Website</div><div class="doc-step-desc">Klik nama domain (akan muncul sebagai link) untuk membuka website di tab baru. Ikon ↗ menandakan domain bisa diklik.</div></div>
+            </div>
+          </div>
+          <div class="doc-warn"><strong>Perhatian:</strong> Hapus vhost (tombol Remove) hanya menghapus konfigurasi FrankenPHP — file di document root tidak ikut terhapus.</div>
+        </div>
+
+        <!-- FILE MANAGER -->
+        <div class="doc-sec" id="doc-files">
+          <div class="doc-sec-head">
+            <div class="doc-icon-wrap">📁</div>
+            <div class="doc-title">File Manager</div>
+            <span class="doc-badge">Filesystem Access</span>
+          </div>
+          <p class="doc-desc">Akses seluruh filesystem server langsung dari browser. Mulai dari <code style="color:var(--accent2)">/var/www</code> secara default, bisa navigasi ke mana saja.</p>
+          <div class="doc-items">
+            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Navigasi:</strong> Klik folder untuk masuk, klik breadcrumb untuk kembali, atau ketik path manual di input bar atas.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Edit file:</strong> Klik nama file teks (PHP, JS, HTML, .env, dll) untuk membuka editor inline. Maksimum ukuran file yang bisa diedit: 2MB.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Upload:</strong> Klik tombol Upload lalu pilih file dari komputer. Bisa upload multiple file sekaligus.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Download:</strong> Klik tombol ↓ pada file yang ingin diunduh.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>New Folder / New File:</strong> Tombol di bagian atas untuk membuat folder atau file baru di direktori saat ini.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Rename / Delete:</strong> Tombol aksi di setiap baris file/folder. Delete meminta konfirmasi untuk folder yang tidak kosong.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Chmod:</strong> Ubah permission file (contoh: <code>644</code>, <code>755</code>, <code>600</code>) langsung dari tombol aksi.</span></div>
+          </div>
+          <div class="doc-tip"><strong>Shortcut paths:</strong> Gunakan tombol quick-jump (<code>/var/www</code>, <code>/etc/frankenphp</code>, <code>/opt/ps-panel</code>, <code>/root</code>) untuk berpindah cepat ke direktori penting.</div>
+        </div>
+
+        <!-- MAIL / SMTP -->
+        <div class="doc-sec" id="doc-mail">
+          <div class="doc-sec-head">
+            <div class="doc-icon-wrap">✉️</div>
+            <div class="doc-title">Mail / SMTP</div>
+            <span class="doc-badge">Email Configuration</span>
+          </div>
+          <p class="doc-desc">Konfigurasi SMTP eksternal untuk aplikasi Laravel/PHP di vhost. Setting disimpan ke file <code style="color:var(--accent2)">.env</code> aplikasi sebagai variabel <code style="color:var(--accent2)">MAIL_*</code>.</p>
+          <div class="doc-steps">
+            <div class="doc-step">
+              <div class="doc-step-n">1</div>
+              <div><div class="doc-step-title">Pilih Virtual Host</div><div class="doc-step-desc">Pilih domain aplikasi dari dropdown. Konfigurasi SMTP akan disimpan ke <code>.env</code> aplikasi tersebut.</div></div>
+            </div>
+            <div class="doc-step">
+              <div class="doc-step-n">2</div>
+              <div><div class="doc-step-title">Pilih Provider atau Isi Manual</div><div class="doc-step-desc">Tersedia 7 preset provider: <strong>Gmail, Outlook, Yahoo, SendGrid, Mailgun, Postmark</strong>, atau Custom. Klik preset untuk mengisi host & port otomatis.</div></div>
+            </div>
+            <div class="doc-step">
+              <div class="doc-step-n">3</div>
+              <div><div class="doc-step-title">Isi Kredensial</div><div class="doc-step-desc">Masukkan username (email/API key) dan password/secret. Pilih enkripsi: TLS (port 587), SSL (port 465), atau None.</div></div>
+            </div>
+            <div class="doc-step">
+              <div class="doc-step-n">4</div>
+              <div><div class="doc-step-title">Test & Simpan</div><div class="doc-step-desc">Klik <strong>Kirim Test Email</strong> untuk memverifikasi koneksi sebelum menyimpan. Jika berhasil, klik <strong>Simpan ke .env</strong>.</div></div>
+            </div>
+          </div>
+          <div class="doc-tip"><strong>Gmail:</strong> Gunakan App Password (bukan password utama). Aktifkan 2FA di akun Google, lalu buat App Password di <code>myaccount.google.com/apppasswords</code>.</div>
+        </div>
+
+        <!-- DEPLOY -->
+        <div class="doc-sec" id="doc-deploy">
+          <div class="doc-sec-head">
+            <div class="doc-icon-wrap">▲</div>
+            <div class="doc-title">Deploy</div>
+            <span class="doc-badge">Git Deployment</span>
+          </div>
+          <p class="doc-desc">Deploy aplikasi dari repository GitHub/GitLab ke server. Mendukung repo publik maupun privat, serta auto-deploy via webhook.</p>
+          <div class="doc-2col" style="margin-bottom:20px">
+            <div class="doc-card">
+              <div class="doc-card-label">Step 1</div>
+              <div class="doc-card-title">SSH Deploy Key</div>
+              <div class="doc-card-desc">Untuk repo <strong>privat</strong>, tampilkan SSH public key lalu tambahkan ke GitHub repo → Settings → Deploy Keys. Cukup dilakukan sekali.</div>
+            </div>
+            <div class="doc-card">
+              <div class="doc-card-label">Step 2</div>
+              <div class="doc-card-title">Clone Repository</div>
+              <div class="doc-card-desc">Clone repo ke folder virtual host untuk pertama kali. Pilih vhost tujuan, masukkan URL repo, klik Clone.</div>
+            </div>
+            <div class="doc-card">
+              <div class="doc-card-label">Step 3</div>
+              <div class="doc-card-title">Manual Deploy</div>
+              <div class="doc-card-desc">Jalankan <code>git pull</code> dari browser. Mode Laravel otomatis menjalankan composer, migrate, dan artisan cache.</div>
+            </div>
+            <div class="doc-card">
+              <div class="doc-card-label">Step 4</div>
+              <div class="doc-card-title">Auto Deploy (Webhook)</div>
+              <div class="doc-card-desc">Setup webhook GitHub agar deploy berjalan otomatis setiap kali ada push ke branch tertentu.</div>
+            </div>
+          </div>
+          <div class="doc-tip"><strong>Laravel Mode:</strong> Centang "Laravel App" saat deploy untuk menjalankan otomatis: <code>composer install</code> → <code>php artisan migrate --force</code> → <code>config:cache</code> → <code>route:cache</code> → <code>view:cache</code>.</div>
+        </div>
+
+        <!-- POSTGRESQL -->
+        <div class="doc-sec" id="doc-postgres">
+          <div class="doc-sec-head">
+            <div class="doc-icon-wrap">🗄️</div>
+            <div class="doc-title">PostgreSQL</div>
+            <span class="doc-badge">Database Management</span>
+          </div>
+          <p class="doc-desc">Monitor dan kelola database PostgreSQL 16. Terhubung langsung ke cluster lokal sebagai user <code style="color:var(--accent2)">postgres</code>.</p>
+          <div class="doc-items">
+            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Statistik koneksi:</strong> Total koneksi aktif, idle, dan yang sedang menjalankan query. Berguna untuk mendeteksi connection leak.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Daftar database:</strong> Semua database beserta ukurannya. Klik nama database untuk melihat detail koneksi aktif.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Buat database baru:</strong> Isi nama database lalu klik Create. Database langsung tersedia tanpa perlu SSH.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Manajemen user:</strong> Buat user/role baru dengan password, lalu assign privilege ke database tertentu (SELECT, INSERT, UPDATE, DELETE, atau ALL).</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Grant privilege:</strong> Pilih user, database, dan privilege yang diinginkan. Opsi "Make Owner" memberikan akses penuh — direkomendasikan untuk aplikasi Laravel.</span></div>
+          </div>
+          <div class="doc-tip"><strong>Untuk Laravel:</strong> Buat database → buat user → grant ALL PRIVILEGES atau centang "Make Owner". Kemudian update <code>DB_DATABASE</code>, <code>DB_USERNAME</code>, <code>DB_PASSWORD</code> di file <code>.env</code> aplikasi via menu Virtual Hosts → ENV.</div>
+        </div>
+
+        <!-- REDIS -->
+        <div class="doc-sec" id="doc-redis">
+          <div class="doc-sec-head">
+            <div class="doc-icon-wrap">🔴</div>
+            <div class="doc-title">Redis</div>
+            <span class="doc-badge">Cache Monitoring</span>
+          </div>
+          <p class="doc-desc">Monitor statistik Redis yang berjalan di <code style="color:var(--accent2)">127.0.0.1:6379</code>. Terhubung tanpa autentikasi (Redis terikat ke localhost untuk keamanan).</p>
+          <div class="doc-2col">
+            <div class="doc-card">
+              <div class="doc-card-label">Hit Rate</div>
+              <div class="doc-card-title">Efisiensi Cache</div>
+              <div class="doc-card-desc">Persentase cache hit vs miss. Idealnya &gt;90%. Jika rendah, pertimbangkan menaikkan <code>maxmemory</code> atau review strategi cache aplikasi.</div>
+            </div>
+            <div class="doc-card">
+              <div class="doc-card-label">Memory</div>
+              <div class="doc-card-title">Penggunaan Memori</div>
+              <div class="doc-card-desc">Memory terpakai vs peak. Jika mendekati <code>maxmemory</code>, Redis akan mulai mengeluarkan key (eviction) sesuai policy yang dikonfigurasi.</div>
+            </div>
+            <div class="doc-card">
+              <div class="doc-card-label">Ops/sec</div>
+              <div class="doc-card-title">Throughput</div>
+              <div class="doc-card-desc">Jumlah command per detik yang diproses Redis. Berguna untuk mendeteksi lonjakan beban dari aplikasi.</div>
+            </div>
+            <div class="doc-card">
+              <div class="doc-card-label">Keyspace</div>
+              <div class="doc-card-title">Jumlah Key</div>
+              <div class="doc-card-desc">Total key per database (db0, db1, dll). Jika key terus bertambah tanpa turun, pastikan aplikasi menetapkan TTL pada setiap key.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SERVICES -->
+        <div class="doc-sec" id="doc-services">
+          <div class="doc-sec-head">
+            <div class="doc-icon-wrap">⚙️</div>
+            <div class="doc-title">Services</div>
+            <span class="doc-badge">System Services</span>
+          </div>
+          <p class="doc-desc">Kontrol layanan sistem via <code style="color:var(--accent2)">systemctl</code> langsung dari browser. Mendukung start, stop, dan restart untuk semua layanan panel.</p>
+          <div class="doc-items">
+            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>FrankenPHP</strong> — Web server utama. Restart diperlukan setelah mengubah Caddyfile atau konfigurasi PHP.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>PHP-FPM</strong> — Prosesor PHP. Restart jika ada perubahan pada <code>php.ini</code> atau ekstensi PHP.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>PostgreSQL</strong> — Database server. Restart dengan hati-hati — semua koneksi aktif akan terputus.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Redis</strong> — Cache server. Data in-memory akan hilang jika tidak dikonfigurasi persistensi (RDB/AOF).</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Node.js (PS Panel)</strong> — Panel itu sendiri berjalan via PM2. Restart panel akan memuat ulang konfigurasi terbaru.</span></div>
+          </div>
+          <div class="doc-warn"><strong>Perhatian:</strong> Stop layanan di server produksi akan menyebabkan downtime. Gunakan Restart (bukan Stop) untuk menerapkan perubahan konfigurasi.</div>
+        </div>
+
+        <!-- SETTINGS -->
+        <div class="doc-sec" id="doc-settings">
+          <div class="doc-sec-head">
+            <div class="doc-icon-wrap">🔧</div>
+            <div class="doc-title">Settings</div>
+            <span class="doc-badge">PHP & FrankenPHP Config</span>
+          </div>
+          <p class="doc-desc">Edit konfigurasi PHP dan FrankenPHP (Caddyfile) langsung dari browser. Perubahan memerlukan konfirmasi password dan restart FrankenPHP otomatis.</p>
+          <div class="doc-items">
+            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>memory_limit</strong> — Batas memori per proses PHP. Default: <code>256M</code>. Naikkan untuk aplikasi berat seperti Composer atau image processing.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>max_execution_time</strong> — Batas waktu eksekusi script PHP (detik). Default: <code>60</code>. Naikkan untuk proses panjang seperti import data.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>upload_max_filesize & post_max_size</strong> — Ukuran maksimum file upload. Keduanya harus dinaikkan bersamaan agar upload besar bisa berjalan.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Ekstensi PHP</strong> — Daftar ekstensi yang aktif. Ekstensi pre-installed: pgsql, redis, opcache, gd, mbstring, curl, zip, xml, dan lainnya.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Caddyfile</strong> — Konfigurasi utama FrankenPHP. Edit dengan hati-hati; syntax error dapat membuat web server tidak bisa start.</span></div>
+          </div>
+          <div class="doc-tip"><strong>Alur edit:</strong> Klik <strong>Unlock Edit</strong> → masukkan password panel → edit nilai → klik <strong>Save Changes</strong>. FrankenPHP akan restart otomatis dan konfigurasi lama dibackup.</div>
+        </div>
+
+        <!-- UPDATE -->
+        <div class="doc-sec" id="doc-update">
+          <div class="doc-sec-head">
+            <div class="doc-icon-wrap">⬆️</div>
+            <div class="doc-title">Update</div>
+            <span class="doc-badge">Self-Update</span>
+          </div>
+          <p class="doc-desc">Perbarui PS Panel ke versi terbaru langsung dari browser tanpa perlu SSH. File lama otomatis di-backup sebelum diperbarui.</p>
+          <div class="doc-steps">
+            <div class="doc-step">
+              <div class="doc-step-n">1</div>
+              <div><div class="doc-step-title">Cek Update</div><div class="doc-step-desc">Klik <strong>Cek Update</strong>. Panel akan membandingkan versi terpasang dengan versi terbaru di GitHub. Badge hijau "new" di sidebar muncul otomatis jika ada update baru saat panel dibuka.</div></div>
+            </div>
+            <div class="doc-step">
+              <div class="doc-step-n">2</div>
+              <div><div class="doc-step-title">Lihat Changelog</div><div class="doc-step-desc">Daftar fitur baru dan perbaikan pada versi terbaru akan ditampilkan setelah cek update berhasil.</div></div>
+            </div>
+            <div class="doc-step">
+              <div class="doc-step-n">3</div>
+              <div><div class="doc-step-title">Update Sekarang</div><div class="doc-step-desc">Klik <strong>Update Sekarang</strong>. Panel akan mengunduh file terbaru, menjalankan <code>npm install</code>, lalu restart otomatis. Proses biasanya selesai dalam 30–60 detik.</div></div>
+            </div>
+            <div class="doc-step">
+              <div class="doc-step-n">4</div>
+              <div><div class="doc-step-title">Halaman Reload Otomatis</div><div class="doc-step-desc">Setelah panel selesai restart, browser akan otomatis reload. Konfigurasi, vhost, database, dan file aplikasi tidak terpengaruh oleh update.</div></div>
+            </div>
+          </div>
+          <div class="doc-tip"><strong>Aman:</strong> Update hanya menyentuh file panel (<code>server.js</code>, <code>public/index.html</code>). Semua konfigurasi vhost di <code>/etc/frankenphp/sites/</code>, database PostgreSQL, dan file <code>.env</code> aplikasi tidak berubah.</div>
+        </div>
+
+      </div><!-- end docs-body -->
+    </div><!-- end docs-layout -->
+  </div>
+</section>
+
 <!-- ── FAQ ── -->
 <section id="faq">
   <div class="container">
@@ -864,10 +1200,11 @@ footer {
     <a href="#features">Features</a>
     <a href="#stack">Stack</a>
     <a href="#install">Install</a>
+    <a href="#docs">Docs</a>
     <a href="#faq">FAQ</a>
   </div>
   <div class="footer-copy">
-    Built with ❤️ for the open-source community &nbsp;·&nbsp; PS Panel v2.0<br>
+    Built with ❤️ for the open-source community &nbsp;·&nbsp; PS Panel v2.1<br>
     <span style="opacity:.5">Released under MIT License</span>
   </div>
 </footer>
@@ -920,6 +1257,21 @@ function toggleFaq(el) {
   document.querySelectorAll('.faq-item.open').forEach(i => i.classList.remove('open'));
   if (!isOpen) item.classList.add('open');
 }
+
+// ── DOCS NAV SCROLL TRACKING ──
+const docNavLinks = document.querySelectorAll('.docs-nav-link');
+const docSections = document.querySelectorAll('.doc-sec');
+const docsObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      const id = e.target.id;
+      docNavLinks.forEach(a => {
+        a.classList.toggle('active', a.getAttribute('href') === '#' + id);
+      });
+    }
+  });
+}, { threshold: 0.25, rootMargin: '-80px 0px -60% 0px' });
+docSections.forEach(s => docsObserver.observe(s));
 
 // ── COPY CODE ──
 function copyCode(btn) {
