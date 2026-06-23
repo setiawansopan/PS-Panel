@@ -467,6 +467,15 @@ section { position:relative; z-index:1; padding:100px 24px; }
 }
 .faq-a-inner code { color:var(--accent); font-size:11px; }
 
+/* ── LANG TOGGLE ── */
+.lang-btn {
+  display:inline-flex; align-items:center; padding:6px 13px;
+  background:var(--ink3); border:1px solid var(--line2); border-radius:8px;
+  color:var(--muted); font-family:var(--mono); font-size:11px; font-weight:700;
+  cursor:pointer; transition:all .15s; letter-spacing:.04em;
+}
+.lang-btn:hover { color:var(--text); border-color:rgba(5,150,105,.35); }
+
 /* ── FOOTER ── */
 footer {
   position:relative; z-index:1;
@@ -517,13 +526,14 @@ footer {
 <nav id="navbar">
   <a class="nav-logo" href="#"><span>PS</span> Panel</a>
   <ul class="nav-links">
-    <li><a href="#features">Features</a></li>
-    <li><a href="#stack">Stack</a></li>
-    <li><a href="#preview">Preview</a></li>
-    <li><a href="#install">Install</a></li>
-    <li><a href="#docs">Docs</a></li>
-    <li><a href="#faq">FAQ</a></li>
+    <li><a href="#features" data-i18n="nav-features">Features</a></li>
+    <li><a href="#stack" data-i18n="nav-stack">Stack</a></li>
+    <li><a href="#preview" data-i18n="nav-preview">Preview</a></li>
+    <li><a href="#install" data-i18n="nav-install">Install</a></li>
+    <li><a href="#docs" data-i18n="nav-docs">Docs</a></li>
+    <li><a href="#faq" data-i18n="nav-faq">FAQ</a></li>
   </ul>
+  <button class="lang-btn" id="lang-btn" onclick="toggleLang()">🇮🇩 ID</button>
   <a class="btn-gh" href="https://github.com/setiawansopan/PS-Panel" target="_blank" rel="noopener">
     <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.69c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0112 6.8c.85 0 1.71.11 2.51.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10.01 10.01 0 0022 12c0-5.52-4.48-10-10-10z"/></svg>
     GitHub
@@ -544,7 +554,7 @@ footer {
     <span class="ps">PS</span> Panel
   </h1>
 
-  <p class="hero-sub fade-up delay-2">
+  <p class="hero-sub fade-up delay-2" data-i18n-html="hero-sub">
     Modern server management for Ubuntu 24.04.<br>
     One command. Fully operational in minutes.
   </p>
@@ -562,10 +572,10 @@ footer {
   </div>
 
   <div class="hero-btns fade-up delay-4">
-    <a href="#install" class="btn-primary">Get Started →</a>
+    <a href="#install" class="btn-primary" data-i18n="hero-btn-start">Get Started →</a>
     <a href="https://github.com/setiawansopan/PS-Panel" target="_blank" rel="noopener" class="btn-secondary">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.69c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0112 6.8c.85 0 1.71.11 2.51.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10.01 10.01 0 0022 12c0-5.52-4.48-10-10-10z"/></svg>
-      View on GitHub
+      <span data-i18n="hero-btn-gh">View on GitHub</span>
     </a>
   </div>
 
@@ -578,39 +588,39 @@ footer {
 <!-- ── FEATURES ── -->
 <section id="features">
   <div class="container">
-    <div class="sec-label fade-up">// features</div>
-    <h2 class="sec-title fade-up delay-1">Everything you need,<br>nothing you don't.</h2>
-    <p class="sec-sub fade-up delay-2">Minimal footprint, maximum control. Manage your entire stack from one clean interface.</p>
+    <div class="sec-label fade-up" data-i18n="feat-label">// features</div>
+    <h2 class="sec-title fade-up delay-1" data-i18n-html="feat-title">Everything you need,<br>nothing you don't.</h2>
+    <p class="sec-sub fade-up delay-2" data-i18n="feat-sub">Minimal footprint, maximum control. Manage your entire stack from one clean interface.</p>
     <div class="feat-grid">
       <div class="feat-card fade-up delay-1" style="--c:var(--accent)">
         <span class="feat-icon">⚡</span>
-        <div class="feat-title">One-command Install</div>
-        <div class="feat-desc">A single curl command installs and configures the entire stack. FrankenPHP, PHP 8.3, PostgreSQL 16, Redis, and Node.js — ready in under 10 minutes.</div>
+        <div class="feat-title" data-i18n="feat1-title">One-command Install</div>
+        <div class="feat-desc" data-i18n="feat1-desc">A single curl command installs and configures the entire stack. FrankenPHP, PHP 8.3, PostgreSQL 16, Redis, and Node.js — ready in under 10 minutes.</div>
       </div>
       <div class="feat-card fade-up delay-2" style="--c:var(--accent2)">
         <span class="feat-icon">📊</span>
-        <div class="feat-title">Real-time Monitoring</div>
-        <div class="feat-desc">Live CPU, RAM, disk, and network I/O metrics with 5-second auto-refresh. Top processes, load average, and 30-second bandwidth history.</div>
+        <div class="feat-title" data-i18n="feat2-title">Real-time Monitoring</div>
+        <div class="feat-desc" data-i18n="feat2-desc">Live CPU, RAM, disk, and network I/O metrics with 5-second auto-refresh. Top processes, load average, and 30-second bandwidth history.</div>
       </div>
       <div class="feat-card fade-up delay-3" style="--c:var(--accent3)">
         <span class="feat-icon">🟥</span>
-        <div class="feat-title">Redis Statistics</div>
-        <div class="feat-desc">Cache hit rate, memory usage, ops/sec, connected clients, eviction counts, and keyspace stats — everything at a glance.</div>
+        <div class="feat-title" data-i18n="feat3-title">Redis Statistics</div>
+        <div class="feat-desc" data-i18n="feat3-desc">Cache hit rate, memory usage, ops/sec, connected clients, eviction counts, and keyspace stats — everything at a glance.</div>
       </div>
       <div class="feat-card fade-up delay-4" style="--c:var(--accent2)">
         <span class="feat-icon">🗄️</span>
-        <div class="feat-title">PostgreSQL Management</div>
-        <div class="feat-desc">Monitor active connections, database sizes, lock counts, and connection states. Create databases directly from the browser.</div>
+        <div class="feat-title" data-i18n="feat4-title">PostgreSQL Management</div>
+        <div class="feat-desc" data-i18n="feat4-desc">Monitor active connections, database sizes, lock counts, and connection states. Create databases directly from the browser.</div>
       </div>
       <div class="feat-card fade-up delay-5" style="--c:var(--accent)">
         <span class="feat-icon">🐘</span>
-        <div class="feat-title">PHP-FPM Stats</div>
-        <div class="feat-desc">Worker pool utilization, idle/active process counts, listen queue depth, and slow request tracking via the FPM status socket.</div>
+        <div class="feat-title" data-i18n="feat5-title">PHP-FPM Stats</div>
+        <div class="feat-desc" data-i18n="feat5-desc">Worker pool utilization, idle/active process counts, listen queue depth, and slow request tracking via the FPM status socket.</div>
       </div>
       <div class="feat-card fade-up delay-6" style="--c:var(--warn)">
         <span class="feat-icon">▲</span>
-        <div class="feat-title">Smart Git Deploy</div>
-        <div class="feat-desc">Trigger deploys from the browser — or automate with GitHub webhooks. Laravel mode runs composer, migrate, and artisan cache commands automatically.</div>
+        <div class="feat-title" data-i18n="feat6-title">Smart Git Deploy</div>
+        <div class="feat-desc" data-i18n="feat6-desc">Trigger deploys from the browser — or automate with GitHub webhooks. Laravel mode runs composer, migrate, and artisan cache commands automatically.</div>
       </div>
     </div>
   </div>
@@ -619,39 +629,39 @@ footer {
 <!-- ── STACK ── -->
 <section id="stack">
   <div class="container">
-    <div class="sec-label fade-up">// tech stack</div>
-    <h2 class="sec-title fade-up delay-1">Built on proven technology</h2>
-    <p class="sec-sub fade-up delay-2">Production-grade components, carefully selected and pre-configured to work together perfectly.</p>
+    <div class="sec-label fade-up" data-i18n="stack-label">// tech stack</div>
+    <h2 class="sec-title fade-up delay-1" data-i18n="stack-title">Built on proven technology</h2>
+    <p class="sec-sub fade-up delay-2" data-i18n="stack-sub">Production-grade components, carefully selected and pre-configured to work together perfectly.</p>
     <div class="stack-row">
       <div class="stack-card fade-up delay-1" style="--c:var(--accent)">
         <span class="stack-em">⚡</span>
         <div class="stack-name">FrankenPHP</div>
         <div class="stack-ver">Latest</div>
-        <div class="stack-desc">Modern PHP server built on Caddy. Auto HTTPS via Let's Encrypt. No Nginx config files.</div>
+        <div class="stack-desc" data-i18n="stack1-desc">Modern PHP server built on Caddy. Auto HTTPS via Let's Encrypt. No Nginx config files.</div>
       </div>
       <div class="stack-card fade-up delay-2" style="--c:var(--accent3)">
         <span class="stack-em">🐘</span>
         <div class="stack-name">PHP</div>
         <div class="stack-ver">8.3 + FPM</div>
-        <div class="stack-desc">Latest stable PHP with pgsql, redis, opcache, gd, mbstring, and 10+ extensions pre-installed.</div>
+        <div class="stack-desc" data-i18n="stack2-desc">Latest stable PHP with pgsql, redis, opcache, gd, mbstring, and 10+ extensions pre-installed.</div>
       </div>
       <div class="stack-card fade-up delay-3" style="--c:var(--accent2)">
         <span class="stack-em">🗄️</span>
         <div class="stack-name">PostgreSQL</div>
         <div class="stack-ver">16</div>
-        <div class="stack-desc">Enterprise-grade relational database. Auto-configured with a secure random password at install.</div>
+        <div class="stack-desc" data-i18n="stack3-desc">Enterprise-grade relational database. Auto-configured with a secure random password at install.</div>
       </div>
       <div class="stack-card fade-up delay-4" style="--c:var(--accent3)">
         <span class="stack-em">🟥</span>
         <div class="stack-name">Redis</div>
         <div class="stack-ver">Latest</div>
-        <div class="stack-desc">In-memory cache and session store. Bound to 127.0.0.1 for security out of the box.</div>
+        <div class="stack-desc" data-i18n="stack4-desc">In-memory cache and session store. Bound to 127.0.0.1 for security out of the box.</div>
       </div>
       <div class="stack-card fade-up delay-5" style="--c:var(--accent)">
         <span class="stack-em">🟩</span>
         <div class="stack-name">Node.js</div>
         <div class="stack-ver">20 LTS + PM2</div>
-        <div class="stack-desc">JS runtime with PM2 process manager. Panel survives server reboots automatically.</div>
+        <div class="stack-desc" data-i18n="stack5-desc">JS runtime with PM2 process manager. Panel survives server reboots automatically.</div>
       </div>
     </div>
   </div>
@@ -660,9 +670,9 @@ footer {
 <!-- ── DASHBOARD PREVIEW ── -->
 <section id="preview">
   <div class="container" style="max-width:1020px">
-    <div class="sec-label fade-up" style="text-align:center">// dashboard preview</div>
-    <h2 class="sec-title fade-up delay-1" style="text-align:center">See it in action</h2>
-    <p class="sec-sub fade-up delay-2" style="text-align:center;margin-left:auto;margin-right:auto">
+    <div class="sec-label fade-up" style="text-align:center" data-i18n="prev-label">// dashboard preview</div>
+    <h2 class="sec-title fade-up delay-1" style="text-align:center" data-i18n="prev-title">See it in action</h2>
+    <p class="sec-sub fade-up delay-2" style="text-align:center;margin-left:auto;margin-right:auto" data-i18n="prev-sub">
       Clean, minimal interface. Everything at a glance — no bloat, no noise.
     </p>
 
@@ -773,16 +783,16 @@ footer {
 <!-- ── INSTALL ── -->
 <section id="install">
   <div class="container">
-    <div class="sec-label fade-up">// quick install</div>
-    <h2 class="sec-title fade-up delay-1">Get started in minutes</h2>
-    <p class="sec-sub fade-up delay-2">Four steps from a fresh VPS to a fully running panel.</p>
+    <div class="sec-label fade-up" data-i18n="inst-label">// quick install</div>
+    <h2 class="sec-title fade-up delay-1" data-i18n="inst-title">Get started in minutes</h2>
+    <p class="sec-sub fade-up delay-2" data-i18n="inst-sub">Four steps from a fresh VPS to a fully running panel.</p>
 
     <div class="steps">
       <div class="step fade-up delay-1">
         <div class="step-num">01</div>
         <div class="step-body">
-          <div class="step-title">Prepare a Ubuntu 24.04 VPS</div>
-          <div class="step-desc">SSH into your server as root. Minimum 1 GB RAM, 10 GB disk. Open ports 80, 443, and 8765 in your firewall.</div>
+          <div class="step-title" data-i18n="inst1-title">Prepare a Ubuntu 24.04 VPS</div>
+          <div class="step-desc" data-i18n="inst1-desc">SSH into your server as root. Minimum 1 GB RAM, 10 GB disk. Open ports 80, 443, and 8765 in your firewall.</div>
           <div class="code-block" data-code="ssh root@your-server-ip">
             <code>ssh root@your-server-ip</code>
             <button class="code-copy" onclick="copyCode(this)">copy</button>
@@ -793,8 +803,8 @@ footer {
       <div class="step fade-up delay-2">
         <div class="step-num">02</div>
         <div class="step-body">
-          <div class="step-title">Run the one-line install command</div>
-          <div class="step-desc">Installs and configures the complete stack automatically. Takes 5–10 minutes depending on your server's connection speed.</div>
+          <div class="step-title" data-i18n="inst2-title">Run the one-line install command</div>
+          <div class="step-desc" data-i18n="inst2-desc">Installs and configures the complete stack automatically. Takes 5–10 minutes depending on your server's connection speed.</div>
           <div class="code-block" data-code="curl -fsSL https://raw.githubusercontent.com/setiawansopan/PS-Panel/main/install.sh | sudo bash">
             <code>curl -fsSL https://raw.githubusercontent.com/setiawansopan/PS-Panel/main/install.sh | sudo bash</code>
             <button class="code-copy" onclick="copyCode(this)">copy</button>
@@ -805,8 +815,8 @@ footer {
       <div class="step fade-up delay-3">
         <div class="step-num">03</div>
         <div class="step-body">
-          <div class="step-title">Open the panel in your browser</div>
-          <div class="step-desc">After install completes, navigate to your server's IP on port 8765. The install summary will show the exact URL.</div>
+          <div class="step-title" data-i18n="inst3-title">Open the panel in your browser</div>
+          <div class="step-desc" data-i18n="inst3-desc">After install completes, navigate to your server's IP on port 8765. The install summary will show the exact URL.</div>
           <div class="code-block" data-code="http://your-server-ip:8765">
             <code>http://your-server-ip:8765</code>
             <button class="code-copy" onclick="copyCode(this)">copy</button>
@@ -817,8 +827,8 @@ footer {
       <div class="step fade-up delay-4">
         <div class="step-num">04</div>
         <div class="step-body">
-          <div class="step-title">Login with the generated password</div>
-          <div class="step-desc">Your credentials are displayed at the end of the install. You can always retrieve them from the credentials file.</div>
+          <div class="step-title" data-i18n="inst4-title">Login with the generated password</div>
+          <div class="step-desc" data-i18n="inst4-desc">Your credentials are displayed at the end of the install. You can always retrieve them from the credentials file.</div>
           <div class="code-block" data-code="cat /root/.pspanel_credentials">
             <code>cat /root/.pspanel_credentials</code>
             <button class="code-copy" onclick="copyCode(this)">copy</button>
@@ -827,7 +837,7 @@ footer {
       </div>
     </div>
 
-    <div class="note-box fade-up">
+    <div class="note-box fade-up" data-i18n-html="inst-note">
       <strong>📁 Credentials file:</strong> All auto-generated passwords (panel + PostgreSQL) are saved to <strong>/root/.pspanel_credentials</strong>. Keep this file secure.<br><br>
       <strong>🔑 Change panel password:</strong> <code>PANEL_PASS=newpassword pm2 restart ps-panel</code>
     </div>
@@ -837,15 +847,15 @@ footer {
 <!-- ── DOCS ── -->
 <section id="docs">
   <div class="container">
-    <div class="sec-label fade-up">// documentation</div>
-    <h2 class="sec-title fade-up delay-1">User Guide</h2>
-    <p class="sec-sub fade-up delay-2">Panduan lengkap penggunaan setiap fitur PS Panel.</p>
+    <div class="sec-label fade-up" data-i18n="docs-label">// documentation</div>
+    <h2 class="sec-title fade-up delay-1" data-i18n="docs-title">User Guide</h2>
+    <p class="sec-sub fade-up delay-2" data-i18n="docs-sub">Complete guide to using every PS Panel feature.</p>
 
     <div class="docs-layout">
 
       <!-- Sidebar nav -->
       <div class="docs-sidebar fade-up">
-        <div class="docs-sidebar-title">Halaman Panel</div>
+        <div class="docs-sidebar-title" data-i18n="docs-sidebar-title">Panel Pages</div>
         <a class="docs-nav-link active" href="#doc-dashboard"><span class="docs-nav-icon">📊</span>Dashboard</a>
         <a class="docs-nav-link" href="#doc-vhosts"><span class="docs-nav-icon">🌐</span>Virtual Hosts</a>
         <a class="docs-nav-link" href="#doc-files"><span class="docs-nav-icon">📁</span>File Manager</a>
@@ -866,32 +876,32 @@ footer {
           <div class="doc-sec-head">
             <div class="doc-icon-wrap">📊</div>
             <div class="doc-title">Dashboard</div>
-            <span class="doc-badge">Real-time Monitoring</span>
+            <span class="doc-badge" data-i18n="doc-dash-badge">Real-time Monitoring</span>
           </div>
-          <p class="doc-desc">Halaman utama yang menampilkan kondisi server secara real-time. Data diperbarui otomatis setiap 5 detik via WebSocket.</p>
+          <p class="doc-desc" data-i18n="doc-dash-desc">The main page displaying server status in real-time. Data is automatically refreshed every 5 seconds via WebSocket.</p>
           <div class="doc-2col">
             <div class="doc-card">
-              <div class="doc-card-label">Metric Cards</div>
-              <div class="doc-card-title">CPU · RAM · Disk · Load</div>
-              <div class="doc-card-desc">Bar progress warna menunjukkan persentase penggunaan. Load average ditampilkan untuk 1m / 5m / 15m.</div>
+              <div class="doc-card-label" data-i18n="doc-dash-c1-label">Metric Cards</div>
+              <div class="doc-card-title" data-i18n="doc-dash-c1-title">CPU · RAM · Disk · Load</div>
+              <div class="doc-card-desc" data-i18n="doc-dash-c1-desc">Color progress bars show usage percentage. Load average is displayed for 1m / 5m / 15m intervals.</div>
             </div>
             <div class="doc-card">
-              <div class="doc-card-label">Network I/O</div>
-              <div class="doc-card-title">Download · Upload Speed</div>
-              <div class="doc-card-desc">Kecepatan transfer per detik pada interface aktif (bukan lo). Grafik 30-detik terakhir.</div>
+              <div class="doc-card-label" data-i18n="doc-dash-c2-label">Network I/O</div>
+              <div class="doc-card-title" data-i18n="doc-dash-c2-title">Download · Upload Speed</div>
+              <div class="doc-card-desc" data-i18n="doc-dash-c2-desc">Transfer speed per second on the active interface (non-lo). 30-second bandwidth history chart.</div>
             </div>
             <div class="doc-card">
-              <div class="doc-card-label">Services</div>
-              <div class="doc-card-title">Status Layanan</div>
-              <div class="doc-card-desc">Status aktif/tidak aktif semua layanan (FrankenPHP, PostgreSQL, Redis, PHP-FPM, Node.js) dalam satu pandangan.</div>
+              <div class="doc-card-label" data-i18n="doc-dash-c3-label">Services</div>
+              <div class="doc-card-title" data-i18n="doc-dash-c3-title">Service Status</div>
+              <div class="doc-card-desc" data-i18n="doc-dash-c3-desc">Active/inactive status of all services (FrankenPHP, PostgreSQL, Redis, PHP-FPM, Node.js) at a glance.</div>
             </div>
             <div class="doc-card">
-              <div class="doc-card-label">Top Processes</div>
-              <div class="doc-card-title">5 Proses Teratas</div>
-              <div class="doc-card-desc">Proses dengan penggunaan CPU tertinggi. Berguna untuk mendeteksi proses yang mencurigakan atau boros resource.</div>
+              <div class="doc-card-label" data-i18n="doc-dash-c4-label">Top Processes</div>
+              <div class="doc-card-title" data-i18n="doc-dash-c4-title">Top 5 Processes</div>
+              <div class="doc-card-desc" data-i18n="doc-dash-c4-desc">Processes with the highest CPU usage. Useful for detecting suspicious or resource-hungry processes.</div>
             </div>
           </div>
-          <div class="doc-tip"><strong>Tip:</strong> Jika CPU atau RAM terus 100%, cek bagian Top Processes untuk mencari proses penyebabnya, lalu gunakan halaman Services untuk restart layanan terkait.</div>
+          <div class="doc-tip" data-i18n-html="doc-dash-tip"><strong>Tip:</strong> If CPU or RAM stays at 100%, check Top Processes to identify the cause, then use the Services page to restart the relevant service.</div>
         </div>
 
         <!-- VIRTUAL HOSTS -->
@@ -899,28 +909,28 @@ footer {
           <div class="doc-sec-head">
             <div class="doc-icon-wrap">🌐</div>
             <div class="doc-title">Virtual Hosts</div>
-            <span class="doc-badge">Domain & SSL</span>
+            <span class="doc-badge" data-i18n="doc-vh-badge">Domain & SSL</span>
           </div>
-          <p class="doc-desc">Kelola domain yang di-serve oleh FrankenPHP. Setiap virtual host menghasilkan file konfigurasi di <code style="color:var(--accent2)">/etc/frankenphp/sites/</code>.</p>
+          <p class="doc-desc" data-i18n-html="doc-vh-desc">Manage domains served by FrankenPHP. Each virtual host generates a config file in <code style="color:var(--accent2)">/etc/frankenphp/sites/</code>.</p>
           <div class="doc-steps">
             <div class="doc-step">
               <div class="doc-step-n">1</div>
-              <div><div class="doc-step-title">Tambah Domain</div><div class="doc-step-desc">Klik tombol <strong>+ Add Domain</strong>. Isi nama domain (contoh: <code>myapp.com</code>), document root (default: <code>/var/www/myapp.com</code>), centang PHP jika aplikasi PHP, dan SSL jika ingin HTTPS.</div></div>
+              <div><div class="doc-step-title" data-i18n="doc-vh-s1-title">Add Domain</div><div class="doc-step-desc" data-i18n-html="doc-vh-s1-desc">Click <strong>+ Add Domain</strong>. Fill in the domain name (e.g.: <code>myapp.com</code>), document root (default: <code>/var/www/myapp.com</code>), check PHP if it's a PHP app, and SSL for HTTPS.</div></div>
             </div>
             <div class="doc-step">
               <div class="doc-step-n">2</div>
-              <div><div class="doc-step-title">SSL Otomatis</div><div class="doc-step-desc">Jika SSL diaktifkan, FrankenPHP (Caddy) akan otomatis request sertifikat dari Let's Encrypt. Pastikan domain sudah diarahkan ke IP server dan port 80 terbuka sebelum mengaktifkan SSL.</div></div>
+              <div><div class="doc-step-title" data-i18n="doc-vh-s2-title">Auto SSL</div><div class="doc-step-desc" data-i18n="doc-vh-s2-desc">When SSL is enabled, FrankenPHP (Caddy) automatically requests a certificate from Let's Encrypt. Ensure the domain points to the server IP and port 80 is open before enabling SSL.</div></div>
             </div>
             <div class="doc-step">
               <div class="doc-step-n">3</div>
-              <div><div class="doc-step-title">Edit Environment (.env)</div><div class="doc-step-desc">Klik tombol <strong>⚙ ENV</strong> pada domain untuk edit file <code>.env</code> aplikasi langsung dari browser. File lama otomatis di-backup sebagai <code>.env.bak</code>.</div></div>
+              <div><div class="doc-step-title" data-i18n="doc-vh-s3-title">Edit Environment (.env)</div><div class="doc-step-desc" data-i18n-html="doc-vh-s3-desc">Click the <strong>⚙ ENV</strong> button on a domain to edit the app's <code>.env</code> file directly from the browser. The previous file is automatically backed up as <code>.env.bak</code>.</div></div>
             </div>
             <div class="doc-step">
               <div class="doc-step-n">4</div>
-              <div><div class="doc-step-title">Buka Website</div><div class="doc-step-desc">Klik nama domain (akan muncul sebagai link) untuk membuka website di tab baru. Ikon ↗ menandakan domain bisa diklik.</div></div>
+              <div><div class="doc-step-title" data-i18n="doc-vh-s4-title">Open Website</div><div class="doc-step-desc" data-i18n="doc-vh-s4-desc">Click the domain name (displayed as a link) to open the website in a new tab. The ↗ icon indicates the domain is clickable.</div></div>
             </div>
           </div>
-          <div class="doc-warn"><strong>Perhatian:</strong> Hapus vhost (tombol Remove) hanya menghapus konfigurasi FrankenPHP — file di document root tidak ikut terhapus.</div>
+          <div class="doc-warn" data-i18n-html="doc-vh-warn"><strong>Warning:</strong> Removing a vhost (Remove button) only removes the FrankenPHP configuration — files in the document root are NOT deleted.</div>
         </div>
 
         <!-- FILE MANAGER -->
@@ -928,19 +938,19 @@ footer {
           <div class="doc-sec-head">
             <div class="doc-icon-wrap">📁</div>
             <div class="doc-title">File Manager</div>
-            <span class="doc-badge">Filesystem Access</span>
+            <span class="doc-badge" data-i18n="doc-fm-badge">Filesystem Access</span>
           </div>
-          <p class="doc-desc">Akses seluruh filesystem server langsung dari browser. Mulai dari <code style="color:var(--accent2)">/var/www</code> secara default, bisa navigasi ke mana saja.</p>
+          <p class="doc-desc" data-i18n-html="doc-fm-desc">Access the entire server filesystem directly from the browser. Starts at <code style="color:var(--accent2)">/var/www</code> by default, can navigate anywhere.</p>
           <div class="doc-items">
-            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Navigasi:</strong> Klik folder untuk masuk, klik breadcrumb untuk kembali, atau ketik path manual di input bar atas.</span></div>
-            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Edit file:</strong> Klik nama file teks (PHP, JS, HTML, .env, dll) untuk membuka editor inline. Maksimum ukuran file yang bisa diedit: 2MB.</span></div>
-            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Upload:</strong> Klik tombol Upload lalu pilih file dari komputer. Bisa upload multiple file sekaligus.</span></div>
-            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Download:</strong> Klik tombol ↓ pada file yang ingin diunduh.</span></div>
-            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>New Folder / New File:</strong> Tombol di bagian atas untuk membuat folder atau file baru di direktori saat ini.</span></div>
-            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Rename / Delete:</strong> Tombol aksi di setiap baris file/folder. Delete meminta konfirmasi untuk folder yang tidak kosong.</span></div>
-            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Chmod:</strong> Ubah permission file (contoh: <code>644</code>, <code>755</code>, <code>600</code>) langsung dari tombol aksi.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-fm-i1"><strong>Navigate:</strong> Click a folder to enter, click the breadcrumb to go back, or type the path manually in the path bar above.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-fm-i2"><strong>Edit file:</strong> Click the name of a text file (PHP, JS, HTML, .env, etc.) to open the inline editor. Maximum editable file size: 2MB.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-fm-i3"><strong>Upload:</strong> Click the Upload button then select files from your computer. Multiple files can be uploaded at once.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-fm-i4"><strong>Download:</strong> Click the ↓ button on the file you want to download.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-fm-i5"><strong>New Folder / New File:</strong> Buttons at the top to create a new folder or file in the current directory.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-fm-i6"><strong>Rename / Delete:</strong> Action buttons on each file/folder row. Delete prompts for confirmation for non-empty folders.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-fm-i7"><strong>Chmod:</strong> Change file permissions (e.g.: <code>644</code>, <code>755</code>, <code>600</code>) directly from the action button.</span></div>
           </div>
-          <div class="doc-tip"><strong>Shortcut paths:</strong> Gunakan tombol quick-jump (<code>/var/www</code>, <code>/etc/frankenphp</code>, <code>/opt/ps-panel</code>, <code>/root</code>) untuk berpindah cepat ke direktori penting.</div>
+          <div class="doc-tip" data-i18n-html="doc-fm-tip"><strong>Shortcut paths:</strong> Use the quick-jump buttons (<code>/var/www</code>, <code>/etc/frankenphp</code>, <code>/opt/ps-panel</code>, <code>/root</code>) to quickly navigate to important directories.</div>
         </div>
 
         <!-- MAIL / SMTP -->
@@ -948,28 +958,28 @@ footer {
           <div class="doc-sec-head">
             <div class="doc-icon-wrap">✉️</div>
             <div class="doc-title">Mail / SMTP</div>
-            <span class="doc-badge">Email Configuration</span>
+            <span class="doc-badge" data-i18n="doc-mail-badge">Email Configuration</span>
           </div>
-          <p class="doc-desc">Konfigurasi SMTP eksternal untuk aplikasi Laravel/PHP di vhost. Setting disimpan ke file <code style="color:var(--accent2)">.env</code> aplikasi sebagai variabel <code style="color:var(--accent2)">MAIL_*</code>.</p>
+          <p class="doc-desc" data-i18n-html="doc-mail-desc">Configure external SMTP for Laravel/PHP apps in your vhosts. Settings are saved to the app's <code style="color:var(--accent2)">.env</code> file as <code style="color:var(--accent2)">MAIL_*</code> variables.</p>
           <div class="doc-steps">
             <div class="doc-step">
               <div class="doc-step-n">1</div>
-              <div><div class="doc-step-title">Pilih Virtual Host</div><div class="doc-step-desc">Pilih domain aplikasi dari dropdown. Konfigurasi SMTP akan disimpan ke <code>.env</code> aplikasi tersebut.</div></div>
+              <div><div class="doc-step-title" data-i18n="doc-mail-s1-title">Select Virtual Host</div><div class="doc-step-desc" data-i18n-html="doc-mail-s1-desc">Choose the app domain from the dropdown. SMTP configuration will be saved to that app's <code>.env</code> file.</div></div>
             </div>
             <div class="doc-step">
               <div class="doc-step-n">2</div>
-              <div><div class="doc-step-title">Pilih Provider atau Isi Manual</div><div class="doc-step-desc">Tersedia 7 preset provider: <strong>Gmail, Outlook, Yahoo, SendGrid, Mailgun, Postmark</strong>, atau Custom. Klik preset untuk mengisi host & port otomatis.</div></div>
+              <div><div class="doc-step-title" data-i18n="doc-mail-s2-title">Choose Provider or Fill Manually</div><div class="doc-step-desc" data-i18n-html="doc-mail-s2-desc">7 provider presets available: <strong>Gmail, Outlook, Yahoo, SendGrid, Mailgun, Postmark</strong>, or Custom. Click a preset to auto-fill host & port.</div></div>
             </div>
             <div class="doc-step">
               <div class="doc-step-n">3</div>
-              <div><div class="doc-step-title">Isi Kredensial</div><div class="doc-step-desc">Masukkan username (email/API key) dan password/secret. Pilih enkripsi: TLS (port 587), SSL (port 465), atau None.</div></div>
+              <div><div class="doc-step-title" data-i18n="doc-mail-s3-title">Enter Credentials</div><div class="doc-step-desc" data-i18n="doc-mail-s3-desc">Enter the username (email/API key) and password/secret. Choose encryption: TLS (port 587), SSL (port 465), or None.</div></div>
             </div>
             <div class="doc-step">
               <div class="doc-step-n">4</div>
-              <div><div class="doc-step-title">Test & Simpan</div><div class="doc-step-desc">Klik <strong>Kirim Test Email</strong> untuk memverifikasi koneksi sebelum menyimpan. Jika berhasil, klik <strong>Simpan ke .env</strong>.</div></div>
+              <div><div class="doc-step-title" data-i18n="doc-mail-s4-title">Test & Save</div><div class="doc-step-desc" data-i18n-html="doc-mail-s4-desc">Click <strong>Send Test Email</strong> to verify the connection before saving. If successful, click <strong>Save to .env</strong>.</div></div>
             </div>
           </div>
-          <div class="doc-tip"><strong>Gmail:</strong> Gunakan App Password (bukan password utama). Aktifkan 2FA di akun Google, lalu buat App Password di <code>myaccount.google.com/apppasswords</code>.</div>
+          <div class="doc-tip" data-i18n-html="doc-mail-tip"><strong>Gmail:</strong> Use an App Password (not your main password). Enable 2FA on your Google account, then create an App Password at <code>myaccount.google.com/apppasswords</code>.</div>
         </div>
 
         <!-- DEPLOY -->
@@ -977,32 +987,32 @@ footer {
           <div class="doc-sec-head">
             <div class="doc-icon-wrap">▲</div>
             <div class="doc-title">Deploy</div>
-            <span class="doc-badge">Git Deployment</span>
+            <span class="doc-badge" data-i18n="doc-dep-badge">Git Deployment</span>
           </div>
-          <p class="doc-desc">Deploy aplikasi dari repository GitHub/GitLab ke server. Mendukung repo publik maupun privat, serta auto-deploy via webhook.</p>
+          <p class="doc-desc" data-i18n="doc-dep-desc">Deploy applications from a GitHub/GitLab repository to the server. Supports both public and private repos, plus auto-deploy via webhooks.</p>
           <div class="doc-2col" style="margin-bottom:20px">
             <div class="doc-card">
-              <div class="doc-card-label">Step 1</div>
-              <div class="doc-card-title">SSH Deploy Key</div>
-              <div class="doc-card-desc">Untuk repo <strong>privat</strong>, tampilkan SSH public key lalu tambahkan ke GitHub repo → Settings → Deploy Keys. Cukup dilakukan sekali.</div>
+              <div class="doc-card-label" data-i18n="doc-dep-c1-label">Step 1</div>
+              <div class="doc-card-title" data-i18n="doc-dep-c1-title">SSH Deploy Key</div>
+              <div class="doc-card-desc" data-i18n-html="doc-dep-c1-desc">For <strong>private</strong> repos, display the SSH public key then add it to GitHub repo → Settings → Deploy Keys. Only needs to be done once.</div>
             </div>
             <div class="doc-card">
-              <div class="doc-card-label">Step 2</div>
-              <div class="doc-card-title">Clone Repository</div>
-              <div class="doc-card-desc">Clone repo ke folder virtual host untuk pertama kali. Pilih vhost tujuan, masukkan URL repo, klik Clone.</div>
+              <div class="doc-card-label" data-i18n="doc-dep-c2-label">Step 2</div>
+              <div class="doc-card-title" data-i18n="doc-dep-c2-title">Clone Repository</div>
+              <div class="doc-card-desc" data-i18n="doc-dep-c2-desc">Clone the repo to the virtual host folder for the first time. Select the target vhost, enter the repo URL, click Clone.</div>
             </div>
             <div class="doc-card">
-              <div class="doc-card-label">Step 3</div>
-              <div class="doc-card-title">Manual Deploy</div>
-              <div class="doc-card-desc">Jalankan <code>git pull</code> dari browser. Mode Laravel otomatis menjalankan composer, migrate, dan artisan cache.</div>
+              <div class="doc-card-label" data-i18n="doc-dep-c3-label">Step 3</div>
+              <div class="doc-card-title" data-i18n="doc-dep-c3-title">Manual Deploy</div>
+              <div class="doc-card-desc" data-i18n-html="doc-dep-c3-desc">Run <code>git pull</code> from the browser. Laravel mode automatically runs composer, migrate, and artisan cache commands.</div>
             </div>
             <div class="doc-card">
-              <div class="doc-card-label">Step 4</div>
-              <div class="doc-card-title">Auto Deploy (Webhook)</div>
-              <div class="doc-card-desc">Setup webhook GitHub agar deploy berjalan otomatis setiap kali ada push ke branch tertentu.</div>
+              <div class="doc-card-label" data-i18n="doc-dep-c4-label">Step 4</div>
+              <div class="doc-card-title" data-i18n="doc-dep-c4-title">Auto Deploy (Webhook)</div>
+              <div class="doc-card-desc" data-i18n="doc-dep-c4-desc">Set up a GitHub webhook so deployment runs automatically on every push to a specific branch.</div>
             </div>
           </div>
-          <div class="doc-tip"><strong>Laravel Mode:</strong> Centang "Laravel App" saat deploy untuk menjalankan otomatis: <code>composer install</code> → <code>php artisan migrate --force</code> → <code>config:cache</code> → <code>route:cache</code> → <code>view:cache</code>.</div>
+          <div class="doc-tip" data-i18n-html="doc-dep-tip"><strong>Laravel Mode:</strong> Check "Laravel App" when deploying to automatically run: <code>composer install</code> → <code>php artisan migrate --force</code> → <code>config:cache</code> → <code>route:cache</code> → <code>view:cache</code>.</div>
         </div>
 
         <!-- POSTGRESQL -->
@@ -1010,17 +1020,17 @@ footer {
           <div class="doc-sec-head">
             <div class="doc-icon-wrap">🗄️</div>
             <div class="doc-title">PostgreSQL</div>
-            <span class="doc-badge">Database Management</span>
+            <span class="doc-badge" data-i18n="doc-pg-badge">Database Management</span>
           </div>
-          <p class="doc-desc">Monitor dan kelola database PostgreSQL 16. Terhubung langsung ke cluster lokal sebagai user <code style="color:var(--accent2)">postgres</code>.</p>
+          <p class="doc-desc" data-i18n-html="doc-pg-desc">Monitor and manage PostgreSQL 16 databases. Connects directly to the local cluster as the <code style="color:var(--accent2)">postgres</code> user.</p>
           <div class="doc-items">
-            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Statistik koneksi:</strong> Total koneksi aktif, idle, dan yang sedang menjalankan query. Berguna untuk mendeteksi connection leak.</span></div>
-            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Daftar database:</strong> Semua database beserta ukurannya. Klik nama database untuk melihat detail koneksi aktif.</span></div>
-            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Buat database baru:</strong> Isi nama database lalu klik Create. Database langsung tersedia tanpa perlu SSH.</span></div>
-            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Manajemen user:</strong> Buat user/role baru dengan password, lalu assign privilege ke database tertentu (SELECT, INSERT, UPDATE, DELETE, atau ALL).</span></div>
-            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Grant privilege:</strong> Pilih user, database, dan privilege yang diinginkan. Opsi "Make Owner" memberikan akses penuh — direkomendasikan untuk aplikasi Laravel.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-pg-i1"><strong>Connection stats:</strong> Total active, idle, and query-running connections. Useful for detecting connection leaks.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-pg-i2"><strong>Database list:</strong> All databases with their sizes. Click a database name to view active connections.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-pg-i3"><strong>Create new database:</strong> Enter a database name and click Create. The database is immediately available without SSH.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-pg-i4"><strong>User management:</strong> Create new users/roles with passwords, then assign privileges to specific databases (SELECT, INSERT, UPDATE, DELETE, or ALL).</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-pg-i5"><strong>Grant privileges:</strong> Select a user, database, and desired privilege. The "Make Owner" option grants full access — recommended for Laravel applications.</span></div>
           </div>
-          <div class="doc-tip"><strong>Untuk Laravel:</strong> Buat database → buat user → grant ALL PRIVILEGES atau centang "Make Owner". Kemudian update <code>DB_DATABASE</code>, <code>DB_USERNAME</code>, <code>DB_PASSWORD</code> di file <code>.env</code> aplikasi via menu Virtual Hosts → ENV.</div>
+          <div class="doc-tip" data-i18n-html="doc-pg-tip"><strong>For Laravel:</strong> Create database → create user → grant ALL PRIVILEGES or check "Make Owner". Then update <code>DB_DATABASE</code>, <code>DB_USERNAME</code>, <code>DB_PASSWORD</code> in the app's <code>.env</code> via Virtual Hosts → ENV.</div>
         </div>
 
         <!-- REDIS -->
@@ -1028,29 +1038,29 @@ footer {
           <div class="doc-sec-head">
             <div class="doc-icon-wrap">🔴</div>
             <div class="doc-title">Redis</div>
-            <span class="doc-badge">Cache Monitoring</span>
+            <span class="doc-badge" data-i18n="doc-redis-badge">Cache Monitoring</span>
           </div>
-          <p class="doc-desc">Monitor statistik Redis yang berjalan di <code style="color:var(--accent2)">127.0.0.1:6379</code>. Terhubung tanpa autentikasi (Redis terikat ke localhost untuk keamanan).</p>
+          <p class="doc-desc" data-i18n-html="doc-redis-desc">Monitor Redis statistics running at <code style="color:var(--accent2)">127.0.0.1:6379</code>. Connects without authentication (Redis is bound to localhost for security).</p>
           <div class="doc-2col">
             <div class="doc-card">
-              <div class="doc-card-label">Hit Rate</div>
-              <div class="doc-card-title">Efisiensi Cache</div>
-              <div class="doc-card-desc">Persentase cache hit vs miss. Idealnya &gt;90%. Jika rendah, pertimbangkan menaikkan <code>maxmemory</code> atau review strategi cache aplikasi.</div>
+              <div class="doc-card-label" data-i18n="doc-redis-c1-label">Hit Rate</div>
+              <div class="doc-card-title" data-i18n="doc-redis-c1-title">Cache Efficiency</div>
+              <div class="doc-card-desc" data-i18n-html="doc-redis-c1-desc">Percentage of cache hits vs misses. Ideally &gt;90%. If low, consider increasing <code>maxmemory</code> or reviewing the app's caching strategy.</div>
             </div>
             <div class="doc-card">
-              <div class="doc-card-label">Memory</div>
-              <div class="doc-card-title">Penggunaan Memori</div>
-              <div class="doc-card-desc">Memory terpakai vs peak. Jika mendekati <code>maxmemory</code>, Redis akan mulai mengeluarkan key (eviction) sesuai policy yang dikonfigurasi.</div>
+              <div class="doc-card-label" data-i18n="doc-redis-c2-label">Memory</div>
+              <div class="doc-card-title" data-i18n="doc-redis-c2-title">Memory Usage</div>
+              <div class="doc-card-desc" data-i18n-html="doc-redis-c2-desc">Used vs peak memory. When approaching <code>maxmemory</code>, Redis will start evicting keys according to the configured policy.</div>
             </div>
             <div class="doc-card">
-              <div class="doc-card-label">Ops/sec</div>
-              <div class="doc-card-title">Throughput</div>
-              <div class="doc-card-desc">Jumlah command per detik yang diproses Redis. Berguna untuk mendeteksi lonjakan beban dari aplikasi.</div>
+              <div class="doc-card-label" data-i18n="doc-redis-c3-label">Ops/sec</div>
+              <div class="doc-card-title" data-i18n="doc-redis-c3-title">Throughput</div>
+              <div class="doc-card-desc" data-i18n="doc-redis-c3-desc">Number of commands processed per second. Useful for detecting load spikes from applications.</div>
             </div>
             <div class="doc-card">
-              <div class="doc-card-label">Keyspace</div>
-              <div class="doc-card-title">Jumlah Key</div>
-              <div class="doc-card-desc">Total key per database (db0, db1, dll). Jika key terus bertambah tanpa turun, pastikan aplikasi menetapkan TTL pada setiap key.</div>
+              <div class="doc-card-label" data-i18n="doc-redis-c4-label">Keyspace</div>
+              <div class="doc-card-title" data-i18n="doc-redis-c4-title">Key Count</div>
+              <div class="doc-card-desc" data-i18n="doc-redis-c4-desc">Total keys per database (db0, db1, etc.). If keys keep growing without dropping, ensure the app sets TTL on each key.</div>
             </div>
           </div>
         </div>
@@ -1060,17 +1070,17 @@ footer {
           <div class="doc-sec-head">
             <div class="doc-icon-wrap">⚙️</div>
             <div class="doc-title">Services</div>
-            <span class="doc-badge">System Services</span>
+            <span class="doc-badge" data-i18n="doc-svc-badge">System Services</span>
           </div>
-          <p class="doc-desc">Kontrol layanan sistem via <code style="color:var(--accent2)">systemctl</code> langsung dari browser. Mendukung start, stop, dan restart untuk semua layanan panel.</p>
+          <p class="doc-desc" data-i18n-html="doc-svc-desc">Control system services via <code style="color:var(--accent2)">systemctl</code> directly from the browser. Supports start, stop, and restart for all panel services.</p>
           <div class="doc-items">
-            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>FrankenPHP</strong> — Web server utama. Restart diperlukan setelah mengubah Caddyfile atau konfigurasi PHP.</span></div>
-            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>PHP-FPM</strong> — Prosesor PHP. Restart jika ada perubahan pada <code>php.ini</code> atau ekstensi PHP.</span></div>
-            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>PostgreSQL</strong> — Database server. Restart dengan hati-hati — semua koneksi aktif akan terputus.</span></div>
-            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Redis</strong> — Cache server. Data in-memory akan hilang jika tidak dikonfigurasi persistensi (RDB/AOF).</span></div>
-            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Node.js (PS Panel)</strong> — Panel itu sendiri berjalan via PM2. Restart panel akan memuat ulang konfigurasi terbaru.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-svc-i1"><strong>FrankenPHP</strong> — Main web server. Restart required after modifying the Caddyfile or PHP configuration.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-svc-i2"><strong>PHP-FPM</strong> — PHP processor. Restart if there are changes to <code>php.ini</code> or PHP extensions.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-svc-i3"><strong>PostgreSQL</strong> — Database server. Restart carefully — all active connections will be dropped.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-svc-i4"><strong>Redis</strong> — Cache server. In-memory data will be lost if persistence (RDB/AOF) is not configured.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-svc-i5"><strong>Node.js (PS Panel)</strong> — The panel itself runs via PM2. Restarting the panel will reload the latest configuration.</span></div>
           </div>
-          <div class="doc-warn"><strong>Perhatian:</strong> Stop layanan di server produksi akan menyebabkan downtime. Gunakan Restart (bukan Stop) untuk menerapkan perubahan konfigurasi.</div>
+          <div class="doc-warn" data-i18n-html="doc-svc-warn"><strong>Warning:</strong> Stopping a service in production will cause downtime. Use Restart (not Stop) to apply configuration changes.</div>
         </div>
 
         <!-- SETTINGS -->
@@ -1078,17 +1088,17 @@ footer {
           <div class="doc-sec-head">
             <div class="doc-icon-wrap">🔧</div>
             <div class="doc-title">Settings</div>
-            <span class="doc-badge">PHP & FrankenPHP Config</span>
+            <span class="doc-badge" data-i18n="doc-set-badge">PHP & FrankenPHP Config</span>
           </div>
-          <p class="doc-desc">Edit konfigurasi PHP dan FrankenPHP (Caddyfile) langsung dari browser. Perubahan memerlukan konfirmasi password dan restart FrankenPHP otomatis.</p>
+          <p class="doc-desc" data-i18n="doc-set-desc">Edit PHP and FrankenPHP (Caddyfile) configuration directly from the browser. Changes require password confirmation and trigger automatic FrankenPHP restart.</p>
           <div class="doc-items">
-            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>memory_limit</strong> — Batas memori per proses PHP. Default: <code>256M</code>. Naikkan untuk aplikasi berat seperti Composer atau image processing.</span></div>
-            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>max_execution_time</strong> — Batas waktu eksekusi script PHP (detik). Default: <code>60</code>. Naikkan untuk proses panjang seperti import data.</span></div>
-            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>upload_max_filesize & post_max_size</strong> — Ukuran maksimum file upload. Keduanya harus dinaikkan bersamaan agar upload besar bisa berjalan.</span></div>
-            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Ekstensi PHP</strong> — Daftar ekstensi yang aktif. Ekstensi pre-installed: pgsql, redis, opcache, gd, mbstring, curl, zip, xml, dan lainnya.</span></div>
-            <div class="doc-item"><span class="doc-arrow">→</span><span><strong>Caddyfile</strong> — Konfigurasi utama FrankenPHP. Edit dengan hati-hati; syntax error dapat membuat web server tidak bisa start.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-set-i1"><strong>memory_limit</strong> — Per-process PHP memory limit. Default: <code>256M</code>. Increase for heavy apps like Composer or image processing.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-set-i2"><strong>max_execution_time</strong> — PHP script execution time limit (seconds). Default: <code>60</code>. Increase for long processes like data imports.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-set-i3"><strong>upload_max_filesize & post_max_size</strong> — Maximum file upload size. Both must be increased together for large file uploads to work.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-set-i4"><strong>PHP Extensions</strong> — List of active extensions. Pre-installed: pgsql, redis, opcache, gd, mbstring, curl, zip, xml, and more.</span></div>
+            <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-set-i5"><strong>Caddyfile</strong> — Main FrankenPHP configuration. Edit carefully; a syntax error can prevent the web server from starting.</span></div>
           </div>
-          <div class="doc-tip"><strong>Alur edit:</strong> Klik <strong>Unlock Edit</strong> → masukkan password panel → edit nilai → klik <strong>Save Changes</strong>. FrankenPHP akan restart otomatis dan konfigurasi lama dibackup.</div>
+          <div class="doc-tip" data-i18n-html="doc-set-tip"><strong>Edit flow:</strong> Click <strong>Unlock Edit</strong> → enter panel password → edit values → click <strong>Save Changes</strong>. FrankenPHP will restart automatically and the old configuration is backed up.</div>
         </div>
 
         <!-- UPDATE -->
@@ -1096,28 +1106,28 @@ footer {
           <div class="doc-sec-head">
             <div class="doc-icon-wrap">⬆️</div>
             <div class="doc-title">Update</div>
-            <span class="doc-badge">Self-Update</span>
+            <span class="doc-badge" data-i18n="doc-upd-badge">Self-Update</span>
           </div>
-          <p class="doc-desc">Perbarui PS Panel ke versi terbaru langsung dari browser tanpa perlu SSH. File lama otomatis di-backup sebelum diperbarui.</p>
+          <p class="doc-desc" data-i18n="doc-upd-desc">Update PS Panel to the latest version directly from the browser without needing SSH. Old files are automatically backed up before being replaced.</p>
           <div class="doc-steps">
             <div class="doc-step">
               <div class="doc-step-n">1</div>
-              <div><div class="doc-step-title">Cek Update</div><div class="doc-step-desc">Klik <strong>Cek Update</strong>. Panel akan membandingkan versi terpasang dengan versi terbaru di GitHub. Badge hijau "new" di sidebar muncul otomatis jika ada update baru saat panel dibuka.</div></div>
+              <div><div class="doc-step-title" data-i18n="doc-upd-s1-title">Check Update</div><div class="doc-step-desc" data-i18n-html="doc-upd-s1-desc">Click <strong>Check Update</strong>. The panel compares the installed version with the latest version on GitHub. A green "new" badge appears in the sidebar automatically when a new update is available on panel load.</div></div>
             </div>
             <div class="doc-step">
               <div class="doc-step-n">2</div>
-              <div><div class="doc-step-title">Lihat Changelog</div><div class="doc-step-desc">Daftar fitur baru dan perbaikan pada versi terbaru akan ditampilkan setelah cek update berhasil.</div></div>
+              <div><div class="doc-step-title" data-i18n="doc-upd-s2-title">View Changelog</div><div class="doc-step-desc" data-i18n="doc-upd-s2-desc">The list of new features and fixes in the latest version will be displayed after a successful update check.</div></div>
             </div>
             <div class="doc-step">
               <div class="doc-step-n">3</div>
-              <div><div class="doc-step-title">Update Sekarang</div><div class="doc-step-desc">Klik <strong>Update Sekarang</strong>. Panel akan mengunduh file terbaru, menjalankan <code>npm install</code>, lalu restart otomatis. Proses biasanya selesai dalam 30–60 detik.</div></div>
+              <div><div class="doc-step-title" data-i18n="doc-upd-s3-title">Update Now</div><div class="doc-step-desc" data-i18n-html="doc-upd-s3-desc">Click <strong>Update Now</strong>. The panel will download the latest files, run <code>npm install</code>, then restart automatically. The process usually completes in 30–60 seconds.</div></div>
             </div>
             <div class="doc-step">
               <div class="doc-step-n">4</div>
-              <div><div class="doc-step-title">Halaman Reload Otomatis</div><div class="doc-step-desc">Setelah panel selesai restart, browser akan otomatis reload. Konfigurasi, vhost, database, dan file aplikasi tidak terpengaruh oleh update.</div></div>
+              <div><div class="doc-step-title" data-i18n="doc-upd-s4-title">Page Auto-reloads</div><div class="doc-step-desc" data-i18n="doc-upd-s4-desc">After the panel finishes restarting, the browser will automatically reload. Config, vhosts, databases, and app files are unaffected by the update.</div></div>
             </div>
           </div>
-          <div class="doc-tip"><strong>Aman:</strong> Update hanya menyentuh file panel (<code>server.js</code>, <code>public/index.html</code>). Semua konfigurasi vhost di <code>/etc/frankenphp/sites/</code>, database PostgreSQL, dan file <code>.env</code> aplikasi tidak berubah.</div>
+          <div class="doc-tip" data-i18n-html="doc-upd-tip"><strong>Safe:</strong> The update only touches panel files (<code>server.js</code>, <code>public/index.html</code>). All vhost configs in <code>/etc/frankenphp/sites/</code>, PostgreSQL databases, and app <code>.env</code> files remain unchanged.</div>
         </div>
 
       </div><!-- end docs-body -->
@@ -1128,47 +1138,47 @@ footer {
 <!-- ── FAQ ── -->
 <section id="faq">
   <div class="container">
-    <div class="sec-label fade-up" style="text-align:center">// faq</div>
-    <h2 class="sec-title fade-up delay-1" style="text-align:center">Frequently asked questions</h2>
-    <p class="sec-sub fade-up delay-2" style="text-align:center;margin-left:auto;margin-right:auto;margin-bottom:44px">Everything you need to know before getting started.</p>
+    <div class="sec-label fade-up" style="text-align:center" data-i18n="faq-label">// faq</div>
+    <h2 class="sec-title fade-up delay-1" style="text-align:center" data-i18n="faq-title">Frequently asked questions</h2>
+    <p class="sec-sub fade-up delay-2" style="text-align:center;margin-left:auto;margin-right:auto;margin-bottom:44px" data-i18n="faq-sub">Everything you need to know before getting started.</p>
 
     <div class="faq-list fade-up delay-2">
       <div class="faq-item">
         <div class="faq-q" onclick="toggleFaq(this)">
-          What is PS Panel?
+          <span data-i18n="faq1-q">What is PS Panel?</span>
           <div class="faq-icon">+</div>
         </div>
-        <div class="faq-a"><div class="faq-a-inner">
+        <div class="faq-a"><div class="faq-a-inner" data-i18n="faq1-a">
           PS Panel is a lightweight, self-hosted server management panel for Ubuntu 24.04 LTS. It provides a browser-based interface to monitor system resources, manage services (FrankenPHP, PHP-FPM, PostgreSQL, Redis), configure virtual hosts with SSL, and deploy applications via git — without needing SSH for routine tasks.
         </div></div>
       </div>
 
       <div class="faq-item">
         <div class="faq-q" onclick="toggleFaq(this)">
-          Is PS Panel free?
+          <span data-i18n="faq2-q">Is PS Panel free?</span>
           <div class="faq-icon">+</div>
         </div>
-        <div class="faq-a"><div class="faq-a-inner">
+        <div class="faq-a"><div class="faq-a-inner" data-i18n="faq2-a">
           Yes, completely free and open-source. No subscriptions, no usage limits, no hidden costs. PS Panel is released for the open-source community. You can use it for personal projects or commercial deployments, and contribute to its development on GitHub.
         </div></div>
       </div>
 
       <div class="faq-item">
         <div class="faq-q" onclick="toggleFaq(this)">
-          Which operating systems are supported?
+          <span data-i18n="faq3-q">Which operating systems are supported?</span>
           <div class="faq-icon">+</div>
         </div>
-        <div class="faq-a"><div class="faq-a-inner">
+        <div class="faq-a"><div class="faq-a-inner" data-i18n-html="faq3-a">
           PS Panel is optimized and tested for <strong style="color:var(--text)">Ubuntu 24.04 LTS</strong>. The installer may work on other Debian-based systems, but Ubuntu 24.04 is the only officially supported target. Support for additional distributions may be added in future versions.
         </div></div>
       </div>
 
       <div class="faq-item">
         <div class="faq-q" onclick="toggleFaq(this)">
-          How do I change the panel password?
+          <span data-i18n="faq4-q">How do I change the panel password?</span>
           <div class="faq-icon">+</div>
         </div>
-        <div class="faq-a"><div class="faq-a-inner">
+        <div class="faq-a"><div class="faq-a-inner" data-i18n-html="faq4-a">
           Restart the panel with the <code>PANEL_PASS</code> environment variable:<br><br>
           <code>PANEL_PASS=yournewpassword pm2 restart ps-panel</code><br><br>
           The current credentials are always readable from <code>/root/.pspanel_credentials</code>.
@@ -1177,10 +1187,10 @@ footer {
 
       <div class="faq-item">
         <div class="faq-q" onclick="toggleFaq(this)">
-          Is the panel secure?
+          <span data-i18n="faq5-q">Is the panel secure?</span>
           <div class="faq-icon">+</div>
         </div>
-        <div class="faq-a"><div class="faq-a-inner">
+        <div class="faq-a"><div class="faq-a-inner" data-i18n="faq5-a">
           PS Panel includes: JWT authentication (8-hour expiry), bcrypt password hashing, login rate limiting (5 attempts / 15 min), WebSocket authentication, command injection prevention on deploy inputs, and domain validation on virtual host creation. For production use, we recommend restricting port 8765 to trusted IPs via your server's firewall.
         </div></div>
       </div>
@@ -1191,17 +1201,17 @@ footer {
 <!-- ── FOOTER ── -->
 <footer>
   <div class="footer-logo"><span>PS</span> Panel</div>
-  <div class="footer-tag">
+  <div class="footer-tag" data-i18n-html="footer-tag">
     Modern server management for Ubuntu 24.04<br>
     FrankenPHP · PHP 8.3 · PostgreSQL 16 · Redis · Node.js 20
   </div>
   <div class="footer-links">
     <a href="https://github.com/setiawansopan/PS-Panel" target="_blank" rel="noopener">GitHub</a>
-    <a href="#features">Features</a>
-    <a href="#stack">Stack</a>
-    <a href="#install">Install</a>
-    <a href="#docs">Docs</a>
-    <a href="#faq">FAQ</a>
+    <a href="#features" data-i18n="nav-features">Features</a>
+    <a href="#stack" data-i18n="nav-stack">Stack</a>
+    <a href="#install" data-i18n="nav-install">Install</a>
+    <a href="#docs" data-i18n="nav-docs">Docs</a>
+    <a href="#faq" data-i18n="nav-faq">FAQ</a>
   </div>
   <div class="footer-copy">
     Built with ❤️ for the open-source community &nbsp;·&nbsp; PS Panel v2.1<br>
@@ -1272,6 +1282,265 @@ const docsObserver = new IntersectionObserver((entries) => {
   });
 }, { threshold: 0.25, rootMargin: '-80px 0px -60% 0px' });
 docSections.forEach(s => docsObserver.observe(s));
+
+// ── BILINGUAL ──
+let _lang = localStorage.getItem('psp_lang') || 'en';
+
+const LANG = {
+  en: {
+    'nav-features':'Features','nav-stack':'Stack','nav-preview':'Preview',
+    'nav-install':'Install','nav-docs':'Docs','nav-faq':'FAQ',
+    'hero-sub':'Modern server management for Ubuntu 24.04.<br>One command. Fully operational in minutes.',
+    'hero-btn-start':'Get Started →','hero-btn-gh':'View on GitHub',
+    'feat-label':'// features',
+    'feat-title':'Everything you need,<br>nothing you don\'t.',
+    'feat-sub':'Minimal footprint, maximum control. Manage your entire stack from one clean interface.',
+    'feat1-title':'One-command Install','feat1-desc':'A single curl command installs and configures the entire stack. FrankenPHP, PHP 8.3, PostgreSQL 16, Redis, and Node.js — ready in under 10 minutes.',
+    'feat2-title':'Real-time Monitoring','feat2-desc':'Live CPU, RAM, disk, and network I/O metrics with 5-second auto-refresh. Top processes, load average, and 30-second bandwidth history.',
+    'feat3-title':'Redis Statistics','feat3-desc':'Cache hit rate, memory usage, ops/sec, connected clients, eviction counts, and keyspace stats — everything at a glance.',
+    'feat4-title':'PostgreSQL Management','feat4-desc':'Monitor active connections, database sizes, lock counts, and connection states. Create databases directly from the browser.',
+    'feat5-title':'PHP-FPM Stats','feat5-desc':'Worker pool utilization, idle/active process counts, listen queue depth, and slow request tracking via the FPM status socket.',
+    'feat6-title':'Smart Git Deploy','feat6-desc':'Trigger deploys from the browser — or automate with GitHub webhooks. Laravel mode runs composer, migrate, and artisan cache commands automatically.',
+    'stack-label':'// tech stack','stack-title':'Built on proven technology',
+    'stack-sub':'Production-grade components, carefully selected and pre-configured to work together perfectly.',
+    'stack1-desc':'Modern PHP server built on Caddy. Auto HTTPS via Let\'s Encrypt. No Nginx config files.',
+    'stack2-desc':'Latest stable PHP with pgsql, redis, opcache, gd, mbstring, and 10+ extensions pre-installed.',
+    'stack3-desc':'Enterprise-grade relational database. Auto-configured with a secure random password at install.',
+    'stack4-desc':'In-memory cache and session store. Bound to 127.0.0.1 for security out of the box.',
+    'stack5-desc':'JS runtime with PM2 process manager. Panel survives server reboots automatically.',
+    'prev-label':'// dashboard preview','prev-title':'See it in action',
+    'prev-sub':'Clean, minimal interface. Everything at a glance — no bloat, no noise.',
+    'inst-label':'// quick install','inst-title':'Get started in minutes',
+    'inst-sub':'Four steps from a fresh VPS to a fully running panel.',
+    'inst1-title':'Prepare a Ubuntu 24.04 VPS','inst1-desc':'SSH into your server as root. Minimum 1 GB RAM, 10 GB disk. Open ports 80, 443, and 8765 in your firewall.',
+    'inst2-title':'Run the one-line install command','inst2-desc':'Installs and configures the complete stack automatically. Takes 5–10 minutes depending on your server\'s connection speed.',
+    'inst3-title':'Open the panel in your browser','inst3-desc':'After install completes, navigate to your server\'s IP on port 8765. The install summary will show the exact URL.',
+    'inst4-title':'Login with the generated password','inst4-desc':'Your credentials are displayed at the end of the install. You can always retrieve them from the credentials file.',
+    'inst-note':'<strong>📁 Credentials file:</strong> All auto-generated passwords (panel + PostgreSQL) are saved to <strong>/root/.pspanel_credentials</strong>. Keep this file secure.<br><br><strong>🔑 Change panel password:</strong> <code>PANEL_PASS=newpassword pm2 restart ps-panel</code>',
+    'docs-label':'// documentation','docs-title':'User Guide',
+    'docs-sub':'Complete guide to using every PS Panel feature.',
+    'docs-sidebar-title':'Panel Pages',
+    'doc-dash-badge':'Real-time Monitoring',
+    'doc-dash-desc':'The main page displaying server status in real-time. Data is automatically refreshed every 5 seconds via WebSocket.',
+    'doc-dash-c1-label':'Metric Cards','doc-dash-c1-title':'CPU · RAM · Disk · Load','doc-dash-c1-desc':'Color progress bars show usage percentage. Load average is displayed for 1m / 5m / 15m intervals.',
+    'doc-dash-c2-label':'Network I/O','doc-dash-c2-title':'Download · Upload Speed','doc-dash-c2-desc':'Transfer speed per second on the active interface (non-lo). 30-second bandwidth history chart.',
+    'doc-dash-c3-label':'Services','doc-dash-c3-title':'Service Status','doc-dash-c3-desc':'Active/inactive status of all services (FrankenPHP, PostgreSQL, Redis, PHP-FPM, Node.js) at a glance.',
+    'doc-dash-c4-label':'Top Processes','doc-dash-c4-title':'Top 5 Processes','doc-dash-c4-desc':'Processes with the highest CPU usage. Useful for detecting suspicious or resource-hungry processes.',
+    'doc-dash-tip':'<strong>Tip:</strong> If CPU or RAM stays at 100%, check Top Processes to identify the cause, then use the Services page to restart the relevant service.',
+    'doc-vh-badge':'Domain & SSL',
+    'doc-vh-desc':'Manage domains served by FrankenPHP. Each virtual host generates a config file in <code style="color:var(--accent2)">/etc/frankenphp/sites/</code>.',
+    'doc-vh-s1-title':'Add Domain','doc-vh-s1-desc':'Click <strong>+ Add Domain</strong>. Fill in the domain name (e.g.: <code>myapp.com</code>), document root (default: <code>/var/www/myapp.com</code>), check PHP if it\'s a PHP app, and SSL for HTTPS.',
+    'doc-vh-s2-title':'Auto SSL','doc-vh-s2-desc':'When SSL is enabled, FrankenPHP (Caddy) automatically requests a certificate from Let\'s Encrypt. Ensure the domain points to the server IP and port 80 is open before enabling SSL.',
+    'doc-vh-s3-title':'Edit Environment (.env)','doc-vh-s3-desc':'Click the <strong>⚙ ENV</strong> button on a domain to edit the app\'s <code>.env</code> file directly from the browser. The previous file is automatically backed up as <code>.env.bak</code>.',
+    'doc-vh-s4-title':'Open Website','doc-vh-s4-desc':'Click the domain name (displayed as a link) to open the website in a new tab. The ↗ icon indicates the domain is clickable.',
+    'doc-vh-warn':'<strong>Warning:</strong> Removing a vhost (Remove button) only removes the FrankenPHP configuration — files in the document root are NOT deleted.',
+    'doc-fm-badge':'Filesystem Access',
+    'doc-fm-desc':'Access the entire server filesystem directly from the browser. Starts at <code style="color:var(--accent2)">/var/www</code> by default, can navigate anywhere.',
+    'doc-fm-i1':'<strong>Navigate:</strong> Click a folder to enter, click the breadcrumb to go back, or type the path manually in the path bar above.',
+    'doc-fm-i2':'<strong>Edit file:</strong> Click the name of a text file (PHP, JS, HTML, .env, etc.) to open the inline editor. Maximum editable file size: 2MB.',
+    'doc-fm-i3':'<strong>Upload:</strong> Click the Upload button then select files from your computer. Multiple files can be uploaded at once.',
+    'doc-fm-i4':'<strong>Download:</strong> Click the ↓ button on the file you want to download.',
+    'doc-fm-i5':'<strong>New Folder / New File:</strong> Buttons at the top to create a new folder or file in the current directory.',
+    'doc-fm-i6':'<strong>Rename / Delete:</strong> Action buttons on each file/folder row. Delete prompts for confirmation for non-empty folders.',
+    'doc-fm-i7':'<strong>Chmod:</strong> Change file permissions (e.g.: <code>644</code>, <code>755</code>, <code>600</code>) directly from the action button.',
+    'doc-fm-tip':'<strong>Shortcut paths:</strong> Use the quick-jump buttons (<code>/var/www</code>, <code>/etc/frankenphp</code>, <code>/opt/ps-panel</code>, <code>/root</code>) to quickly navigate to important directories.',
+    'doc-mail-badge':'Email Configuration',
+    'doc-mail-desc':'Configure external SMTP for Laravel/PHP apps in your vhosts. Settings are saved to the app\'s <code style="color:var(--accent2)">.env</code> file as <code style="color:var(--accent2)">MAIL_*</code> variables.',
+    'doc-mail-s1-title':'Select Virtual Host','doc-mail-s1-desc':'Choose the app domain from the dropdown. SMTP configuration will be saved to that app\'s <code>.env</code> file.',
+    'doc-mail-s2-title':'Choose Provider or Fill Manually','doc-mail-s2-desc':'7 provider presets available: <strong>Gmail, Outlook, Yahoo, SendGrid, Mailgun, Postmark</strong>, or Custom. Click a preset to auto-fill host & port.',
+    'doc-mail-s3-title':'Enter Credentials','doc-mail-s3-desc':'Enter the username (email/API key) and password/secret. Choose encryption: TLS (port 587), SSL (port 465), or None.',
+    'doc-mail-s4-title':'Test & Save','doc-mail-s4-desc':'Click <strong>Send Test Email</strong> to verify the connection before saving. If successful, click <strong>Save to .env</strong>.',
+    'doc-mail-tip':'<strong>Gmail:</strong> Use an App Password (not your main password). Enable 2FA on your Google account, then create an App Password at <code>myaccount.google.com/apppasswords</code>.',
+    'doc-dep-badge':'Git Deployment',
+    'doc-dep-desc':'Deploy applications from a GitHub/GitLab repository to the server. Supports both public and private repos, plus auto-deploy via webhooks.',
+    'doc-dep-c1-label':'Step 1','doc-dep-c1-title':'SSH Deploy Key','doc-dep-c1-desc':'For <strong>private</strong> repos, display the SSH public key then add it to GitHub repo → Settings → Deploy Keys. Only needs to be done once.',
+    'doc-dep-c2-label':'Step 2','doc-dep-c2-title':'Clone Repository','doc-dep-c2-desc':'Clone the repo to the virtual host folder for the first time. Select the target vhost, enter the repo URL, click Clone.',
+    'doc-dep-c3-label':'Step 3','doc-dep-c3-title':'Manual Deploy','doc-dep-c3-desc':'Run <code>git pull</code> from the browser. Laravel mode automatically runs composer, migrate, and artisan cache commands.',
+    'doc-dep-c4-label':'Step 4','doc-dep-c4-title':'Auto Deploy (Webhook)','doc-dep-c4-desc':'Set up a GitHub webhook so deployment runs automatically on every push to a specific branch.',
+    'doc-dep-tip':'<strong>Laravel Mode:</strong> Check "Laravel App" when deploying to automatically run: <code>composer install</code> → <code>php artisan migrate --force</code> → <code>config:cache</code> → <code>route:cache</code> → <code>view:cache</code>.',
+    'doc-pg-badge':'Database Management',
+    'doc-pg-desc':'Monitor and manage PostgreSQL 16 databases. Connects directly to the local cluster as the <code style="color:var(--accent2)">postgres</code> user.',
+    'doc-pg-i1':'<strong>Connection stats:</strong> Total active, idle, and query-running connections. Useful for detecting connection leaks.',
+    'doc-pg-i2':'<strong>Database list:</strong> All databases with their sizes. Click a database name to view active connections.',
+    'doc-pg-i3':'<strong>Create new database:</strong> Enter a database name and click Create. The database is immediately available without SSH.',
+    'doc-pg-i4':'<strong>User management:</strong> Create new users/roles with passwords, then assign privileges to specific databases (SELECT, INSERT, UPDATE, DELETE, or ALL).',
+    'doc-pg-i5':'<strong>Grant privileges:</strong> Select a user, database, and desired privilege. The "Make Owner" option grants full access — recommended for Laravel applications.',
+    'doc-pg-tip':'<strong>For Laravel:</strong> Create database → create user → grant ALL PRIVILEGES or check "Make Owner". Then update <code>DB_DATABASE</code>, <code>DB_USERNAME</code>, <code>DB_PASSWORD</code> in the app\'s <code>.env</code> via Virtual Hosts → ENV.',
+    'doc-redis-badge':'Cache Monitoring',
+    'doc-redis-desc':'Monitor Redis statistics running at <code style="color:var(--accent2)">127.0.0.1:6379</code>. Connects without authentication (Redis is bound to localhost for security).',
+    'doc-redis-c1-label':'Hit Rate','doc-redis-c1-title':'Cache Efficiency','doc-redis-c1-desc':'Percentage of cache hits vs misses. Ideally &gt;90%. If low, consider increasing <code>maxmemory</code> or reviewing the app\'s caching strategy.',
+    'doc-redis-c2-label':'Memory','doc-redis-c2-title':'Memory Usage','doc-redis-c2-desc':'Used vs peak memory. When approaching <code>maxmemory</code>, Redis will start evicting keys according to the configured policy.',
+    'doc-redis-c3-label':'Ops/sec','doc-redis-c3-title':'Throughput','doc-redis-c3-desc':'Number of commands processed per second. Useful for detecting load spikes from applications.',
+    'doc-redis-c4-label':'Keyspace','doc-redis-c4-title':'Key Count','doc-redis-c4-desc':'Total keys per database (db0, db1, etc.). If keys keep growing without dropping, ensure the app sets TTL on each key.',
+    'doc-svc-badge':'System Services',
+    'doc-svc-desc':'Control system services via <code style="color:var(--accent2)">systemctl</code> directly from the browser. Supports start, stop, and restart for all panel services.',
+    'doc-svc-i1':'<strong>FrankenPHP</strong> — Main web server. Restart required after modifying the Caddyfile or PHP configuration.',
+    'doc-svc-i2':'<strong>PHP-FPM</strong> — PHP processor. Restart if there are changes to <code>php.ini</code> or PHP extensions.',
+    'doc-svc-i3':'<strong>PostgreSQL</strong> — Database server. Restart carefully — all active connections will be dropped.',
+    'doc-svc-i4':'<strong>Redis</strong> — Cache server. In-memory data will be lost if persistence (RDB/AOF) is not configured.',
+    'doc-svc-i5':'<strong>Node.js (PS Panel)</strong> — The panel itself runs via PM2. Restarting the panel will reload the latest configuration.',
+    'doc-svc-warn':'<strong>Warning:</strong> Stopping a service in production will cause downtime. Use Restart (not Stop) to apply configuration changes.',
+    'doc-set-badge':'PHP & FrankenPHP Config',
+    'doc-set-desc':'Edit PHP and FrankenPHP (Caddyfile) configuration directly from the browser. Changes require password confirmation and trigger automatic FrankenPHP restart.',
+    'doc-set-i1':'<strong>memory_limit</strong> — Per-process PHP memory limit. Default: <code>256M</code>. Increase for heavy apps like Composer or image processing.',
+    'doc-set-i2':'<strong>max_execution_time</strong> — PHP script execution time limit (seconds). Default: <code>60</code>. Increase for long processes like data imports.',
+    'doc-set-i3':'<strong>upload_max_filesize & post_max_size</strong> — Maximum file upload size. Both must be increased together for large file uploads to work.',
+    'doc-set-i4':'<strong>PHP Extensions</strong> — List of active extensions. Pre-installed: pgsql, redis, opcache, gd, mbstring, curl, zip, xml, and more.',
+    'doc-set-i5':'<strong>Caddyfile</strong> — Main FrankenPHP configuration. Edit carefully; a syntax error can prevent the web server from starting.',
+    'doc-set-tip':'<strong>Edit flow:</strong> Click <strong>Unlock Edit</strong> → enter panel password → edit values → click <strong>Save Changes</strong>. FrankenPHP will restart automatically and the old configuration is backed up.',
+    'doc-upd-badge':'Self-Update',
+    'doc-upd-desc':'Update PS Panel to the latest version directly from the browser without needing SSH. Old files are automatically backed up before being replaced.',
+    'doc-upd-s1-title':'Check Update','doc-upd-s1-desc':'Click <strong>Check Update</strong>. The panel compares the installed version with the latest version on GitHub. A green "new" badge appears in the sidebar automatically when a new update is available on panel load.',
+    'doc-upd-s2-title':'View Changelog','doc-upd-s2-desc':'The list of new features and fixes in the latest version will be displayed after a successful update check.',
+    'doc-upd-s3-title':'Update Now','doc-upd-s3-desc':'Click <strong>Update Now</strong>. The panel will download the latest files, run <code>npm install</code>, then restart automatically. The process usually completes in 30–60 seconds.',
+    'doc-upd-s4-title':'Page Auto-reloads','doc-upd-s4-desc':'After the panel finishes restarting, the browser will automatically reload. Config, vhosts, databases, and app files are unaffected by the update.',
+    'doc-upd-tip':'<strong>Safe:</strong> The update only touches panel files (<code>server.js</code>, <code>public/index.html</code>). All vhost configs in <code>/etc/frankenphp/sites/</code>, PostgreSQL databases, and app <code>.env</code> files remain unchanged.',
+    'faq-label':'// faq','faq-title':'Frequently asked questions','faq-sub':'Everything you need to know before getting started.',
+    'faq1-q':'What is PS Panel?','faq1-a':'PS Panel is a lightweight, self-hosted server management panel for Ubuntu 24.04 LTS. It provides a browser-based interface to monitor system resources, manage services (FrankenPHP, PHP-FPM, PostgreSQL, Redis), configure virtual hosts with SSL, and deploy applications via git — without needing SSH for routine tasks.',
+    'faq2-q':'Is PS Panel free?','faq2-a':'Yes, completely free and open-source. No subscriptions, no usage limits, no hidden costs. PS Panel is released for the open-source community. You can use it for personal projects or commercial deployments, and contribute to its development on GitHub.',
+    'faq3-q':'Which operating systems are supported?','faq3-a':'PS Panel is optimized and tested for <strong style="color:var(--text)">Ubuntu 24.04 LTS</strong>. The installer may work on other Debian-based systems, but Ubuntu 24.04 is the only officially supported target. Support for additional distributions may be added in future versions.',
+    'faq4-q':'How do I change the panel password?','faq4-a':'Restart the panel with the <code>PANEL_PASS</code> environment variable:<br><br><code>PANEL_PASS=yournewpassword pm2 restart ps-panel</code><br><br>The current credentials are always readable from <code>/root/.pspanel_credentials</code>.',
+    'faq5-q':'Is the panel secure?','faq5-a':'PS Panel includes: JWT authentication (8-hour expiry), bcrypt password hashing, login rate limiting (5 attempts / 15 min), WebSocket authentication, command injection prevention on deploy inputs, and domain validation on virtual host creation. For production use, we recommend restricting port 8765 to trusted IPs via your server\'s firewall.',
+    'footer-tag':'Modern server management for Ubuntu 24.04<br>FrankenPHP · PHP 8.3 · PostgreSQL 16 · Redis · Node.js 20',
+  },
+  id: {
+    'nav-features':'Fitur','nav-stack':'Stack','nav-preview':'Preview',
+    'nav-install':'Instalasi','nav-docs':'Dokumentasi','nav-faq':'FAQ',
+    'hero-sub':'Manajemen server modern untuk Ubuntu 24.04.<br>Satu perintah. Siap dalam hitungan menit.',
+    'hero-btn-start':'Mulai Sekarang →','hero-btn-gh':'Lihat di GitHub',
+    'feat-label':'// fitur',
+    'feat-title':'Semua yang Anda butuhkan,<br>tanpa yang tidak perlu.',
+    'feat-sub':'Footprint minimal, kontrol maksimal. Kelola seluruh stack dari satu antarmuka yang bersih.',
+    'feat1-title':'Instalasi Satu Perintah','feat1-desc':'Satu perintah curl menginstall dan mengkonfigurasi seluruh stack. FrankenPHP, PHP 8.3, PostgreSQL 16, Redis, dan Node.js — siap dalam 10 menit.',
+    'feat2-title':'Monitoring Real-time','feat2-desc':'Metrik CPU, RAM, disk, dan network I/O secara langsung dengan refresh otomatis 5 detik. Top process, load average, dan riwayat bandwidth 30 detik.',
+    'feat3-title':'Statistik Redis','feat3-desc':'Cache hit rate, penggunaan memori, ops/detik, klien terhubung, jumlah eviction, dan statistik keyspace — semua dalam satu tampilan.',
+    'feat4-title':'Manajemen PostgreSQL','feat4-desc':'Monitor koneksi aktif, ukuran database, jumlah lock, dan status koneksi. Buat database langsung dari browser.',
+    'feat5-title':'Statistik PHP-FPM','feat5-desc':'Utilisasi worker pool, jumlah proses idle/aktif, kedalaman listen queue, dan pelacakan request lambat via socket status FPM.',
+    'feat6-title':'Deploy Git Cerdas','feat6-desc':'Trigger deploy dari browser — atau otomatis via GitHub webhooks. Mode Laravel menjalankan composer, migrate, dan perintah artisan cache secara otomatis.',
+    'stack-label':'// tech stack','stack-title':'Dibangun di atas teknologi teruji',
+    'stack-sub':'Komponen berkelas produksi, dipilih dengan cermat dan dikonfigurasi agar bekerja sempurna bersama.',
+    'stack1-desc':'Server PHP modern berbasis Caddy. Auto HTTPS via Let\'s Encrypt. Tanpa file konfigurasi Nginx.',
+    'stack2-desc':'PHP stable terbaru dengan pgsql, redis, opcache, gd, mbstring, dan 10+ ekstensi sudah terinstall.',
+    'stack3-desc':'Database relasional enterprise-grade. Dikonfigurasi otomatis dengan password acak yang aman saat instalasi.',
+    'stack4-desc':'Cache in-memory dan session store. Terikat ke 127.0.0.1 untuk keamanan langsung dari kotak.',
+    'stack5-desc':'JS runtime dengan process manager PM2. Panel tetap berjalan otomatis setelah server reboot.',
+    'prev-label':'// preview dashboard','prev-title':'Lihat tampilannya',
+    'prev-sub':'Antarmuka bersih dan minimal. Semua informasi sekilas — tanpa bloat, tanpa noise.',
+    'inst-label':'// instalasi cepat','inst-title':'Mulai dalam hitungan menit',
+    'inst-sub':'Empat langkah dari VPS baru hingga panel berjalan penuh.',
+    'inst1-title':'Siapkan VPS Ubuntu 24.04','inst1-desc':'SSH ke server sebagai root. Minimal 1 GB RAM, 10 GB disk. Buka port 80, 443, dan 8765 di firewall.',
+    'inst2-title':'Jalankan perintah instalasi satu baris','inst2-desc':'Menginstall dan mengkonfigurasi seluruh stack secara otomatis. Membutuhkan 5–10 menit tergantung kecepatan koneksi server.',
+    'inst3-title':'Buka panel di browser','inst3-desc':'Setelah instalasi selesai, akses IP server di port 8765. Ringkasan instalasi akan menampilkan URL lengkap.',
+    'inst4-title':'Login dengan password yang dibuat','inst4-desc':'Kredensial ditampilkan di akhir instalasi. Anda bisa mengambilnya kapan saja dari file kredensial.',
+    'inst-note':'<strong>📁 File kredensial:</strong> Semua password yang dibuat otomatis (panel + PostgreSQL) disimpan di <strong>/root/.pspanel_credentials</strong>. Jaga kerahasiaan file ini.<br><br><strong>🔑 Ganti password panel:</strong> <code>PANEL_PASS=passwordbaru pm2 restart ps-panel</code>',
+    'docs-label':'// dokumentasi','docs-title':'Panduan Pengguna',
+    'docs-sub':'Panduan lengkap penggunaan setiap fitur PS Panel.',
+    'docs-sidebar-title':'Halaman Panel',
+    'doc-dash-badge':'Monitoring Real-time',
+    'doc-dash-desc':'Halaman utama yang menampilkan kondisi server secara real-time. Data diperbarui otomatis setiap 5 detik via WebSocket.',
+    'doc-dash-c1-label':'Metric Cards','doc-dash-c1-title':'CPU · RAM · Disk · Load','doc-dash-c1-desc':'Bar progress warna menunjukkan persentase penggunaan. Load average ditampilkan untuk 1m / 5m / 15m.',
+    'doc-dash-c2-label':'Network I/O','doc-dash-c2-title':'Kecepatan Download · Upload','doc-dash-c2-desc':'Kecepatan transfer per detik pada interface aktif (bukan lo). Grafik riwayat bandwidth 30 detik.',
+    'doc-dash-c3-label':'Services','doc-dash-c3-title':'Status Layanan','doc-dash-c3-desc':'Status aktif/tidak aktif semua layanan (FrankenPHP, PostgreSQL, Redis, PHP-FPM, Node.js) dalam satu pandangan.',
+    'doc-dash-c4-label':'Top Processes','doc-dash-c4-title':'5 Proses Teratas','doc-dash-c4-desc':'Proses dengan penggunaan CPU tertinggi. Berguna untuk mendeteksi proses yang mencurigakan atau boros resource.',
+    'doc-dash-tip':'<strong>Tip:</strong> Jika CPU atau RAM terus 100%, cek bagian Top Processes untuk mencari proses penyebabnya, lalu gunakan halaman Services untuk restart layanan terkait.',
+    'doc-vh-badge':'Domain & SSL',
+    'doc-vh-desc':'Kelola domain yang di-serve oleh FrankenPHP. Setiap virtual host menghasilkan file konfigurasi di <code style="color:var(--accent2)">/etc/frankenphp/sites/</code>.',
+    'doc-vh-s1-title':'Tambah Domain','doc-vh-s1-desc':'Klik <strong>+ Add Domain</strong>. Isi nama domain (contoh: <code>myapp.com</code>), document root (default: <code>/var/www/myapp.com</code>), centang PHP jika aplikasi PHP, dan SSL jika ingin HTTPS.',
+    'doc-vh-s2-title':'SSL Otomatis','doc-vh-s2-desc':'Jika SSL diaktifkan, FrankenPHP (Caddy) akan otomatis request sertifikat dari Let\'s Encrypt. Pastikan domain sudah diarahkan ke IP server dan port 80 terbuka sebelum mengaktifkan SSL.',
+    'doc-vh-s3-title':'Edit Environment (.env)','doc-vh-s3-desc':'Klik tombol <strong>⚙ ENV</strong> pada domain untuk edit file <code>.env</code> aplikasi langsung dari browser. File lama otomatis di-backup sebagai <code>.env.bak</code>.',
+    'doc-vh-s4-title':'Buka Website','doc-vh-s4-desc':'Klik nama domain (akan muncul sebagai link) untuk membuka website di tab baru. Ikon ↗ menandakan domain bisa diklik.',
+    'doc-vh-warn':'<strong>Perhatian:</strong> Hapus vhost (tombol Remove) hanya menghapus konfigurasi FrankenPHP — file di document root tidak ikut terhapus.',
+    'doc-fm-badge':'Akses Filesystem',
+    'doc-fm-desc':'Akses seluruh filesystem server langsung dari browser. Mulai dari <code style="color:var(--accent2)">/var/www</code> secara default, bisa navigasi ke mana saja.',
+    'doc-fm-i1':'<strong>Navigasi:</strong> Klik folder untuk masuk, klik breadcrumb untuk kembali, atau ketik path manual di input bar atas.',
+    'doc-fm-i2':'<strong>Edit file:</strong> Klik nama file teks (PHP, JS, HTML, .env, dll) untuk membuka editor inline. Maksimum ukuran file yang bisa diedit: 2MB.',
+    'doc-fm-i3':'<strong>Upload:</strong> Klik tombol Upload lalu pilih file dari komputer. Bisa upload multiple file sekaligus.',
+    'doc-fm-i4':'<strong>Download:</strong> Klik tombol ↓ pada file yang ingin diunduh.',
+    'doc-fm-i5':'<strong>New Folder / New File:</strong> Tombol di bagian atas untuk membuat folder atau file baru di direktori saat ini.',
+    'doc-fm-i6':'<strong>Rename / Delete:</strong> Tombol aksi di setiap baris file/folder. Delete meminta konfirmasi untuk folder yang tidak kosong.',
+    'doc-fm-i7':'<strong>Chmod:</strong> Ubah permission file (contoh: <code>644</code>, <code>755</code>, <code>600</code>) langsung dari tombol aksi.',
+    'doc-fm-tip':'<strong>Shortcut paths:</strong> Gunakan tombol quick-jump (<code>/var/www</code>, <code>/etc/frankenphp</code>, <code>/opt/ps-panel</code>, <code>/root</code>) untuk berpindah cepat ke direktori penting.',
+    'doc-mail-badge':'Konfigurasi Email',
+    'doc-mail-desc':'Konfigurasi SMTP eksternal untuk aplikasi Laravel/PHP di vhost. Setting disimpan ke file <code style="color:var(--accent2)">.env</code> aplikasi sebagai variabel <code style="color:var(--accent2)">MAIL_*</code>.',
+    'doc-mail-s1-title':'Pilih Virtual Host','doc-mail-s1-desc':'Pilih domain aplikasi dari dropdown. Konfigurasi SMTP akan disimpan ke <code>.env</code> aplikasi tersebut.',
+    'doc-mail-s2-title':'Pilih Provider atau Isi Manual','doc-mail-s2-desc':'Tersedia 7 preset provider: <strong>Gmail, Outlook, Yahoo, SendGrid, Mailgun, Postmark</strong>, atau Custom. Klik preset untuk mengisi host & port otomatis.',
+    'doc-mail-s3-title':'Isi Kredensial','doc-mail-s3-desc':'Masukkan username (email/API key) dan password/secret. Pilih enkripsi: TLS (port 587), SSL (port 465), atau None.',
+    'doc-mail-s4-title':'Test & Simpan','doc-mail-s4-desc':'Klik <strong>Kirim Test Email</strong> untuk memverifikasi koneksi sebelum menyimpan. Jika berhasil, klik <strong>Simpan ke .env</strong>.',
+    'doc-mail-tip':'<strong>Gmail:</strong> Gunakan App Password (bukan password utama). Aktifkan 2FA di akun Google, lalu buat App Password di <code>myaccount.google.com/apppasswords</code>.',
+    'doc-dep-badge':'Git Deployment',
+    'doc-dep-desc':'Deploy aplikasi dari repository GitHub/GitLab ke server. Mendukung repo publik maupun privat, serta auto-deploy via webhook.',
+    'doc-dep-c1-label':'Step 1','doc-dep-c1-title':'SSH Deploy Key','doc-dep-c1-desc':'Untuk repo <strong>privat</strong>, tampilkan SSH public key lalu tambahkan ke GitHub repo → Settings → Deploy Keys. Cukup dilakukan sekali.',
+    'doc-dep-c2-label':'Step 2','doc-dep-c2-title':'Clone Repository','doc-dep-c2-desc':'Clone repo ke folder virtual host untuk pertama kali. Pilih vhost tujuan, masukkan URL repo, klik Clone.',
+    'doc-dep-c3-label':'Step 3','doc-dep-c3-title':'Manual Deploy','doc-dep-c3-desc':'Jalankan <code>git pull</code> dari browser. Mode Laravel otomatis menjalankan composer, migrate, dan artisan cache.',
+    'doc-dep-c4-label':'Step 4','doc-dep-c4-title':'Auto Deploy (Webhook)','doc-dep-c4-desc':'Setup webhook GitHub agar deploy berjalan otomatis setiap kali ada push ke branch tertentu.',
+    'doc-dep-tip':'<strong>Laravel Mode:</strong> Centang "Laravel App" saat deploy untuk menjalankan otomatis: <code>composer install</code> → <code>php artisan migrate --force</code> → <code>config:cache</code> → <code>route:cache</code> → <code>view:cache</code>.',
+    'doc-pg-badge':'Manajemen Database',
+    'doc-pg-desc':'Monitor dan kelola database PostgreSQL 16. Terhubung langsung ke cluster lokal sebagai user <code style="color:var(--accent2)">postgres</code>.',
+    'doc-pg-i1':'<strong>Statistik koneksi:</strong> Total koneksi aktif, idle, dan yang sedang menjalankan query. Berguna untuk mendeteksi connection leak.',
+    'doc-pg-i2':'<strong>Daftar database:</strong> Semua database beserta ukurannya. Klik nama database untuk melihat detail koneksi aktif.',
+    'doc-pg-i3':'<strong>Buat database baru:</strong> Isi nama database lalu klik Create. Database langsung tersedia tanpa perlu SSH.',
+    'doc-pg-i4':'<strong>Manajemen user:</strong> Buat user/role baru dengan password, lalu assign privilege ke database tertentu (SELECT, INSERT, UPDATE, DELETE, atau ALL).',
+    'doc-pg-i5':'<strong>Grant privilege:</strong> Pilih user, database, dan privilege yang diinginkan. Opsi "Make Owner" memberikan akses penuh — direkomendasikan untuk aplikasi Laravel.',
+    'doc-pg-tip':'<strong>Untuk Laravel:</strong> Buat database → buat user → grant ALL PRIVILEGES atau centang "Make Owner". Kemudian update <code>DB_DATABASE</code>, <code>DB_USERNAME</code>, <code>DB_PASSWORD</code> di file <code>.env</code> aplikasi via Virtual Hosts → ENV.',
+    'doc-redis-badge':'Monitoring Cache',
+    'doc-redis-desc':'Monitor statistik Redis yang berjalan di <code style="color:var(--accent2)">127.0.0.1:6379</code>. Terhubung tanpa autentikasi (Redis terikat ke localhost untuk keamanan).',
+    'doc-redis-c1-label':'Hit Rate','doc-redis-c1-title':'Efisiensi Cache','doc-redis-c1-desc':'Persentase cache hit vs miss. Idealnya &gt;90%. Jika rendah, pertimbangkan menaikkan <code>maxmemory</code> atau review strategi cache aplikasi.',
+    'doc-redis-c2-label':'Memory','doc-redis-c2-title':'Penggunaan Memori','doc-redis-c2-desc':'Memory terpakai vs peak. Jika mendekati <code>maxmemory</code>, Redis akan mulai mengeluarkan key (eviction) sesuai policy yang dikonfigurasi.',
+    'doc-redis-c3-label':'Ops/sec','doc-redis-c3-title':'Throughput','doc-redis-c3-desc':'Jumlah command per detik yang diproses Redis. Berguna untuk mendeteksi lonjakan beban dari aplikasi.',
+    'doc-redis-c4-label':'Keyspace','doc-redis-c4-title':'Jumlah Key','doc-redis-c4-desc':'Total key per database (db0, db1, dll). Jika key terus bertambah tanpa turun, pastikan aplikasi menetapkan TTL pada setiap key.',
+    'doc-svc-badge':'Layanan Sistem',
+    'doc-svc-desc':'Kontrol layanan sistem via <code style="color:var(--accent2)">systemctl</code> langsung dari browser. Mendukung start, stop, dan restart untuk semua layanan panel.',
+    'doc-svc-i1':'<strong>FrankenPHP</strong> — Web server utama. Restart diperlukan setelah mengubah Caddyfile atau konfigurasi PHP.',
+    'doc-svc-i2':'<strong>PHP-FPM</strong> — Prosesor PHP. Restart jika ada perubahan pada <code>php.ini</code> atau ekstensi PHP.',
+    'doc-svc-i3':'<strong>PostgreSQL</strong> — Database server. Restart dengan hati-hati — semua koneksi aktif akan terputus.',
+    'doc-svc-i4':'<strong>Redis</strong> — Cache server. Data in-memory akan hilang jika tidak dikonfigurasi persistensi (RDB/AOF).',
+    'doc-svc-i5':'<strong>Node.js (PS Panel)</strong> — Panel itu sendiri berjalan via PM2. Restart panel akan memuat ulang konfigurasi terbaru.',
+    'doc-svc-warn':'<strong>Perhatian:</strong> Stop layanan di server produksi akan menyebabkan downtime. Gunakan Restart (bukan Stop) untuk menerapkan perubahan konfigurasi.',
+    'doc-set-badge':'Konfigurasi PHP & FrankenPHP',
+    'doc-set-desc':'Edit konfigurasi PHP dan FrankenPHP (Caddyfile) langsung dari browser. Perubahan memerlukan konfirmasi password dan restart FrankenPHP otomatis.',
+    'doc-set-i1':'<strong>memory_limit</strong> — Batas memori per proses PHP. Default: <code>256M</code>. Naikkan untuk aplikasi berat seperti Composer atau image processing.',
+    'doc-set-i2':'<strong>max_execution_time</strong> — Batas waktu eksekusi script PHP (detik). Default: <code>60</code>. Naikkan untuk proses panjang seperti import data.',
+    'doc-set-i3':'<strong>upload_max_filesize & post_max_size</strong> — Ukuran maksimum file upload. Keduanya harus dinaikkan bersamaan agar upload besar bisa berjalan.',
+    'doc-set-i4':'<strong>Ekstensi PHP</strong> — Daftar ekstensi yang aktif. Ekstensi pre-installed: pgsql, redis, opcache, gd, mbstring, curl, zip, xml, dan lainnya.',
+    'doc-set-i5':'<strong>Caddyfile</strong> — Konfigurasi utama FrankenPHP. Edit dengan hati-hati; syntax error dapat membuat web server tidak bisa start.',
+    'doc-set-tip':'<strong>Alur edit:</strong> Klik <strong>Unlock Edit</strong> → masukkan password panel → edit nilai → klik <strong>Save Changes</strong>. FrankenPHP akan restart otomatis dan konfigurasi lama dibackup.',
+    'doc-upd-badge':'Self-Update',
+    'doc-upd-desc':'Perbarui PS Panel ke versi terbaru langsung dari browser tanpa perlu SSH. File lama otomatis di-backup sebelum diperbarui.',
+    'doc-upd-s1-title':'Cek Update','doc-upd-s1-desc':'Klik <strong>Cek Update</strong>. Panel akan membandingkan versi terpasang dengan versi terbaru di GitHub. Badge hijau "new" di sidebar muncul otomatis jika ada update baru saat panel dibuka.',
+    'doc-upd-s2-title':'Lihat Changelog','doc-upd-s2-desc':'Daftar fitur baru dan perbaikan pada versi terbaru akan ditampilkan setelah cek update berhasil.',
+    'doc-upd-s3-title':'Update Sekarang','doc-upd-s3-desc':'Klik <strong>Update Sekarang</strong>. Panel akan mengunduh file terbaru, menjalankan <code>npm install</code>, lalu restart otomatis. Proses biasanya selesai dalam 30–60 detik.',
+    'doc-upd-s4-title':'Halaman Reload Otomatis','doc-upd-s4-desc':'Setelah panel selesai restart, browser akan otomatis reload. Konfigurasi, vhost, database, dan file aplikasi tidak terpengaruh oleh update.',
+    'doc-upd-tip':'<strong>Aman:</strong> Update hanya menyentuh file panel (<code>server.js</code>, <code>public/index.html</code>). Semua konfigurasi vhost di <code>/etc/frankenphp/sites/</code>, database PostgreSQL, dan file <code>.env</code> aplikasi tidak berubah.',
+    'faq-label':'// faq','faq-title':'Pertanyaan yang Sering Ditanya','faq-sub':'Semua yang perlu Anda ketahui sebelum memulai.',
+    'faq1-q':'Apa itu PS Panel?','faq1-a':'PS Panel adalah panel manajemen server ringan yang self-hosted untuk Ubuntu 24.04 LTS. Menyediakan antarmuka berbasis browser untuk monitoring resource sistem, mengelola layanan (FrankenPHP, PHP-FPM, PostgreSQL, Redis), mengkonfigurasi virtual host dengan SSL, dan deploy aplikasi via git — tanpa perlu SSH untuk tugas rutin.',
+    'faq2-q':'Apakah PS Panel gratis?','faq2-a':'Ya, sepenuhnya gratis dan open-source. Tanpa langganan, tanpa batas penggunaan, tanpa biaya tersembunyi. PS Panel dirilis untuk komunitas open-source. Anda bisa menggunakannya untuk proyek pribadi maupun komersial, dan berkontribusi pada pengembangannya di GitHub.',
+    'faq3-q':'Sistem operasi apa yang didukung?','faq3-a':'PS Panel dioptimalkan dan diuji untuk <strong style="color:var(--text)">Ubuntu 24.04 LTS</strong>. Installer mungkin berjalan di sistem berbasis Debian lainnya, namun Ubuntu 24.04 adalah satu-satunya target yang didukung secara resmi. Dukungan untuk distribusi tambahan mungkin ditambahkan di versi mendatang.',
+    'faq4-q':'Bagaimana cara mengganti password panel?','faq4-a':'Restart panel dengan variabel environment <code>PANEL_PASS</code>:<br><br><code>PANEL_PASS=passwordbaru pm2 restart ps-panel</code><br><br>Kredensial saat ini selalu bisa dibaca dari <code>/root/.pspanel_credentials</code>.',
+    'faq5-q':'Apakah panel ini aman?','faq5-a':'PS Panel mencakup: autentikasi JWT (8 jam kadaluarsa), bcrypt password hashing, rate limiting login (5 percobaan / 15 menit), autentikasi WebSocket, pencegahan command injection pada input deploy, dan validasi domain saat pembuatan virtual host. Untuk penggunaan produksi, kami merekomendasikan membatasi akses port 8765 ke IP tepercaya via firewall server.',
+    'footer-tag':'Manajemen server modern untuk Ubuntu 24.04<br>FrankenPHP · PHP 8.3 · PostgreSQL 16 · Redis · Node.js 20',
+  }
+};
+
+function applyLang(lang) {
+  _lang = lang;
+  const t = LANG[lang];
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const v = t[el.dataset.i18n];
+    if (v !== undefined) el.textContent = v;
+  });
+  document.querySelectorAll('[data-i18n-html]').forEach(el => {
+    const v = t[el.dataset.i18nHtml];
+    if (v !== undefined) el.innerHTML = v;
+  });
+  const btn = document.getElementById('lang-btn');
+  if (btn) btn.textContent = lang === 'en' ? '🇮🇩 ID' : '🇬🇧 EN';
+  document.documentElement.lang = lang;
+  localStorage.setItem('psp_lang', lang);
+}
+
+function toggleLang() { applyLang(_lang === 'en' ? 'id' : 'en'); }
+
+if (_lang === 'id') applyLang('id');
 
 // ── COPY CODE ──
 function copyCode(btn) {
