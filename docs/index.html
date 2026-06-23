@@ -20,21 +20,30 @@
 
 <style>
 :root {
-  --ink:    #0a0b0f;
-  --ink2:   #12141a;
-  --ink3:   #1a1d26;
-  --ink4:   #232735;
-  --line:   rgba(255,255,255,.07);
-  --line2:  rgba(255,255,255,.13);
-  --text:   #e8eaf2;
-  --muted:  #5c6278;
-  --dim:    #3a3f54;
-  --accent: #6ee7b7;
-  --accent2:#818cf8;
-  --accent3:#f472b6;
-  --warn:   #fbbf24;
+  --ink:    #ffffff;
+  --ink2:   #f3f4f8;
+  --ink3:   #e8eaf2;
+  --ink4:   #dde0ec;
+  --line:   rgba(0,0,0,.07);
+  --line2:  rgba(0,0,0,.12);
+  --text:   #0f1117;
+  --muted:  #6b7280;
+  --dim:    #9ca3af;
+  --accent: #059669;
+  --accent2:#6366f1;
+  --accent3:#db2777;
+  --warn:   #d97706;
   --font:   'Syne', sans-serif;
   --mono:   'JetBrains Mono', monospace;
+}
+
+/* Dark scope for mock dashboard preview — keeps it looking like a panel screenshot */
+.dark-preview {
+  --ink:#0a0b0f; --ink2:#12141a; --ink3:#1a1d26; --ink4:#232735;
+  --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.13);
+  --text:#e8eaf2; --muted:#5c6278; --dim:#3a3f54;
+  --accent:#6ee7b7; --accent2:#818cf8; --accent3:#f472b6; --warn:#fbbf24;
+  background:var(--ink); color:var(--text);
 }
 
 *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
@@ -45,7 +54,7 @@ body { background:var(--ink); color:var(--text); font-family:var(--font); overfl
 body::before {
   content:'';
   position:fixed; inset:0;
-  background-image:radial-gradient(rgba(110,231,183,.12) 1px, transparent 1px);
+  background-image:radial-gradient(rgba(5,150,105,.1) 1px, transparent 1px);
   background-size:30px 30px;
   pointer-events:none; z-index:0;
 }
@@ -58,7 +67,7 @@ nav {
   transition:all .35s;
 }
 nav.scrolled {
-  background:rgba(10,11,15,.88);
+  background:rgba(255,255,255,.92);
   backdrop-filter:blur(20px);
   -webkit-backdrop-filter:blur(20px);
   border-bottom:1px solid var(--line);
@@ -89,20 +98,20 @@ nav.scrolled {
   position:absolute; top:15%; left:50%;
   transform:translateX(-50%);
   width:700px; height:500px;
-  background:radial-gradient(ellipse, rgba(110,231,183,.13) 0%, rgba(129,140,248,.08) 45%, transparent 70%);
+  background:radial-gradient(ellipse, rgba(5,150,105,.1) 0%, rgba(99,102,241,.06) 45%, transparent 70%);
   pointer-events:none; filter:blur(48px);
   transition:transform .1s linear;
 }
 .hero-glow2 {
   position:absolute; bottom:10%; right:10%;
   width:300px; height:300px;
-  background:radial-gradient(ellipse, rgba(244,114,182,.07) 0%, transparent 70%);
+  background:radial-gradient(ellipse, rgba(219,39,119,.06) 0%, transparent 70%);
   pointer-events:none; filter:blur(40px);
 }
 .hero-badge {
   display:inline-flex; align-items:center; gap:8px;
   padding:6px 16px;
-  background:rgba(110,231,183,.08); border:1px solid rgba(110,231,183,.22);
+  background:rgba(5,150,105,.07); border:1px solid rgba(5,150,105,.2);
   border-radius:20px; font-family:var(--mono); font-size:11px;
   color:var(--accent); margin-bottom:30px; letter-spacing:.06em;
 }
@@ -119,7 +128,7 @@ nav.scrolled {
 }
 .hero-title .ps {
   color:var(--accent);
-  text-shadow:0 0 60px rgba(110,231,183,.45),0 0 120px rgba(110,231,183,.2);
+  text-shadow:0 0 60px rgba(5,150,105,.25),0 0 120px rgba(5,150,105,.1);
 }
 .hero-sub {
   font-family:var(--mono); font-size:clamp(12px,1.4vw,15px);
@@ -131,7 +140,7 @@ nav.scrolled {
   width:100%; max-width:700px;
   background:#050810; border:1px solid var(--line2); border-radius:14px;
   overflow:hidden; margin-bottom:42px;
-  box-shadow:0 28px 72px rgba(0,0,0,.65), 0 0 0 1px rgba(110,231,183,.04), inset 0 1px 0 rgba(255,255,255,.03);
+  box-shadow:0 16px 48px rgba(0,0,0,.15), 0 0 0 1px rgba(5,150,105,.06);
 }
 .term-bar {
   background:var(--ink3); padding:12px 16px;
@@ -214,7 +223,7 @@ section { position:relative; z-index:1; padding:100px 24px; }
 }
 .feat-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
 .feat-card {
-  background:rgba(255,255,255,.025); border:1px solid var(--line);
+  background:rgba(0,0,0,.025); border:1px solid var(--line);
   border-radius:16px; padding:28px;
   position:relative; overflow:hidden;
   transition:border-color .2s, transform .25s;
@@ -261,7 +270,7 @@ section { position:relative; z-index:1; padding:100px 24px; }
   max-width:980px; margin:0 auto;
   border-radius:16px; overflow:hidden;
   border:1px solid var(--line2);
-  box-shadow:0 40px 90px rgba(0,0,0,.7), 0 0 0 1px rgba(129,140,248,.06);
+  box-shadow:0 20px 60px rgba(0,0,0,.12), 0 0 0 1px rgba(99,102,241,.08);
 }
 .b-bar {
   background:var(--ink3); padding:12px 18px;
@@ -373,8 +382,8 @@ section { position:relative; z-index:1; padding:100px 24px; }
 .code-copy:hover { color:var(--accent); border-color:rgba(110,231,183,.3); }
 
 .note-box {
-  margin-top:44px; background:rgba(110,231,183,.04);
-  border:1px solid rgba(110,231,183,.14); border-radius:12px;
+  margin-top:44px; background:rgba(5,150,105,.05);
+  border:1px solid rgba(5,150,105,.18); border-radius:12px;
   padding:18px 22px; font-family:var(--mono); font-size:11px;
   color:var(--muted); line-height:1.95; max-width:720px;
 }
@@ -483,7 +492,7 @@ footer {
 
   <div class="hero-badge fade-up">
     <span class="hb-dot"></span>
-    v2.0 &nbsp;·&nbsp; Ubuntu 24.04 LTS &nbsp;·&nbsp; FrankenPHP Stack
+    v2.1 &nbsp;·&nbsp; Ubuntu 24.04 LTS &nbsp;·&nbsp; FrankenPHP Stack
   </div>
 
   <h1 class="hero-title fade-up delay-1">
@@ -617,7 +626,7 @@ footer {
         <div class="b-dots"><span class="b-r"></span><span class="b-y"></span><span class="b-g"></span></div>
         <div class="b-url">http://your-server-ip:8765</div>
       </div>
-      <div class="b-content">
+      <div class="b-content dark-preview">
 
         <!-- Sidebar -->
         <div class="mock-sb">

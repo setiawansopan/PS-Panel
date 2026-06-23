@@ -1,10 +1,11 @@
 {
-  "version": "2.1.0",
+  "version": "2.1.1",
   "released": "2026-06-23",
   "notes": [
+    "Virtual Hosts: domain bisa diklik langsung ke website (tab baru)",
+    "Landing page: tema default berubah ke light (lebih mudah dibaca)",
     "Self-update: cek & pasang versi terbaru langsung dari panel",
     "File Manager: browse, edit, upload, download, chmod",
-    "Mail / SMTP: konfigurasi & test email untuk reset password / OTP",
-    "Sidebar pakai icon SVG + tema default light"
+    "Mail / SMTP: konfigurasi & test email untuk reset password / OTP"
   ]
 }

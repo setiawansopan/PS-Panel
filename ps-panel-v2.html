@@ -1622,7 +1622,7 @@ async function loadVhosts(){
   const d=await api('GET','/api/vhosts');if(!d)return;
   document.getElementById('vhost-tb').innerHTML=d.length
     ?d.map(v=>`<tr>
-      <td style="font-weight:600">${v.domain}</td>
+      <td style="font-weight:600"><a href="${v.ssl==='HTTPS'?'https':'http'}://${v.domain}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='inherit'">${v.domain} <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;display:inline;vertical-align:middle;opacity:.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></td>
       <td class="td-mono" style="font-size:11px;max-width:300px;overflow:hidden;text-overflow:ellipsis">${v.docroot}</td>
       <td><span class="pill ${v.phpEnabled?'p-on':'p-unk'}" style="font-size:9px">${v.phpEnabled?'✓ Enabled':'—'}</span></td>
       <td><span class="pill ${v.ssl==='HTTPS'?'p-on':'p-unk'}" style="font-size:9px">${v.ssl==='HTTPS'?'🔒 HTTPS':'HTTP'}</span></td>
