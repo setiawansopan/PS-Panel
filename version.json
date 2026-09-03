@@ -1,14 +1,12 @@
 {
-  "version": "2.2.0",
-  "released": "2026-09-03",
+  "version": "2.3.0",
+  "released": "2026-09-04",
   "notes": [
-    "Installer: perbaikan kritis — step sekarang benar-benar diverifikasi (pm2, node_modules, panel merespons), bukan cuma \"command selesai dijalankan\"",
-    "Installer: fail-fast dengan pesan jelas kalau pm2/npm install/server.js gagal, bukan lanjut pura-pura sukses",
-    "Panel password (PANEL_PASS) sekarang dibaca dari file kredensial, bukan cuma env var proses — tidak hilang lagi setelah restart/reboot",
-    "Deploy: .env otomatis dibuat dari .env.example + APP_KEY digenerate untuk app Laravel baru",
-    "Deploy: database PostgreSQL dibuatkan otomatis kalau belum ada",
-    "Deploy: storage/bootstrap-cache ownership & storage:link diurus otomatis",
-    "Virtual Hosts: konfigurasi baru langsung di-reload ke FrankenPHP, tidak perlu restart manual lagi",
-    "Firewall: pesan lebih jujur kalau UFW belum diaktifkan"
+    "Installer: Caddyfile sekarang selalu punya global block { frankenphp } sejak awal — tanpa ini semua request PHP hang selamanya tanpa error di log manapun",
+    "Installer: smoke test PHP nyata setelah FrankenPHP start (bukan cuma cek systemctl is-active)",
+    "Panel: self-heal otomatis — kalau instalasi lama tidak punya block frankenphp di Caddyfile, panel memperbaikinya sendiri saat startup",
+    "Virtual Hosts: opsi \"Laravel app\" — document root otomatis diarahkan ke public/ supaya tidak 404 langsung dari Caddy",
+    "Deploy: build frontend (npm install + npm run build) otomatis untuk project Vite/Inertia, dengan workaround DNS IPv6 dan timeout lebih panjang",
+    "Deploy: riwayat deploy tersimpan (Deploy History) — bisa lihat status & log tiap step, termasuk deploy dari webhook yang sebelumnya silent-fail"
   ]
 }

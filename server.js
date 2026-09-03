@@ -257,6 +257,28 @@ app.get('/api/frankenphp', auth, async (req, res) => {
 // ── Virtual Hosts ──
 const VHOSTS_DIR = '/etc/frankenphp/sites';
 fs.mkdirSync(VHOSTS_DIR,{recursive:true});
+const CADDYFILE_PATH = '/etc/frankenphp/Caddyfile';
+
+// CRITICAL self-heal: FrankenPHP's PHP app is only provisioned if the Caddyfile's
+// global options block (the very first block, before any site) declares
+// `frankenphp`. Without it, `php_server` directives still show up in the routing
+// table, but every request that hits one hangs forever — no error, no log entry,
+// nothing — because the PHP runtime behind it was never started. Older installs
+// (before this was added to install.sh) shipped without this block by default,
+// and it only ever got added as an accidental side effect of changing the
+// num_threads setting. Check for it on every reload and repair it if missing.
+function ensureFrankenPHPGlobalBlock() {
+  if (!fs.existsSync(CADDYFILE_PATH)) return false;
+  const content = fs.readFileSync(CADDYFILE_PATH, 'utf8');
+  const stripped = content.split('\n').filter(l => !l.trim().startsWith('#')).join('\n').trim();
+  if (stripped.startsWith('{')) {
+    const firstBlock = stripped.match(/^\{([\s\S]*?)\n\}/);
+    if (firstBlock && /frankenphp/.test(firstBlock[1])) return false; // already present
+  }
+  fs.copyFileSync(CADDYFILE_PATH, CADDYFILE_PATH + '.bak.' + Date.now());
+  fs.writeFileSync(CADDYFILE_PATH, '{\n\tfrankenphp\n}\n\n' + content);
+  return true; // a fix was applied — caller should reload FrankenPHP
+}
 
 // Writing a site .conf file alone does NOT make FrankenPHP (Caddy) pick it up —
 // the running process needs to reload its config, or the domain keeps serving
@@ -264,6 +286,7 @@ fs.mkdirSync(VHOSTS_DIR,{recursive:true});
 // Try a clean reload first (no downtime for other sites); fall back to a full
 // restart for older installs whose systemd unit has no ExecReload defined.
 function reloadFrankenPHP(cb) {
+  try { ensureFrankenPHPGlobalBlock(); } catch {}
   exec('systemctl reload frankenphp', (err) => {
     if (!err) return cb(null);
     exec('systemctl restart frankenphp', (err2) => cb(err2));
@@ -296,12 +319,17 @@ app.get('/api/vhosts', auth,(req,res)=>{
   }));
 });
 app.post('/api/vhosts', auth,(req,res)=>{
-  const {domain,root,php,ssl}=req.body;
+  const {domain,root,php,ssl,laravel}=req.body;
   if(!domain) return res.status(400).json({error:'Domain required'});
   if(!/^[a-zA-Z0-9][a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,}$/.test(domain)) return res.status(400).json({error:'Invalid domain name'});
-  const docroot = root||`/var/www/${domain}`;
-  if(!path.isAbsolute(docroot)) return res.status(400).json({error:'Document root must be an absolute path'});
-  fs.mkdirSync(docroot,{recursive:true});
+  const projectRoot = root||`/var/www/${domain}`;
+  if(!path.isAbsolute(projectRoot)) return res.status(400).json({error:'Document root must be an absolute path'});
+  fs.mkdirSync(projectRoot,{recursive:true});
+  // Laravel's index.php lives in <project>/public, not the project root — pointing
+  // Caddy at the project root means every request 404s straight from Caddy before
+  // the app ever runs, which looks like "the server can't find anything" even
+  // though the deployed app itself is perfectly fine.
+  const docroot = laravel ? path.join(projectRoot,'public') : projectRoot;
   const host = ssl ? domain : `http://${domain}`;
   const config = php
     ? `${host} {\n  root * ${docroot}\n  php_server\n}\n`
@@ -579,12 +607,12 @@ app.post('/api/db-users/:username/grant', auth, async(req,res)=>{
 });
 
 // ── Settings (PHP.ini + FrankenPHP) ──
+// CADDYFILE_PATH is declared earlier (Virtual Hosts section) since it's needed there too.
 const PHP_INI_PATHS = [
   '/etc/php/8.3/embed/php.ini',
   '/etc/php/8.3/cli/php.ini',
   '/etc/php/8.3/fpm/php.ini',
 ];
-const CADDYFILE_PATH = '/etc/frankenphp/Caddyfile';
 
 const PHP_KEYS = [
   'upload_max_filesize',
@@ -756,10 +784,39 @@ function parseEnvFile(envPath) {
   return env;
 }
 
+// Does this app have a frontend build step (Vite/Mix)? Most modern Laravel apps
+// (Inertia/Vue/React) need `npm run build` to produce public/build/manifest.json
+// before Blade can render — skip silently for API-only apps with no such script.
+function hasFrontendBuild(dir) {
+  const pkgPath = path.join(dir, 'package.json');
+  if (!fs.existsSync(pkgPath)) return false;
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    return !!(pkg.scripts && pkg.scripts.build);
+  } catch { return false; }
+}
+
+// ── Deploy history ──
+const DEPLOY_HISTORY_FILE = path.join(__dirname, 'deploy-history.json');
+const DEPLOY_HISTORY_MAX = 50;
+const DEPLOY_STEP_OUTPUT_MAX = 20000;
+function loadDeployHistory() {
+  try { return JSON.parse(fs.readFileSync(DEPLOY_HISTORY_FILE, 'utf8')); } catch { return []; }
+}
+function recordDeploy(entry) {
+  try {
+    const history = loadDeployHistory();
+    const steps = (entry.steps || []).map(s => ({ ...s, output: (s.output || '').slice(0, DEPLOY_STEP_OUTPUT_MAX) }));
+    history.unshift({ ...entry, steps });
+    fs.writeFileSync(DEPLOY_HISTORY_FILE, JSON.stringify(history.slice(0, DEPLOY_HISTORY_MAX), null, 2));
+  } catch (e) { console.error('[Deploy] Failed to record deploy history:', e.message); }
+}
+
 // Full first-deploy pipeline for a Laravel app: git pull → ensure .env exists →
-// ensure its database exists → composer install → fix storage ownership →
-// migrate → storage:link → cache. Each step's output is collected so both the
-// manual "Deploy" button and the webhook auto-deploy path can show/log it.
+// ensure its database exists → composer install → frontend build (if any) →
+// fix storage ownership → migrate → storage:link → cache. Each step's output is
+// collected so both the manual "Deploy" button and the webhook auto-deploy path
+// can show/log it, and so it can be persisted to deploy history.
 //
 // This exists because a bare `composer install && migrate` (the old behavior)
 // silently does the wrong thing on a brand new app: with no .env, Laravel falls
@@ -767,6 +824,7 @@ function parseEnvFile(envPath) {
 // fails outright once it hits Postgres-only migration syntax.
 async function runDeploySteps(hook) {
   const outParts = [];
+  const steps = [];
   const log = (s) => outParts.push(s);
   const sshKey = '/root/.ssh/ps-panel-deploy';
   const gitEnv = fs.existsSync(sshKey)
@@ -776,7 +834,8 @@ async function runDeploySteps(hook) {
   const safeBranch = (hook.branch || 'main').replace(/[^a-zA-Z0-9._\/-]/g, '');
 
   async function run(cmd, args, opts = {}) {
-    log(`\n$ ${cmd} ${args.join(' ')}\n`);
+    const label = `${cmd} ${args.join(' ')}`;
+    log(`\n$ ${label}\n`);
     try {
       const { stdout, stderr } = await execFileAsync(cmd, args, {
         cwd: opts.cwd || appPath,
@@ -785,20 +844,23 @@ async function runDeploySteps(hook) {
       });
       if (stdout) log(stdout);
       if (stderr) log(stderr);
+      steps.push({ cmd: label, ok: true, output: (stdout || '') + (stderr || '') });
       return true;
     } catch (e) {
+      const errOutput = (e.stdout || '') + (e.stderr || '');
       if (e.stdout) log(e.stdout);
       if (e.stderr) log(e.stderr);
       if (e.code === 'ENOENT') log(`\n[ERROR] Command "${cmd}" not found. Please ensure it's installed and in PATH.\n`);
       else if (e.code) log(`\n[ERROR] Exit code: ${e.code}\n`);
       if (e.message && !e.stderr) log(`[ERROR] ${e.message}\n`);
       log('\n[FAILED]\n');
+      steps.push({ cmd: label, ok: false, output: errOutput || e.message || 'failed' });
       return false;
     }
   }
 
   if (!await run('git', ['-C', appPath, 'pull', 'origin', safeBranch], { env: gitEnv }))
-    return { ok: false, output: outParts.join('') };
+    return { ok: false, output: outParts.join(''), steps };
 
   if (hook.laravel) {
     // 1. Ensure .env exists — without it Laravel silently falls back to sqlite
@@ -838,12 +900,30 @@ async function runDeploySteps(hook) {
 
     // 3. Install dependencies
     if (!await run('composer', ['install', '--optimize-autoloader', '--no-dev', '--no-interaction']))
-      return { ok: false, output: outParts.join('') };
+      return { ok: false, output: outParts.join(''), steps };
 
     // 3b. Generate APP_KEY if missing (fresh .env from .env.example has none)
     const envAfterComposer = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
     if (!/^APP_KEY=.+/m.test(envAfterComposer)) {
       await run('php', ['artisan', 'key:generate', '--force']);
+    }
+
+    // 3c. Frontend build (Vite/Mix) — skipped for apps with no build script.
+    // Some hosts have broken IPv6 routing (Vite fetches Google/Bunny fonts at
+    // build time and Node's resolver doesn't fall back to IPv4 as readily as
+    // curl does, hanging the build); force IPv4 resolution as a safety net.
+    // npm can be much slower than other steps here, hence the longer timeout.
+    if (hasFrontendBuild(appPath)) {
+      const buildEnv = { ...process.env, NODE_OPTIONS: '--dns-result-order=ipv4first' };
+      if (!await run('npm', ['install'], { env: buildEnv, timeout: 600000 }))
+        return { ok: false, output: outParts.join(''), steps };
+      if (!await run('npm', ['run', 'build'], { env: buildEnv, timeout: 600000 }))
+        return { ok: false, output: outParts.join(''), steps };
+      if (!fs.existsSync(path.join(appPath, 'public/build/manifest.json'))) {
+        log('\n[ERROR] npm run build finished but public/build/manifest.json was not produced.\n[FAILED]\n');
+        steps.push({ cmd: 'verify public/build/manifest.json', ok: false, output: 'manifest.json missing after build' });
+        return { ok: false, output: outParts.join(''), steps };
+      }
     }
 
     // 4. Fix ownership so the web server user (www-data) can actually write
@@ -852,7 +932,7 @@ async function runDeploySteps(hook) {
 
     // 5. Migrate
     if (!await run('php', ['artisan', 'migrate', '--force']))
-      return { ok: false, output: outParts.join('') };
+      return { ok: false, output: outParts.join(''), steps };
 
     // 6. Storage symlink (safe to re-run — artisan skips if it already exists)
     await run('php', ['artisan', 'storage:link']);
@@ -863,7 +943,20 @@ async function runDeploySteps(hook) {
     await run('php', ['artisan', 'view:cache']);
   }
 
-  return { ok: true, output: outParts.join('') };
+  return { ok: true, output: outParts.join(''), steps };
+}
+
+// Runs the deploy pipeline and persists the result to deploy history regardless
+// of trigger source, so a silently-failing webhook deploy is no longer invisible.
+async function deployAndRecord(hook, trigger) {
+  const startedAt = new Date().toISOString();
+  const result = await runDeploySteps(hook);
+  const finishedAt = new Date().toISOString();
+  recordDeploy({
+    trigger, path: hook.path, branch: hook.branch || 'main', laravel: !!hook.laravel,
+    startedAt, finishedAt, ok: result.ok, steps: result.steps || [],
+  });
+  return result;
 }
 app.get('/api/webhooks', auth, (req, res) => res.json(loadWebhooks().map(h => ({...h, secret: undefined}))));
 app.post('/api/webhooks', auth, (req, res) => {
@@ -891,10 +984,11 @@ app.post('/api/webhook/:id', (req, res) => {
   const pushedBranch = (req.body.ref || '').replace('refs/heads/', '');
   if (pushedBranch !== hook.branch) return res.json({ skipped:true });
   res.json({ ok:true });
-  runDeploySteps(hook)
+  deployAndRecord(hook, 'webhook')
     .then(r => { if (!r.ok) console.error(`[Deploy] webhook ${hook.id} (${hook.path}) failed:\n${r.output}`); })
     .catch(e => console.error(`[Deploy] webhook ${hook.id} (${hook.path}) threw:`, e));
 });
+app.get('/api/deploy-history', auth, (req, res) => res.json({ history: loadDeployHistory() }));
 
 // ── SSH Deploy Key ──
 const DEPLOY_KEY = '/root/.ssh/ps-panel-deploy';
@@ -1007,7 +1101,7 @@ app.post('/api/clone', auth, (req, res) => {
 app.post('/api/deploy', auth, async (req,res)=>{
   const {path:p,branch,laravel}=req.body;
   if(!p||!path.isAbsolute(p)) return res.status(400).json({error:'Absolute path required'});
-  const result = await runDeploySteps({ path:p, branch, laravel });
+  const result = await deployAndRecord({ path:p, branch, laravel }, 'manual');
   res.json(result);
 });
 
@@ -1433,3 +1527,18 @@ wss.on('connection', (ws, req)=>{
 });
 
 server.listen(PORT,'0.0.0.0',()=>console.log(`PS Panel → http://0.0.0.0:${PORT}`));
+
+// Run the Caddyfile self-heal once per boot. On an install that predates this
+// fix, this repairs the file and reloads FrankenPHP automatically the moment
+// the panel is updated/restarted — no manual Caddyfile surgery required.
+try {
+  if (ensureFrankenPHPGlobalBlock()) {
+    console.log('[Startup] Caddyfile was missing the global `frankenphp` block (PHP requests would hang forever) — fixed and reloading FrankenPHP');
+    reloadFrankenPHP((err) => {
+      if (err) console.error('[Startup] FrankenPHP reload after Caddyfile fix failed:', err.message||err);
+      else console.log('[Startup] FrankenPHP reloaded successfully');
+    });
+  }
+} catch (e) {
+  console.error('[Startup] ensureFrankenPHPGlobalBlock check failed:', e.message);
+}

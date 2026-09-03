@@ -810,6 +810,16 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         </div>
         <div id="webhook-list"><div style="color:var(--muted);font-size:12px;font-family:var(--mono);padding:12px;background:var(--ink3);border-radius:9px">Belum ada webhook. Klik + Add untuk setup auto deploy.</div></div>
       </div>
+
+      <!-- Deploy History -->
+      <div class="card" style="max-width:1040px;margin-top:18px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <h3 style="margin:0;font-size:16px;font-weight:700">Deploy History</h3>
+          <span class="ct-badge">Last 50</span>
+          <button class="btn btn-ghost" style="padding:5px 13px;font-size:11px;margin-left:auto" onclick="loadDeployHistory()">↻ Refresh</button>
+        </div>
+        <div id="deploy-history-list"><div style="color:var(--muted);font-size:12px;font-family:var(--mono);padding:12px;background:var(--ink3);border-radius:9px">No deploys recorded yet.</div></div>
+      </div>
     </div>
 
     <!-- ── SETTINGS ── -->
@@ -968,6 +978,7 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
     </div>
     <label class="check-lbl" style="margin-top:12px;margin-bottom:8px"><input type="checkbox" id="v-php" checked> Enable PHP</label>
     <label class="check-lbl" style="margin-top:6px"><input type="checkbox" id="v-ssl"> Enable SSL (Let's Encrypt)</label>
+    <label class="check-lbl" style="margin-top:6px"><input type="checkbox" id="v-laravel" onchange="updateVhostPreview()"> Laravel app <span style="color:var(--muted);font-weight:400">(serve from public/)</span></label>
     <div class="mf">
       <button class="btn btn-ghost" onclick="document.getElementById('m-vhost').classList.remove('open')">Cancel</button>
       <button class="btn" onclick="addVhost()">Add Domain</button>
@@ -1188,7 +1199,7 @@ function go(name){
   if(name==='redis')     loadRedis();
   if(name==='postgres')  loadPostgres();
   if(name==='frankenphp') loadFrankenphp();
-  if(name==='deploy'){loadWebhookList();loadDeployVhosts();}
+  if(name==='deploy'){loadWebhookList();loadDeployVhosts();loadDeployHistory();}
   if(name==='settings')  loadSettings();
   if(name==='update')    checkUpdate();
 }
@@ -1638,12 +1649,14 @@ async function loadVhosts(){
 function updateVhostPreview(){
   const domain=document.getElementById('v-domain').value.trim();
   const root=document.getElementById('v-root').value.trim();
-  const finalPath=root||(domain?`/var/www/${domain}`:'/var/www/example.com');
+  const isLaravel=document.getElementById('v-laravel').checked;
+  let finalPath=root||(domain?`/var/www/${domain}`:'/var/www/example.com');
+  if(isLaravel) finalPath+='/public';
   document.getElementById('vhost-path-preview').textContent=finalPath;
 }
 async function addVhost(){
   const domain=document.getElementById('v-domain').value.trim();if(!domain)return;
-  const r=await api('POST','/api/vhosts',{domain,root:document.getElementById('v-root').value.trim(),php:document.getElementById('v-php').checked,ssl:document.getElementById('v-ssl').checked});
+  const r=await api('POST','/api/vhosts',{domain,root:document.getElementById('v-root').value.trim(),php:document.getElementById('v-php').checked,ssl:document.getElementById('v-ssl').checked,laravel:document.getElementById('v-laravel').checked});
   if(!r||!r.ok){alert(r?.error||'Failed to add vhost');return;}
   if(r.reloaded===false) alert('Vhost saved, but FrankenPHP failed to reload the new config — the site may still show the default page.\n\n'+(r.reloadError||'')+'\n\nRun: systemctl restart frankenphp');
   document.getElementById('m-vhost').classList.remove('open');document.getElementById('v-domain').value='';loadVhosts();
@@ -2172,6 +2185,44 @@ async function deploy(){
   btn.innerHTML='▲ &nbsp;Run Deploy';btn.disabled=false;
   out.textContent=r?r.output:'[error] No response';
   out.style.color=r?.ok?'var(--accent)':'var(--danger)';
+  loadDeployHistory();
+}
+
+// ── Deploy History ──
+async function loadDeployHistory(){
+  const el=document.getElementById('deploy-history-list');if(!el)return;
+  const d=await api('GET','/api/deploy-history');
+  const history=d?.history||[];
+  if(!history.length){
+    el.innerHTML='<div style="color:var(--muted);font-size:12px;font-family:var(--mono);padding:12px;background:var(--ink3);border-radius:9px">No deploys recorded yet.</div>';
+    return;
+  }
+  el.innerHTML=history.map((h,i)=>{
+    const dur=h.startedAt&&h.finishedAt?Math.round((new Date(h.finishedAt)-new Date(h.startedAt))/1000)+'s':'--';
+    const statusColor=h.ok?'var(--accent)':'var(--danger)';
+    const statusLabel=h.ok?'✓ success':'✗ failed';
+    const when=h.startedAt?new Date(h.startedAt).toLocaleString('id-ID'):'--';
+    return `<div style="background:var(--ink3);border-radius:9px;margin-bottom:8px;overflow:hidden">
+      <div style="padding:10px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;font-family:var(--mono);font-size:11px" onclick="toggleDeployHistoryItem(${i})">
+        <span style="color:${statusColor};font-weight:700;min-width:70px">${statusLabel}</span>
+        <span style="color:var(--dim)">${h.trigger==='webhook'?'⚡ webhook':'▲ manual'}</span>
+        <span style="color:var(--muted)">${h.path||''}</span>
+        <span style="color:var(--muted)">(${h.branch||'main'})</span>
+        <span style="color:var(--dim);margin-left:auto">${dur}</span>
+        <span style="color:var(--muted)">${when}</span>
+      </div>
+      <div id="dh-item-${i}" style="display:none;padding:0 14px 14px">
+        ${(h.steps||[]).map(s=>`<div style="font-family:var(--mono);font-size:10px;margin-bottom:6px">
+          <div style="color:${s.ok?'var(--accent)':'var(--danger)'}">${s.ok?'✓':'✗'} ${s.cmd}</div>
+          ${s.output?`<pre style="white-space:pre-wrap;color:var(--muted);background:var(--ink);border-radius:6px;padding:8px;margin-top:4px;max-height:160px;overflow:auto">${s.output.replace(/</g,'&lt;')}</pre>`:''}
+        </div>`).join('')||'<div style="color:var(--muted);font-family:var(--mono);font-size:10px">No step detail recorded.</div>'}
+      </div>
+    </div>`;
+  }).join('');
+}
+function toggleDeployHistoryItem(i){
+  const el=document.getElementById('dh-item-'+i);
+  if(el) el.style.display=el.style.display==='none'?'block':'none';
 }
 
 // ── Settings ──

@@ -2,3 +2,6 @@ node_modules/
 .env
 *.log
 .claude/
+webhooks.json
+vhost-repos.json
+deploy-history.json

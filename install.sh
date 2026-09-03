@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-#  PS Panel Installer  v2.2
+#  PS Panel Installer  v2.3
 #  Stack: FrankenPHP + PHP 8.3 + PostgreSQL 16 + Redis + Node.js 20
 #  Target: Ubuntu 24.04 LTS
 #  Usage : curl -fsSL https://raw.githubusercontent.com/setiawansopan/PS-Panel/main/install.sh | sudo bash
@@ -272,13 +272,13 @@ trap '_on_error' ERR
 print_banner() {
   echo -e "${CYAN}" >&2
   echo "  ╔══════════════════════════════════════════════╗" >&2
-  echo "  ║           PS Panel Installer v2.2            ║" >&2
+  echo "  ║           PS Panel Installer v2.3            ║" >&2
   echo "  ║  FrankenPHP · PHP 8.3 · PostgreSQL 16        ║" >&2
   echo "  ║  Redis · Node.js v${NODE_VERSION} · PM2                 ║" >&2
   echo "  ╚══════════════════════════════════════════════╝" >&2
   echo -e "${RESET}" >&2
   echo -e "  ${DIM}Log: ${LOG_FILE}${RESET}\n" >&2
-  log_raw "PS Panel Installer v2.2 started"
+  log_raw "PS Panel Installer v2.3 started"
 }
 
 # ════════════════════════════════════════════════════════════
@@ -602,7 +602,15 @@ install_frankenphp() {
   mkdir -p /var/www/.local/share/caddy/locks
   chown -R www-data:www-data /var/www/.local
 
+  # The global options block below is NOT optional. Without it, FrankenPHP's PHP
+  # app is never provisioned — php_server directives still show up in Caddy's
+  # routing table, but every PHP request then hangs forever (no error, no log,
+  # just a connection that never completes) the moment a real vhost is added.
   cat > /etc/frankenphp/Caddyfile << 'CADDYFILE'
+{
+	frankenphp
+}
+
 http://:80 {
   root * /var/www/html
   php_server
@@ -638,7 +646,24 @@ SVC
   run_logged systemctl start frankenphp
   spinner_stop ok
 
-  log "FrankenPHP ${latest} installed"
+  # `systemctl is-active` only proves the process is running — it does NOT prove
+  # PHP requests are actually processed. Without the global `frankenphp` options
+  # block in the Caddyfile, php_server still routes requests but they hang
+  # forever (no error, no timeout on the server side) because the PHP runtime
+  # was never provisioned. Prove it end-to-end with a real request instead.
+  spinner_start "Verifying PHP requests are actually processed..."
+  echo '<?php echo "pspanel-ok";' > /var/www/html/__pspanel_healthcheck.php
+  local php_body
+  php_body=$(curl -s -m 5 "http://127.0.0.1/__pspanel_healthcheck.php" 2>/dev/null || echo "")
+  rm -f /var/www/html/__pspanel_healthcheck.php
+  if [[ "$php_body" != "pspanel-ok" ]]; then
+    spinner_stop fail
+    fatal "FrankenPHP is running but a PHP request did not return the expected response (got: '${php_body}')." \
+      "Ensure /etc/frankenphp/Caddyfile starts with a global '{ frankenphp }' options block, then run: systemctl restart frankenphp"
+  fi
+  spinner_stop ok
+
+  log "FrankenPHP ${latest} installed and verified serving PHP"
 }
 
 # ════════════════════════════════════════════════════════════
@@ -789,7 +814,7 @@ install_panel() {
   cat > "${PANEL_DIR}/package.json" << 'PKGJSON'
 {
   "name": "ps-panel",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "main": "server.js",
   "dependencies": {
     "express": "^4.18.2",
