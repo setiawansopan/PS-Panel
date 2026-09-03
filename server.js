@@ -2,6 +2,8 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const { exec, execFile } = require('child_process');
+const { promisify } = require('util');
+const execFileAsync = promisify(execFile);
 const si = require('systeminformation');
 const path = require('path');
 const jwt = require('jsonwebtoken');
@@ -39,7 +41,11 @@ function getCreds() {
 }
 
 // ── Auth ──
-const ADMIN_HASH = bcrypt.hashSync(process.env.PANEL_PASS || 'admin123', 10);
+// Read the panel password from the credentials file first (same source as PG_PASSWORD),
+// falling back to the env var and then the default. This matters because how the process
+// is started (pm2 start, pm2 resurrect after reboot, systemd, manual `node server.js`)
+// does not reliably carry env vars across restarts, but the creds file always does.
+const ADMIN_HASH = bcrypt.hashSync(getCreds().PANEL_PASS || process.env.PANEL_PASS || 'admin123', 10);
 function auth(req,res,next){
   const t = req.headers.authorization?.split(' ')[1];
   if(!t) return res.status(401).json({error:'Unauthorized'});
@@ -251,6 +257,18 @@ app.get('/api/frankenphp', auth, async (req, res) => {
 // ── Virtual Hosts ──
 const VHOSTS_DIR = '/etc/frankenphp/sites';
 fs.mkdirSync(VHOSTS_DIR,{recursive:true});
+
+// Writing a site .conf file alone does NOT make FrankenPHP (Caddy) pick it up —
+// the running process needs to reload its config, or the domain keeps serving
+// whatever the default/catch-all site was until someone reloads it manually.
+// Try a clean reload first (no downtime for other sites); fall back to a full
+// restart for older installs whose systemd unit has no ExecReload defined.
+function reloadFrankenPHP(cb) {
+  exec('systemctl reload frankenphp', (err) => {
+    if (!err) return cb(null);
+    exec('systemctl restart frankenphp', (err2) => cb(err2));
+  });
+}
 app.get('/api/vhosts', auth,(req,res)=>{
   const files = fs.existsSync(VHOSTS_DIR)?fs.readdirSync(VHOSTS_DIR):[];
   res.json(files.map(f=>{
@@ -289,12 +307,16 @@ app.post('/api/vhosts', auth,(req,res)=>{
     ? `${host} {\n  root * ${docroot}\n  php_server\n}\n`
     : `${host} {\n  root * ${docroot}\n  file_server\n}\n`;
   fs.writeFileSync(path.join(VHOSTS_DIR,`${domain}.conf`),config);
-  res.json({ok:true});
+  reloadFrankenPHP((err)=>{
+    res.json({ok:true, reloaded:!err, reloadError: err ? String(err.message||err) : null});
+  });
 });
 app.delete('/api/vhosts/:domain', auth,(req,res)=>{
   const f=path.join(VHOSTS_DIR,`${req.params.domain}.conf`);
   if(fs.existsSync(f)) fs.unlinkSync(f);
-  res.json({ok:true});
+  reloadFrankenPHP((err)=>{
+    res.json({ok:true, reloaded:!err, reloadError: err ? String(err.message||err) : null});
+  });
 });
 
 // ── Vhost Repository Mapping ──
@@ -722,35 +744,126 @@ function loadWebhooks() {
 function saveWebhooks(hooks) {
   fs.writeFileSync(WEBHOOKS_FILE, JSON.stringify(hooks, null, 2));
 }
-function runDeploy(hook) {
-  // Setup SSH key environment untuk git operations
+// Parse a Laravel .env file into a plain object (handles simple KEY=VALUE lines,
+// optionally quoted). Good enough for the values we read here.
+function parseEnvFile(envPath) {
+  const env = {};
+  if (!fs.existsSync(envPath)) return env;
+  fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
+    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
+    if (m) env[m[1]] = m[2].trim().replace(/^["']|["']$/g, '');
+  });
+  return env;
+}
+
+// Full first-deploy pipeline for a Laravel app: git pull → ensure .env exists →
+// ensure its database exists → composer install → fix storage ownership →
+// migrate → storage:link → cache. Each step's output is collected so both the
+// manual "Deploy" button and the webhook auto-deploy path can show/log it.
+//
+// This exists because a bare `composer install && migrate` (the old behavior)
+// silently does the wrong thing on a brand new app: with no .env, Laravel falls
+// back to DB_CONNECTION=sqlite and migrate runs against the wrong database, or
+// fails outright once it hits Postgres-only migration syntax.
+async function runDeploySteps(hook) {
+  const outParts = [];
+  const log = (s) => outParts.push(s);
   const sshKey = '/root/.ssh/ps-panel-deploy';
   const gitEnv = fs.existsSync(sshKey)
     ? { ...process.env, GIT_SSH_COMMAND: `ssh -i ${sshKey} -o StrictHostKeyChecking=no` }
     : process.env;
+  const appPath = hook.path;
+  const safeBranch = (hook.branch || 'main').replace(/[^a-zA-Z0-9._\/-]/g, '');
 
-  const steps = [
-    { cmd:'git', args:['-C', hook.path, 'pull', 'origin', hook.branch], useGitEnv:true },
-    ...(hook.laravel ? [
-      { cmd:'composer', args:['install','--optimize-autoloader','--no-dev','--no-interaction'], cwd:hook.path },
-      { cmd:'php', args:['artisan','migrate','--force'],  cwd:hook.path },
-      { cmd:'php', args:['artisan','config:cache'],       cwd:hook.path },
-      { cmd:'php', args:['artisan','route:cache'],        cwd:hook.path },
-      { cmd:'php', args:['artisan','view:cache'],         cwd:hook.path },
-    ] : []),
-  ];
-  let i = 0;
-  function next() {
-    if (i >= steps.length) return;
-    const { cmd, args, cwd, useGitEnv } = steps[i++];
-    const execOpts = {
-      cwd: cwd || hook.path,
-      timeout: 300000,
-      env: useGitEnv ? gitEnv : process.env,
-    };
-    execFile(cmd, args, execOpts, (err) => { if (!err) next(); });
+  async function run(cmd, args, opts = {}) {
+    log(`\n$ ${cmd} ${args.join(' ')}\n`);
+    try {
+      const { stdout, stderr } = await execFileAsync(cmd, args, {
+        cwd: opts.cwd || appPath,
+        timeout: opts.timeout || 300000,
+        env: opts.env || process.env,
+      });
+      if (stdout) log(stdout);
+      if (stderr) log(stderr);
+      return true;
+    } catch (e) {
+      if (e.stdout) log(e.stdout);
+      if (e.stderr) log(e.stderr);
+      if (e.code === 'ENOENT') log(`\n[ERROR] Command "${cmd}" not found. Please ensure it's installed and in PATH.\n`);
+      else if (e.code) log(`\n[ERROR] Exit code: ${e.code}\n`);
+      if (e.message && !e.stderr) log(`[ERROR] ${e.message}\n`);
+      log('\n[FAILED]\n');
+      return false;
+    }
   }
-  next();
+
+  if (!await run('git', ['-C', appPath, 'pull', 'origin', safeBranch], { env: gitEnv }))
+    return { ok: false, output: outParts.join('') };
+
+  if (hook.laravel) {
+    // 1. Ensure .env exists — without it Laravel silently falls back to sqlite
+    //    and migrate either hits the wrong DB or fails on Postgres-only syntax.
+    const envPath = path.join(appPath, '.env');
+    const examplePath = path.join(appPath, '.env.example');
+    if (!fs.existsSync(envPath) && fs.existsSync(examplePath)) {
+      try {
+        fs.copyFileSync(examplePath, envPath);
+        log(`\n[SETUP] .env not found — created from .env.example\n`);
+      } catch (e) {
+        log(`\n[SETUP] Failed to create .env from .env.example: ${e.message}\n`);
+      }
+    }
+
+    // 2. Ensure the target Postgres database exists (only when the app is
+    //    actually configured for pgsql — leave sqlite/mysql apps alone).
+    const env = parseEnvFile(envPath);
+    if (env.DB_CONNECTION === 'pgsql' && env.DB_DATABASE && /^[a-z0-9_]+$/i.test(env.DB_DATABASE)) {
+      try {
+        const creds = getCreds();
+        const pool = new Pool({
+          host: env.DB_HOST || 'localhost', user: 'postgres',
+          password: creds.PG_PASSWORD || '', database: 'postgres',
+          connectionTimeoutMillis: 3000,
+        });
+        const r = await pool.query('SELECT 1 FROM pg_database WHERE datname=$1', [env.DB_DATABASE]);
+        if (r.rowCount === 0) {
+          await pool.query(`CREATE DATABASE "${env.DB_DATABASE}"`);
+          log(`\n[SETUP] Database "${env.DB_DATABASE}" did not exist — created it\n`);
+        }
+        await pool.end();
+      } catch (e) {
+        log(`\n[SETUP] Could not verify/create database "${env.DB_DATABASE}": ${e.message}\n`);
+      }
+    }
+
+    // 3. Install dependencies
+    if (!await run('composer', ['install', '--optimize-autoloader', '--no-dev', '--no-interaction']))
+      return { ok: false, output: outParts.join('') };
+
+    // 3b. Generate APP_KEY if missing (fresh .env from .env.example has none)
+    const envAfterComposer = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
+    if (!/^APP_KEY=.+/m.test(envAfterComposer)) {
+      await run('php', ['artisan', 'key:generate', '--force']);
+    }
+
+    // 4. Fix ownership so the web server user (www-data) can actually write
+    //    logs/cache/uploads — git clone/pull as root leaves these root-owned.
+    await run('chown', ['-R', 'www-data:www-data', 'storage', 'bootstrap/cache']);
+
+    // 5. Migrate
+    if (!await run('php', ['artisan', 'migrate', '--force']))
+      return { ok: false, output: outParts.join('') };
+
+    // 6. Storage symlink (safe to re-run — artisan skips if it already exists)
+    await run('php', ['artisan', 'storage:link']);
+
+    // 7. Cache
+    await run('php', ['artisan', 'config:cache']);
+    await run('php', ['artisan', 'route:cache']);
+    await run('php', ['artisan', 'view:cache']);
+  }
+
+  return { ok: true, output: outParts.join('') };
 }
 app.get('/api/webhooks', auth, (req, res) => res.json(loadWebhooks().map(h => ({...h, secret: undefined}))));
 app.post('/api/webhooks', auth, (req, res) => {
@@ -778,7 +891,9 @@ app.post('/api/webhook/:id', (req, res) => {
   const pushedBranch = (req.body.ref || '').replace('refs/heads/', '');
   if (pushedBranch !== hook.branch) return res.json({ skipped:true });
   res.json({ ok:true });
-  runDeploy(hook);
+  runDeploySteps(hook)
+    .then(r => { if (!r.ok) console.error(`[Deploy] webhook ${hook.id} (${hook.path}) failed:\n${r.output}`); })
+    .catch(e => console.error(`[Deploy] webhook ${hook.id} (${hook.path}) threw:`, e));
 });
 
 // ── SSH Deploy Key ──
@@ -889,53 +1004,11 @@ app.post('/api/clone', auth, (req, res) => {
 });
 
 // ── Deploy ──
-app.post('/api/deploy', auth,(req,res)=>{
+app.post('/api/deploy', auth, async (req,res)=>{
   const {path:p,branch,laravel}=req.body;
   if(!p||!path.isAbsolute(p)) return res.status(400).json({error:'Absolute path required'});
-  const safeBranch=(branch||'main').replace(/[^a-zA-Z0-9._\/-]/g,'');
-
-  // Setup SSH key environment untuk git operations (sama dengan clone endpoint)
-  const sshKey = '/root/.ssh/ps-panel-deploy';
-  const gitEnv = fs.existsSync(sshKey)
-    ? { ...process.env, GIT_SSH_COMMAND: `ssh -i ${sshKey} -o StrictHostKeyChecking=no` }
-    : process.env;
-
-  const steps=[
-    {cmd:'git',  args:['-C',p,'pull','origin',safeBranch], useGitEnv:true},
-    ...(laravel?[
-      {cmd:'composer',args:['install','--optimize-autoloader','--no-dev','--no-interaction'],cwd:p},
-      {cmd:'php',     args:['artisan','migrate','--force'],  cwd:p},
-      {cmd:'php',     args:['artisan','config:cache'],       cwd:p},
-      {cmd:'php',     args:['artisan','route:cache'],        cwd:p},
-      {cmd:'php',     args:['artisan','view:cache'],         cwd:p},
-    ]:[]),
-  ];
-  let out=''; let i=0;
-  function next(){
-    if(i>=steps.length) return res.json({ok:true, output:out});
-    const {cmd,args,cwd,useGitEnv}=steps[i++];
-    out+=`\n$ ${cmd} ${args.join(' ')}\n`;
-    const execOpts = {
-      cwd: cwd||p,
-      timeout: 300000,
-      env: useGitEnv ? gitEnv : process.env,
-    };
-    execFile(cmd,args,execOpts,(err,stdout,stderr)=>{
-      // Capture all output (both stdout and stderr)
-      if(stdout) out+=stdout;
-      if(stderr) out+=stderr;
-      if(err){
-        // Show detailed error info
-        if(err.code==='ENOENT') out+=`\n[ERROR] Command "${cmd}" not found. Please ensure it's installed and in PATH.\n`;
-        else if(err.code) out+=`\n[ERROR] Exit code: ${err.code}\n`;
-        if(err.message && !stderr) out+=`[ERROR] ${err.message}\n`;
-        out+='\n[FAILED]\n';
-        return res.json({ok:false, output:out});
-      }
-      next();
-    });
-  }
-  next();
+  const result = await runDeploySteps({ path:p, branch, laravel });
+  res.json(result);
 });
 
 // ── File Manager ──

@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # ============================================================
-#  PS Panel Installer  v2.1
+#  PS Panel Installer  v2.2
 #  Stack: FrankenPHP + PHP 8.3 + PostgreSQL 16 + Redis + Node.js 20
 #  Target: Ubuntu 24.04 LTS
 #  Usage : curl -fsSL https://raw.githubusercontent.com/setiawansopan/PS-Panel/main/install.sh | sudo bash
 # ============================================================
 
-# --- strict mode, but errors are caught via our own trap ---
-set -uo pipefail
+# --- strict mode: -e (exit on error) + -E (propagate ERR trap into functions/subshells)
+#     are BOTH required for the ERR trap below to actually fire on failures that happen
+#     inside a function — without -E, `trap ... ERR` at top level silently does nothing
+#     for errors raised inside install_php/install_panel/etc, and steps report "OK" even
+#     when the command they ran failed. ---
+set -Eeuo pipefail
 
 # ── Config ──────────────────────────────────────────────────
 PANEL_DIR="/opt/ps-panel"
@@ -36,6 +40,7 @@ CURRENT_STEP_MSG=""
 TOTAL_STEPS=8
 CURRENT_STEP=0
 INSTALL_ERRORS=()
+UFW_INACTIVE=false
 
 # ── Step definitions: name|estimated_time ────────────────────
 declare -a STEPS=(
@@ -267,13 +272,13 @@ trap '_on_error' ERR
 print_banner() {
   echo -e "${CYAN}" >&2
   echo "  ╔══════════════════════════════════════════════╗" >&2
-  echo "  ║           PS Panel Installer v2.1            ║" >&2
+  echo "  ║           PS Panel Installer v2.2            ║" >&2
   echo "  ║  FrankenPHP · PHP 8.3 · PostgreSQL 16        ║" >&2
   echo "  ║  Redis · Node.js v${NODE_VERSION} · PM2                 ║" >&2
   echo "  ╚══════════════════════════════════════════════╝" >&2
   echo -e "${RESET}" >&2
   echo -e "  ${DIM}Log: ${LOG_FILE}${RESET}\n" >&2
-  log_raw "PS Panel Installer v2.1 started"
+  log_raw "PS Panel Installer v2.2 started"
 }
 
 # ════════════════════════════════════════════════════════════
@@ -422,7 +427,7 @@ install_php() {
       php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" >> "$LOG_FILE" 2>&1
       php composer-setup.php --install-dir=/usr/local/bin --filename=composer --quiet >> "$LOG_FILE" 2>&1
       rm -f composer-setup.php
-    )
+    ) || true   # Composer failure is non-fatal here — checked below and reported as WARN, not FATAL
     if command -v composer &>/dev/null; then
       spinner_stop ok
       log "Composer $(composer --version --no-ansi 2>/dev/null | head -n1) installed"
@@ -616,6 +621,7 @@ Type=simple
 User=www-data
 WorkingDirectory=/var/www
 ExecStart=/usr/local/bin/frankenphp run --config /etc/frankenphp/Caddyfile
+ExecReload=/usr/local/bin/frankenphp reload --config /etc/frankenphp/Caddyfile
 Restart=always
 RestartSec=5
 LimitNOFILE=1048576
@@ -729,9 +735,22 @@ install_nodejs() {
     skip "PM2"
   else
     spinner_start "Installing PM2 globally..."
+    if ! curl -sf -m 5 https://registry.npmjs.org/ &>/dev/null; then
+      spinner_stop fail
+      fatal "Cannot reach the npm registry (registry.npmjs.org)" \
+        "Check the server's internet/DNS connectivity, then re-run the installer."
+    fi
     retry_run "npm install pm2" npm install -g pm2
-    run_logged pm2 startup systemd -u root --hp /root || true
     spinner_stop ok
+
+    # Verify pm2 is actually usable — npm can report success without leaving a
+    # working binary on PATH (e.g. custom npm prefix not in root's PATH).
+    if ! command -v pm2 &>/dev/null; then
+      fatal "PM2 installed via npm but the 'pm2' command is not on PATH" \
+        "Run 'npm config get prefix' and ensure its bin directory is in root's \$PATH, then re-run the installer."
+    fi
+
+    run_logged pm2 startup systemd -u root --hp /root || true
     log "PM2 $(pm2 -v) installed"
   fi
 }
@@ -753,9 +772,11 @@ install_panel() {
   spinner_stop ok
 
   spinner_start "Downloading panel backend (server.js)..."
-  wget_download "${GITHUB_RAW}/server.js" \
-    "${PANEL_DIR}/server.js" \
-    || warn "server.js download failed — copy server.js manually later."
+  if ! wget_download "${GITHUB_RAW}/server.js" "${PANEL_DIR}/server.js"; then
+    spinner_stop fail
+    fatal "Failed to download server.js — the panel cannot run without it." \
+      "Check connectivity to raw.githubusercontent.com and re-run the installer."
+  fi
   spinner_stop ok
 
   spinner_start "Downloading version manifest..."
@@ -768,7 +789,7 @@ install_panel() {
   cat > "${PANEL_DIR}/package.json" << 'PKGJSON'
 {
   "name": "ps-panel",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "main": "server.js",
   "dependencies": {
     "express": "^4.18.2",
@@ -785,8 +806,20 @@ PKGJSON
   spinner_stop ok
 
   spinner_start "Installing npm packages... (this may take a while)"
+  if ! curl -sf -m 5 https://registry.npmjs.org/ &>/dev/null; then
+    spinner_stop fail
+    fatal "Cannot reach the npm registry (registry.npmjs.org)" \
+      "Check the server's internet/DNS connectivity, then re-run the installer."
+  fi
   retry_run "npm install" npm install --prefix "${PANEL_DIR}" --silent
   spinner_stop ok
+
+  # npm can report a "successful" install while node_modules ends up empty/partial
+  # (seen in the wild after a flaky registry connection) — verify explicitly.
+  if [[ ! -d "${PANEL_DIR}/node_modules/express" ]]; then
+    fatal "npm install finished but node_modules/express is missing — dependencies did not install correctly." \
+      "Check connectivity to registry.npmjs.org, then run: cd ${PANEL_DIR} && npm install"
+  fi
 
   # Generate credentials
   local panel_pass
@@ -803,7 +836,27 @@ PKGJSON
   pm2 save >> "$LOG_FILE" 2>&1
   spinner_stop ok
 
-  log "PS Panel started on port ${PANEL_PORT}"
+  # "pm2 start" exiting 0 only means the command was accepted — it does NOT mean the
+  # process is actually up. Verify something is really listening before claiming success.
+  spinner_start "Verifying PS Panel is responding on port ${PANEL_PORT}..."
+  local panel_ok=false http_code i
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    http_code=$(curl -s -o /dev/null -w '%{http_code}' -m 2 "http://127.0.0.1:${PANEL_PORT}/" 2>/dev/null || echo "000")
+    if [[ "$http_code" != "000" ]]; then
+      panel_ok=true
+      break
+    fi
+    sleep 1
+  done
+
+  if [[ "$panel_ok" != "true" ]]; then
+    spinner_stop fail
+    fatal "PS Panel did not start — nothing is listening on port ${PANEL_PORT} after 10s." \
+      "Run 'pm2 logs ps-panel' and check ${LOG_FILE} for the real error (common cause: crash on startup)."
+  fi
+  spinner_stop ok
+
+  log "PS Panel started and responding on port ${PANEL_PORT}"
 }
 
 # ════════════════════════════════════════════════════════════
@@ -824,7 +877,16 @@ configure_firewall() {
   run_logged ufw allow "${PANEL_PORT}/tcp" || true
   spinner_stop ok
 
-  log "UFW rules added (80, 443, ${PANEL_PORT})"
+  if ufw status 2>/dev/null | grep -q "^Status: active"; then
+    log "UFW rules added (80, 443, ${PANEL_PORT}) — UFW is active and enforcing them"
+  else
+    log "UFW rules added (80, 443, ${PANEL_PORT})"
+    warn "UFW itself is NOT enabled — these rules are not filtering anything yet."
+    warn "If your VPS provider's security group/cloud firewall already restricts access, this is fine as-is."
+    warn "To enforce locally instead, run (in this order, or you may lock yourself out of SSH):"
+    warn "  ufw allow 22/tcp && ufw enable"
+    UFW_INACTIVE=true
+  fi
 }
 
 # ════════════════════════════════════════════════════════════
@@ -847,8 +909,8 @@ svc_status() {
 print_summary() {
   local creds panel_pass pg_pass server_ip
   creds=$(cat "$CREDS_FILE" 2>/dev/null || echo "")
-  panel_pass=$(echo "$creds" | grep "^PANEL_PASS=" | cut -d= -f2)
-  pg_pass=$(echo "$creds"   | grep "^PG_PASSWORD=" | cut -d= -f2)
+  panel_pass=$(echo "$creds" | grep "^PANEL_PASS=" | cut -d= -f2 || true)
+  pg_pass=$(echo "$creds"   | grep "^PG_PASSWORD=" | cut -d= -f2 || true)
   server_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
 
   echo -e "\n${BOLD}${GREEN}" >&2
@@ -887,6 +949,10 @@ print_summary() {
   echo "  ╚══════════════════════════════════════════════════════╝" >&2
   echo -e "${RESET}" >&2
   echo -e "  ${YELLOW}${BOLD}⚠  Save your credentials now — they won't be shown again.${RESET}\n" >&2
+
+  if [[ "$UFW_INACTIVE" == "true" ]]; then
+    echo -e "  ${YELLOW}${BOLD}⚠  UFW rules were added but UFW is NOT enabled${RESET} ${DIM}(see Firewall step above for how to enable it)${RESET}\n" >&2
+  fi
 
   log_raw "Installation complete. URL=http://${server_ip}:${PANEL_PORT}"
 }

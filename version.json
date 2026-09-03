@@ -1,11 +1,14 @@
 {
-  "version": "2.1.1",
-  "released": "2026-06-23",
+  "version": "2.2.0",
+  "released": "2026-09-03",
   "notes": [
-    "Virtual Hosts: domain bisa diklik langsung ke website (tab baru)",
-    "Landing page: tema default berubah ke light (lebih mudah dibaca)",
-    "Self-update: cek & pasang versi terbaru langsung dari panel",
-    "File Manager: browse, edit, upload, download, chmod",
-    "Mail / SMTP: konfigurasi & test email untuk reset password / OTP"
+    "Installer: perbaikan kritis — step sekarang benar-benar diverifikasi (pm2, node_modules, panel merespons), bukan cuma \"command selesai dijalankan\"",
+    "Installer: fail-fast dengan pesan jelas kalau pm2/npm install/server.js gagal, bukan lanjut pura-pura sukses",
+    "Panel password (PANEL_PASS) sekarang dibaca dari file kredensial, bukan cuma env var proses — tidak hilang lagi setelah restart/reboot",
+    "Deploy: .env otomatis dibuat dari .env.example + APP_KEY digenerate untuk app Laravel baru",
+    "Deploy: database PostgreSQL dibuatkan otomatis kalau belum ada",
+    "Deploy: storage/bootstrap-cache ownership & storage:link diurus otomatis",
+    "Virtual Hosts: konfigurasi baru langsung di-reload ke FrankenPHP, tidak perlu restart manual lagi",
+    "Firewall: pesan lebih jujur kalau UFW belum diaktifkan"
   ]
 }

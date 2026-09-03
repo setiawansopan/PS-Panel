@@ -1645,6 +1645,7 @@ async function addVhost(){
   const domain=document.getElementById('v-domain').value.trim();if(!domain)return;
   const r=await api('POST','/api/vhosts',{domain,root:document.getElementById('v-root').value.trim(),php:document.getElementById('v-php').checked,ssl:document.getElementById('v-ssl').checked});
   if(!r||!r.ok){alert(r?.error||'Failed to add vhost');return;}
+  if(r.reloaded===false) alert('Vhost saved, but FrankenPHP failed to reload the new config — the site may still show the default page.\n\n'+(r.reloadError||'')+'\n\nRun: systemctl restart frankenphp');
   document.getElementById('m-vhost').classList.remove('open');document.getElementById('v-domain').value='';loadVhosts();
 }
 async function delVhost(domain){if(!confirm(`Remove vhost: ${domain}?`))return;await api('DELETE',`/api/vhosts/${domain}`);loadVhosts();}
