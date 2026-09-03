@@ -547,7 +547,7 @@ footer {
 
   <div class="hero-badge fade-up">
     <span class="hb-dot"></span>
-    v2.1 &nbsp;·&nbsp; Ubuntu 24.04 LTS &nbsp;·&nbsp; FrankenPHP Stack
+    v2.3 &nbsp;·&nbsp; Ubuntu 24.04 LTS &nbsp;·&nbsp; FrankenPHP Stack
   </div>
 
   <h1 class="hero-title fade-up delay-1">
@@ -620,7 +620,7 @@ footer {
       <div class="feat-card fade-up delay-6" style="--c:var(--warn)">
         <span class="feat-icon">▲</span>
         <div class="feat-title" data-i18n="feat6-title">Smart Git Deploy</div>
-        <div class="feat-desc" data-i18n="feat6-desc">Trigger deploys from the browser — or automate with GitHub webhooks. Laravel mode runs composer, migrate, and artisan cache commands automatically.</div>
+        <div class="feat-desc" data-i18n="feat6-desc">Trigger deploys from the browser — or automate with GitHub webhooks. First deploy auto-creates .env & the database, runs composer and Vite builds, fixes storage permissions, and caches everything.</div>
       </div>
     </div>
   </div>
@@ -915,7 +915,7 @@ footer {
           <div class="doc-steps">
             <div class="doc-step">
               <div class="doc-step-n">1</div>
-              <div><div class="doc-step-title" data-i18n="doc-vh-s1-title">Add Domain</div><div class="doc-step-desc" data-i18n-html="doc-vh-s1-desc">Click <strong>+ Add Domain</strong>. Fill in the domain name (e.g.: <code>myapp.com</code>), document root (default: <code>/var/www/myapp.com</code>), check PHP if it's a PHP app, and SSL for HTTPS.</div></div>
+              <div><div class="doc-step-title" data-i18n="doc-vh-s1-title">Add Domain</div><div class="doc-step-desc" data-i18n-html="doc-vh-s1-desc">Click <strong>+ Add Domain</strong>. Fill in the domain name (e.g.: <code>myapp.com</code>), document root (default: <code>/var/www/myapp.com</code>), check PHP if it's a PHP app, SSL for HTTPS, and <strong>Laravel app</strong> if it's a Laravel project — this automatically points the document root at <code>public/</code> instead of the project root.</div></div>
             </div>
             <div class="doc-step">
               <div class="doc-step-n">2</div>
@@ -1004,7 +1004,7 @@ footer {
             <div class="doc-card">
               <div class="doc-card-label" data-i18n="doc-dep-c3-label">Step 3</div>
               <div class="doc-card-title" data-i18n="doc-dep-c3-title">Manual Deploy</div>
-              <div class="doc-card-desc" data-i18n-html="doc-dep-c3-desc">Run <code>git pull</code> from the browser. Laravel mode automatically runs composer, migrate, and artisan cache commands.</div>
+              <div class="doc-card-desc" data-i18n-html="doc-dep-c3-desc">Run <code>git pull</code> from the browser. Laravel mode auto-creates <code>.env</code> & the database on first deploy, runs composer, builds the frontend (Vite) if present, fixes storage permissions, migrates, and caches.</div>
             </div>
             <div class="doc-card">
               <div class="doc-card-label" data-i18n="doc-dep-c4-label">Step 4</div>
@@ -1012,7 +1012,7 @@ footer {
               <div class="doc-card-desc" data-i18n="doc-dep-c4-desc">Set up a GitHub webhook so deployment runs automatically on every push to a specific branch.</div>
             </div>
           </div>
-          <div class="doc-tip" data-i18n-html="doc-dep-tip"><strong>Laravel Mode:</strong> Check "Laravel App" when deploying to automatically run: <code>composer install</code> → <code>php artisan migrate --force</code> → <code>config:cache</code> → <code>route:cache</code> → <code>view:cache</code>.</div>
+          <div class="doc-tip" data-i18n-html="doc-dep-tip"><strong>Laravel Mode:</strong> Check "Laravel App" to run the full pipeline automatically: create <code>.env</code> from <code>.env.example</code> + generate <code>APP_KEY</code> → create the database if missing → <code>composer install</code> → <code>npm install &amp;&amp; npm run build</code> (only if a build script exists) → fix <code>storage/</code> ownership → <code>migrate --force</code> → <code>storage:link</code> → cache. Every deploy (manual or webhook) is logged in the <strong>Deploy History</strong> card below with per-step pass/fail output.</div>
         </div>
 
         <!-- POSTGRESQL -->
@@ -1214,7 +1214,7 @@ footer {
     <a href="#faq" data-i18n="nav-faq">FAQ</a>
   </div>
   <div class="footer-copy">
-    Built with ❤️ for the open-source community &nbsp;·&nbsp; PS Panel v2.1<br>
+    Built with ❤️ for the open-source community &nbsp;·&nbsp; PS Panel v2.3<br>
     <span style="opacity:.5">Released under MIT License</span>
   </div>
 </footer>
@@ -1300,7 +1300,7 @@ const LANG = {
     'feat3-title':'Redis Statistics','feat3-desc':'Cache hit rate, memory usage, ops/sec, connected clients, eviction counts, and keyspace stats — everything at a glance.',
     'feat4-title':'PostgreSQL Management','feat4-desc':'Monitor active connections, database sizes, lock counts, and connection states. Create databases directly from the browser.',
     'feat5-title':'PHP-FPM Stats','feat5-desc':'Worker pool utilization, idle/active process counts, listen queue depth, and slow request tracking via the FPM status socket.',
-    'feat6-title':'Smart Git Deploy','feat6-desc':'Trigger deploys from the browser — or automate with GitHub webhooks. Laravel mode runs composer, migrate, and artisan cache commands automatically.',
+    'feat6-title':'Smart Git Deploy','feat6-desc':'Trigger deploys from the browser — or automate with GitHub webhooks. First deploy auto-creates .env & the database, runs composer and Vite builds, fixes storage permissions, and caches everything.',
     'stack-label':'// tech stack','stack-title':'Built on proven technology',
     'stack-sub':'Production-grade components, carefully selected and pre-configured to work together perfectly.',
     'stack1-desc':'Modern PHP server built on Caddy. Auto HTTPS via Let\'s Encrypt. No Nginx config files.',
@@ -1329,7 +1329,7 @@ const LANG = {
     'doc-dash-tip':'<strong>Tip:</strong> If CPU or RAM stays at 100%, check Top Processes to identify the cause, then use the Services page to restart the relevant service.',
     'doc-vh-badge':'Domain & SSL',
     'doc-vh-desc':'Manage domains served by FrankenPHP. Each virtual host generates a config file in <code style="color:var(--accent2)">/etc/frankenphp/sites/</code>.',
-    'doc-vh-s1-title':'Add Domain','doc-vh-s1-desc':'Click <strong>+ Add Domain</strong>. Fill in the domain name (e.g.: <code>myapp.com</code>), document root (default: <code>/var/www/myapp.com</code>), check PHP if it\'s a PHP app, and SSL for HTTPS.',
+    'doc-vh-s1-title':'Add Domain','doc-vh-s1-desc':'Click <strong>+ Add Domain</strong>. Fill in the domain name (e.g.: <code>myapp.com</code>), document root (default: <code>/var/www/myapp.com</code>), check PHP if it\'s a PHP app, SSL for HTTPS, and <strong>Laravel app</strong> if it\'s a Laravel project — this automatically points the document root at <code>public/</code> instead of the project root.',
     'doc-vh-s2-title':'Auto SSL','doc-vh-s2-desc':'When SSL is enabled, FrankenPHP (Caddy) automatically requests a certificate from Let\'s Encrypt. Ensure the domain points to the server IP and port 80 is open before enabling SSL.',
     'doc-vh-s3-title':'Edit Environment (.env)','doc-vh-s3-desc':'Click the <strong>⚙ ENV</strong> button on a domain to edit the app\'s <code>.env</code> file directly from the browser. The previous file is automatically backed up as <code>.env.bak</code>.',
     'doc-vh-s4-title':'Open Website','doc-vh-s4-desc':'Click the domain name (displayed as a link) to open the website in a new tab. The ↗ icon indicates the domain is clickable.',
@@ -1355,9 +1355,9 @@ const LANG = {
     'doc-dep-desc':'Deploy applications from a GitHub/GitLab repository to the server. Supports both public and private repos, plus auto-deploy via webhooks.',
     'doc-dep-c1-label':'Step 1','doc-dep-c1-title':'SSH Deploy Key','doc-dep-c1-desc':'For <strong>private</strong> repos, display the SSH public key then add it to GitHub repo → Settings → Deploy Keys. Only needs to be done once.',
     'doc-dep-c2-label':'Step 2','doc-dep-c2-title':'Clone Repository','doc-dep-c2-desc':'Clone the repo to the virtual host folder for the first time. Select the target vhost, enter the repo URL, click Clone.',
-    'doc-dep-c3-label':'Step 3','doc-dep-c3-title':'Manual Deploy','doc-dep-c3-desc':'Run <code>git pull</code> from the browser. Laravel mode automatically runs composer, migrate, and artisan cache commands.',
+    'doc-dep-c3-label':'Step 3','doc-dep-c3-title':'Manual Deploy','doc-dep-c3-desc':'Run <code>git pull</code> from the browser. Laravel mode auto-creates <code>.env</code> &amp; the database on first deploy, runs composer, builds the frontend (Vite) if present, fixes storage permissions, migrates, and caches.',
     'doc-dep-c4-label':'Step 4','doc-dep-c4-title':'Auto Deploy (Webhook)','doc-dep-c4-desc':'Set up a GitHub webhook so deployment runs automatically on every push to a specific branch.',
-    'doc-dep-tip':'<strong>Laravel Mode:</strong> Check "Laravel App" when deploying to automatically run: <code>composer install</code> → <code>php artisan migrate --force</code> → <code>config:cache</code> → <code>route:cache</code> → <code>view:cache</code>.',
+    'doc-dep-tip':'<strong>Laravel Mode:</strong> Check "Laravel App" to run the full pipeline automatically: create <code>.env</code> from <code>.env.example</code> + generate <code>APP_KEY</code> → create the database if missing → <code>composer install</code> → <code>npm install &amp;&amp; npm run build</code> (only if a build script exists) → fix <code>storage/</code> ownership → <code>migrate --force</code> → <code>storage:link</code> → cache. Every deploy (manual or webhook) is logged in the <strong>Deploy History</strong> card below with per-step pass/fail output.',
     'doc-pg-badge':'Database Management',
     'doc-pg-desc':'Monitor and manage PostgreSQL 16 databases. Connects directly to the local cluster as the <code style="color:var(--accent2)">postgres</code> user.',
     'doc-pg-i1':'<strong>Connection stats:</strong> Total active, idle, and query-running connections. Useful for detecting connection leaks.',
@@ -1416,7 +1416,7 @@ const LANG = {
     'feat3-title':'Statistik Redis','feat3-desc':'Cache hit rate, penggunaan memori, ops/detik, klien terhubung, jumlah eviction, dan statistik keyspace — semua dalam satu tampilan.',
     'feat4-title':'Manajemen PostgreSQL','feat4-desc':'Monitor koneksi aktif, ukuran database, jumlah lock, dan status koneksi. Buat database langsung dari browser.',
     'feat5-title':'Statistik PHP-FPM','feat5-desc':'Utilisasi worker pool, jumlah proses idle/aktif, kedalaman listen queue, dan pelacakan request lambat via socket status FPM.',
-    'feat6-title':'Deploy Git Cerdas','feat6-desc':'Trigger deploy dari browser — atau otomatis via GitHub webhooks. Mode Laravel menjalankan composer, migrate, dan perintah artisan cache secara otomatis.',
+    'feat6-title':'Deploy Git Cerdas','feat6-desc':'Trigger deploy dari browser — atau otomatis via GitHub webhooks. Deploy pertama otomatis membuat .env & database, menjalankan composer dan build Vite, memperbaiki permission storage, dan cache semuanya.',
     'stack-label':'// tech stack','stack-title':'Dibangun di atas teknologi teruji',
     'stack-sub':'Komponen berkelas produksi, dipilih dengan cermat dan dikonfigurasi agar bekerja sempurna bersama.',
     'stack1-desc':'Server PHP modern berbasis Caddy. Auto HTTPS via Let\'s Encrypt. Tanpa file konfigurasi Nginx.',
@@ -1445,7 +1445,7 @@ const LANG = {
     'doc-dash-tip':'<strong>Tip:</strong> Jika CPU atau RAM terus 100%, cek bagian Top Processes untuk mencari proses penyebabnya, lalu gunakan halaman Services untuk restart layanan terkait.',
     'doc-vh-badge':'Domain & SSL',
     'doc-vh-desc':'Kelola domain yang di-serve oleh FrankenPHP. Setiap virtual host menghasilkan file konfigurasi di <code style="color:var(--accent2)">/etc/frankenphp/sites/</code>.',
-    'doc-vh-s1-title':'Tambah Domain','doc-vh-s1-desc':'Klik <strong>+ Add Domain</strong>. Isi nama domain (contoh: <code>myapp.com</code>), document root (default: <code>/var/www/myapp.com</code>), centang PHP jika aplikasi PHP, dan SSL jika ingin HTTPS.',
+    'doc-vh-s1-title':'Tambah Domain','doc-vh-s1-desc':'Klik <strong>+ Add Domain</strong>. Isi nama domain (contoh: <code>myapp.com</code>), document root (default: <code>/var/www/myapp.com</code>), centang PHP jika aplikasi PHP, SSL jika ingin HTTPS, dan <strong>Laravel app</strong> jika ini project Laravel — document root otomatis diarahkan ke <code>public/</code>, bukan root project.',
     'doc-vh-s2-title':'SSL Otomatis','doc-vh-s2-desc':'Jika SSL diaktifkan, FrankenPHP (Caddy) akan otomatis request sertifikat dari Let\'s Encrypt. Pastikan domain sudah diarahkan ke IP server dan port 80 terbuka sebelum mengaktifkan SSL.',
     'doc-vh-s3-title':'Edit Environment (.env)','doc-vh-s3-desc':'Klik tombol <strong>⚙ ENV</strong> pada domain untuk edit file <code>.env</code> aplikasi langsung dari browser. File lama otomatis di-backup sebagai <code>.env.bak</code>.',
     'doc-vh-s4-title':'Buka Website','doc-vh-s4-desc':'Klik nama domain (akan muncul sebagai link) untuk membuka website di tab baru. Ikon ↗ menandakan domain bisa diklik.',
@@ -1471,9 +1471,9 @@ const LANG = {
     'doc-dep-desc':'Deploy aplikasi dari repository GitHub/GitLab ke server. Mendukung repo publik maupun privat, serta auto-deploy via webhook.',
     'doc-dep-c1-label':'Step 1','doc-dep-c1-title':'SSH Deploy Key','doc-dep-c1-desc':'Untuk repo <strong>privat</strong>, tampilkan SSH public key lalu tambahkan ke GitHub repo → Settings → Deploy Keys. Cukup dilakukan sekali.',
     'doc-dep-c2-label':'Step 2','doc-dep-c2-title':'Clone Repository','doc-dep-c2-desc':'Clone repo ke folder virtual host untuk pertama kali. Pilih vhost tujuan, masukkan URL repo, klik Clone.',
-    'doc-dep-c3-label':'Step 3','doc-dep-c3-title':'Manual Deploy','doc-dep-c3-desc':'Jalankan <code>git pull</code> dari browser. Mode Laravel otomatis menjalankan composer, migrate, dan artisan cache.',
+    'doc-dep-c3-label':'Step 3','doc-dep-c3-title':'Manual Deploy','doc-dep-c3-desc':'Jalankan <code>git pull</code> dari browser. Mode Laravel otomatis membuat <code>.env</code> &amp; database di deploy pertama, jalankan composer, build frontend (Vite) kalau ada, perbaiki permission storage, migrate, dan cache.',
     'doc-dep-c4-label':'Step 4','doc-dep-c4-title':'Auto Deploy (Webhook)','doc-dep-c4-desc':'Setup webhook GitHub agar deploy berjalan otomatis setiap kali ada push ke branch tertentu.',
-    'doc-dep-tip':'<strong>Laravel Mode:</strong> Centang "Laravel App" saat deploy untuk menjalankan otomatis: <code>composer install</code> → <code>php artisan migrate --force</code> → <code>config:cache</code> → <code>route:cache</code> → <code>view:cache</code>.',
+    'doc-dep-tip':'<strong>Laravel Mode:</strong> Centang "Laravel App" untuk menjalankan seluruh pipeline otomatis: buat <code>.env</code> dari <code>.env.example</code> + generate <code>APP_KEY</code> → buat database kalau belum ada → <code>composer install</code> → <code>npm install &amp;&amp; npm run build</code> (hanya kalau ada build script) → perbaiki ownership <code>storage/</code> → <code>migrate --force</code> → <code>storage:link</code> → cache. Setiap deploy (manual maupun webhook) tercatat di kartu <strong>Deploy History</strong> di bawah lengkap dengan status & output tiap step.',
     'doc-pg-badge':'Manajemen Database',
     'doc-pg-desc':'Monitor dan kelola database PostgreSQL 16. Terhubung langsung ke cluster lokal sebagai user <code style="color:var(--accent2)">postgres</code>.',
     'doc-pg-i1':'<strong>Statistik koneksi:</strong> Total koneksi aktif, idle, dan yang sedang menjalankan query. Berguna untuk mendeteksi connection leak.',
