@@ -4,6 +4,8 @@ const WebSocket = require('ws');
 const { exec, execFile } = require('child_process');
 const { promisify } = require('util');
 const execFileAsync = promisify(execFile);
+// reloadFrankenPHP is a function declaration further down (hoisted), safe to wrap here.
+const reloadFrankenPHPAsync = promisify(reloadFrankenPHP);
 const si = require('systeminformation');
 const path = require('path');
 const jwt = require('jsonwebtoken');
@@ -941,6 +943,22 @@ async function runDeploySteps(hook) {
     await run('php', ['artisan', 'config:cache']);
     await run('php', ['artisan', 'route:cache']);
     await run('php', ['artisan', 'view:cache']);
+
+    // 8. Reload FrankenPHP. Blade views recompile on their own when their source
+    //    changes, but FrankenPHP's OPcache does NOT invalidate PHP source files
+    //    (Controllers, Models, etc.) the same way — a deploy that only touches
+    //    PHP code can report every step green while the live site keeps serving
+    //    the pre-deploy code until the process restarts. Soft-fail: don't mark
+    //    the whole deploy as failed just because the reload itself hiccuped.
+    log('\n$ reload FrankenPHP (apply PHP source changes)\n');
+    try {
+      await reloadFrankenPHPAsync();
+      log('FrankenPHP reloaded.\n');
+      steps.push({ cmd: 'reload FrankenPHP', ok: true, output: 'reloaded' });
+    } catch (e) {
+      log(`[WARN] Failed to reload FrankenPHP — PHP source changes may not take effect until a manual restart: ${e.message}\n`);
+      steps.push({ cmd: 'reload FrankenPHP', ok: false, output: e.message });
+    }
   }
 
   return { ok: true, output: outParts.join(''), steps };

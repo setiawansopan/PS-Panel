@@ -1,7 +1,8 @@
 {
-  "version": "2.3.0",
-  "released": "2026-09-04",
+  "version": "2.4.0",
+  "released": "2026-09-05",
   "notes": [
+    "Deploy: FrankenPHP di-reload otomatis di akhir tiap deploy Laravel — OPcache-nya tidak invalidate file PHP (Controller/Model) seperti Blade view yang auto-recompile, jadi tanpa ini deploy bisa \"sukses\" tapi situs tetap sajikan kode lama sampai proses direstart manual",
     "Installer: Caddyfile sekarang selalu punya global block { frankenphp } sejak awal — tanpa ini semua request PHP hang selamanya tanpa error di log manapun",
     "Installer: smoke test PHP nyata setelah FrankenPHP start (bukan cuma cek systemctl is-active)",
     "Panel: self-heal otomatis — kalau instalasi lama tidak punya block frankenphp di Caddyfile, panel memperbaikinya sendiri saat startup",
