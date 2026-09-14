@@ -865,6 +865,23 @@ async function runDeploySteps(hook) {
     return { ok: false, output: outParts.join(''), steps };
 
   if (hook.laravel) {
+    // 0. Sanity-check the path before doing anything else. `git pull` above
+    //    succeeds even if `hook.path` points at the app's `public/` docroot
+    //    instead of its project root, because git walks up to find `.git` —
+    //    but composer/artisan don't do that, so composer install would fail
+    //    several steps later with a confusing "no composer.json" error and
+    //    nothing after it (build, migrate, cache) would ever run. Catch the
+    //    common mistake here with a message that names the actual fix.
+    if (!fs.existsSync(path.join(appPath, 'composer.json'))) {
+      const parentComposer = path.join(appPath, '..', 'composer.json');
+      const hint = fs.existsSync(parentComposer)
+        ? ` This looks like the app's "public/" docroot — use "${path.dirname(appPath)}" instead (the directory containing composer.json and artisan).`
+        : ' Check that this webhook/deploy path points at the Laravel project root, not a subdirectory.';
+      log(`\n[ERROR] No composer.json found in "${appPath}".${hint}\n[FAILED]\n`);
+      steps.push({ cmd: 'verify composer.json', ok: false, output: `composer.json missing in ${appPath}.${hint}` });
+      return { ok: false, output: outParts.join(''), steps };
+    }
+
     // 1. Ensure .env exists — without it Laravel silently falls back to sqlite
     //    and migrate either hits the wrong DB or fails on Postgres-only syntax.
     const envPath = path.join(appPath, '.env');
@@ -980,6 +997,18 @@ app.get('/api/webhooks', auth, (req, res) => res.json(loadWebhooks().map(h => ({
 app.post('/api/webhooks', auth, (req, res) => {
   const { path: p, branch, laravel } = req.body;
   if (!p || !path.isAbsolute(p)) return res.status(400).json({ error:'Absolute path required' });
+  // Catch the most common setup mistake up front: pointing this at the app's
+  // `public/` docroot (what the *vhost* should use) instead of the project
+  // root (what git/composer/npm need). `git pull` alone wouldn't reveal this
+  // — it only breaks once a real deploy reaches `composer install` — so we
+  // check it here instead of letting it fail silently later.
+  if (laravel && !fs.existsSync(path.join(p, 'composer.json'))) {
+    const parentComposer = path.join(p, '..', 'composer.json');
+    const hint = fs.existsSync(parentComposer)
+      ? `This looks like the app's "public/" docroot — use "${path.dirname(p)}" instead (the directory containing composer.json and artisan).`
+      : `No composer.json found in "${p}". For a Laravel app, this should be the project root (the directory containing artisan and composer.json), not a subdirectory.`;
+    return res.status(400).json({ error: hint });
+  }
   const hooks = loadWebhooks();
   const id     = crypto.randomBytes(8).toString('hex');
   const secret = crypto.randomBytes(20).toString('hex');
