@@ -30,6 +30,10 @@ const PANEL_DIR = __dirname;
 const GITHUB_RAW = process.env.PANEL_UPDATE_URL || 'https://raw.githubusercontent.com/setiawansopan/PS-Panel/main';
 
 app.use(express.json({ limit: '100mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
+// GitHub webhooks can also be configured with content type
+// application/x-www-form-urlencoded (body: payload=<json>); the HMAC signature
+// covers that raw form body, so keep it too.
+app.use(express.urlencoded({ extended: false, limit: '25mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Credentials ──
@@ -945,23 +949,32 @@ async function runDeploySteps(hook) {
       }
     }
 
-    // 4. Fix ownership so the web server user (www-data) can actually write
-    //    logs/cache/uploads — git clone/pull as root leaves these root-owned.
-    await run('chown', ['-R', 'www-data:www-data', 'storage', 'bootstrap/cache']);
-
-    // 5. Migrate
+    // 4. Migrate
     if (!await run('php', ['artisan', 'migrate', '--force']))
       return { ok: false, output: outParts.join(''), steps };
 
-    // 6. Storage symlink (safe to re-run — artisan skips if it already exists)
+    // 5. Storage symlink (safe to re-run — artisan skips if it already exists)
     await run('php', ['artisan', 'storage:link']);
 
-    // 7. Cache
+    // 6. Cache
     await run('php', ['artisan', 'config:cache']);
     await run('php', ['artisan', 'route:cache']);
     await run('php', ['artisan', 'view:cache']);
 
-    // 8. Reload FrankenPHP. Blade views recompile on their own when their source
+    // 7. Tell running queue workers to exit after their current job so their
+    //    supervisor (systemd/pm2/supervisord) starts them on the new code —
+    //    a long-lived `queue:work` otherwise keeps executing the old job
+    //    classes. Harmless when no worker is running (it only sets a cache key).
+    await run('php', ['artisan', 'queue:restart']);
+
+    // 8. Fix ownership so the web server user (www-data) can actually write
+    //    logs/cache/uploads. This must run AFTER every artisan call above: they
+    //    run as root, so view:cache, queue:restart (file cache) etc. would
+    //    otherwise leave fresh root-owned files in storage/ that www-data then
+    //    can't overwrite.
+    await run('chown', ['-R', 'www-data:www-data', 'storage', 'bootstrap/cache']);
+
+    // 9. Reload FrankenPHP. Blade views recompile on their own when their source
     //    changes, but FrankenPHP's OPcache does NOT invalidate PHP source files
     //    (Controllers, Models, etc.) the same way — a deploy that only touches
     //    PHP code can report every step green while the live site keeps serving
@@ -1022,14 +1035,30 @@ app.delete('/api/webhooks/:id', auth, (req, res) => {
 });
 // Public endpoint — GitHub calls this
 app.post('/api/webhook/:id', (req, res) => {
+  // Every early return below used to be silent, so a misconfigured webhook
+  // (wrong secret, wrong content type, stale URL) looked exactly like "GitHub
+  // never called us". Log each rejection so it shows up in `pm2 logs ps-panel`.
+  const event = req.headers['x-github-event'] || '-';
+  const delivery = req.headers['x-github-delivery'] || '-';
+  const reject = (status, reason, body) => {
+    console.warn(`[Webhook] ${req.params.id} event=${event} delivery=${delivery} rejected (${status}): ${reason}`);
+    return body ? res.status(status).json(body) : res.status(status).end();
+  };
   const hook = loadWebhooks().find(h => h.id === req.params.id);
-  if (!hook) return res.status(404).end();
+  if (!hook) return reject(404, 'unknown webhook id');
+  if (event === 'ping') return res.json({ ok:true, pong:true });
   const sig = req.headers['x-hub-signature-256'] || '';
   const expected = 'sha256=' + crypto.createHmac('sha256', hook.secret).update(req.rawBody||'').digest('hex');
-  if (!crypto.timingSafeEqual(Buffer.from(expected.padEnd(71,'0')), Buffer.from(sig.padEnd(71,'0'))) || expected !== sig)
-    return res.status(401).end();
-  const pushedBranch = (req.body.ref || '').replace('refs/heads/', '');
-  if (pushedBranch !== hook.branch) return res.json({ skipped:true });
+  if (sig.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(sig)))
+    return reject(401, sig ? 'signature mismatch (check the webhook secret)' : 'missing X-Hub-Signature-256 (secret not set on GitHub?)');
+  let payload = req.body || {};
+  if (typeof payload.payload === 'string') {
+    try { payload = JSON.parse(payload.payload); } catch { return reject(400, 'unparseable form payload'); }
+  }
+  const pushedBranch = (payload.ref || '').replace('refs/heads/', '');
+  if (pushedBranch !== hook.branch)
+    return reject(200, `ref "${payload.ref || '(none)'}" is not branch "${hook.branch}"`, { skipped:true });
+  console.log(`[Webhook] ${hook.id} delivery=${delivery} push to ${hook.branch} — deploying ${hook.path}`);
   res.json({ ok:true });
   deployAndRecord(hook, 'webhook')
     .then(r => { if (!r.ok) console.error(`[Deploy] webhook ${hook.id} (${hook.path}) failed:\n${r.output}`); })

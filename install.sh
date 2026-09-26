@@ -407,8 +407,13 @@ install_php() {
     spinner_stop ok
 
     spinner_start "Installing PHP 8.3 extensions... (this may take a while)"
+    # Deliberately NOT the bare `php8.3` metapackage: it depends on
+    # libapache2-mod-php8.3 | php8.3-fpm | php8.3-cgi, and apt resolves that to
+    # Apache — which is then enabled at boot and grabs port 80 before FrankenPHP
+    # on the next reboot. FrankenPHP embeds its own PHP; only the CLI is needed
+    # here (composer, artisan).
     apt_install \
-      php8.3 php8.3-cli php8.3-common \
+      php8.3-cli php8.3-common \
       php8.3-pgsql php8.3-mysql php8.3-sqlite3 \
       php8.3-redis php8.3-curl php8.3-mbstring \
       php8.3-xml php8.3-zip php8.3-bcmath php8.3-intl \
@@ -640,6 +645,14 @@ CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 [Install]
 WantedBy=multi-user.target
 SVC
+
+  # Apache left enabled from an older install (see install_php) binds :80 at
+  # boot, so FrankenPHP fails with "address already in use" and restart-loops
+  # while the domain serves Apache's default page. Nothing else here uses it.
+  if systemctl list-unit-files apache2.service 2>/dev/null | grep -q '^apache2\.service'; then
+    run_logged systemctl disable --now apache2
+    log "Disabled apache2 (conflicts with FrankenPHP on port 80)"
+  fi
 
   run_logged systemctl daemon-reload
   run_logged systemctl enable frankenphp
