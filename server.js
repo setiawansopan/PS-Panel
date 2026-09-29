@@ -802,6 +802,36 @@ function hasFrontendBuild(dir) {
   } catch { return false; }
 }
 
+// Building straight into public/build makes Vite empty that folder first, so
+// any request that lands during the build (10+ seconds) fails with "Vite
+// manifest not found" — and a failed build leaves the site broken outright.
+// Instead build into public/build-next and swap it in: new (content-hashed,
+// non-colliding) assets are copied first, the manifest is replaced by an
+// atomic rename, and stale assets are removed last. Only for the standard
+// setup (build script is a bare `vite build`, default buildDirectory) —
+// anything else falls back to a plain build.
+const VITE_BUILD_SWAP_SH = `
+set -e
+N=public/build-next; B=public/build
+test -f "$N/manifest.json" || { echo "incomplete build: $N/manifest.json is missing" >&2; exit 1; }
+mkdir -p "$B"
+for d in "$N"/*/; do [ -d "$d" ] && cp -pR "$d" "$B/"; done
+for f in "$N"/*; do [ -f "$f" ] || continue; n=$(basename "$f"); cp -p "$f" "$B/.$n.tmp"; mv -f "$B/.$n.tmp" "$B/$n"; done
+(cd "$B" && find . -type f) | while IFS= read -r f; do [ -e "$N/$f" ] || rm -f "$B/$f"; done
+find "$B" -mindepth 1 -type d -empty -delete
+rm -rf "$N"
+echo "public/build updated: $(find "$B" -type f | wc -l) files"
+`;
+function canStageViteBuild(dir) {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
+    if (!/^\s*vite build[^&|;]*$/.test((pkg.scripts && pkg.scripts.build) || '')) return false;
+    const cfg = ['vite.config.js', 'vite.config.ts', 'vite.config.mjs']
+      .map(f => path.join(dir, f)).find(f => fs.existsSync(f));
+    return !!cfg && !/buildDirectory|outDir/.test(fs.readFileSync(cfg, 'utf8'));
+  } catch { return false; }
+}
+
 // ── Deploy history ──
 const DEPLOY_HISTORY_FILE = path.join(__dirname, 'deploy-history.json');
 const DEPLOY_HISTORY_MAX = 50;
@@ -949,8 +979,14 @@ async function runDeploySteps(hook) {
       const buildEnv = { ...process.env, NODE_OPTIONS: '--dns-result-order=ipv4first' };
       if (!await run('npm', ['install'], { env: buildEnv, timeout: 600000 }))
         return { ok: false, output: outParts.join(''), steps };
-      if (!await run('npm', ['run', 'build'], { env: buildEnv, timeout: 600000 }))
+      if (canStageViteBuild(appPath)) {
+        if (!await run('npm', ['run', 'build', '--', '--outDir', 'public/build-next'], { env: buildEnv, timeout: 600000 }))
+          return { ok: false, output: outParts.join(''), steps };
+        if (!await run('sh', ['-c', VITE_BUILD_SWAP_SH]))
+          return { ok: false, output: outParts.join(''), steps };
+      } else if (!await run('npm', ['run', 'build'], { env: buildEnv, timeout: 600000 })) {
         return { ok: false, output: outParts.join(''), steps };
+      }
       if (!fs.existsSync(path.join(appPath, 'public/build/manifest.json'))) {
         log('\n[ERROR] npm run build finished but public/build/manifest.json was not produced.\n[FAILED]\n');
         steps.push({ cmd: 'verify public/build/manifest.json', ok: false, output: 'manifest.json missing after build' });

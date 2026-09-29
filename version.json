@@ -1,7 +1,8 @@
 {
-  "version": "2.5.1",
+  "version": "2.5.2",
   "released": "2026-09-29",
   "notes": [
+    "Deploy: build Vite dilakukan ke public/build-next lalu ditukar ke public/build tanpa jeda (aset baru disalin dulu, manifest diganti atomik, aset lama dihapus terakhir) — sebelumnya Vite mengosongkan public/build selama build sehingga request saat deploy kena \"Vite manifest not found\", dan build gagal membuat situs rusak",
     "Deploy: perubahan lokal yang belum di-commit di server (hotfix manual, package-lock.json yang diubah npm install) otomatis di-`git stash` sebelum `git pull` — sebelumnya pull gagal \"local changes would be overwritten\" dan seluruh deploy berhenti; perubahan tetap bisa dipulihkan lewat `git stash list`",
     "Deploy: `php artisan queue:restart` dijalankan setiap deploy Laravel — tanpa ini queue worker yang sedang jalan tetap mengeksekusi kode job versi lama",
     "Deploy: chown storage/ & bootstrap/cache ke www-data dipindah ke SETELAH semua langkah artisan — sebelumnya view:cache (jalan sebagai root) meninggalkan file cache milik root",
