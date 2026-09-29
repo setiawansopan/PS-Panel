@@ -865,6 +865,15 @@ async function runDeploySteps(hook) {
     }
   }
 
+  // Uncommitted changes on the server (a manual hotfix, or package-lock.json
+  // rewritten by `npm install`) make `git pull` abort with "local changes would
+  // be overwritten", and then nothing else in the deploy runs. Stash them first
+  // so the server always ends up matching the repo — they stay recoverable via
+  // `git stash list`. Exits 0 with "No local changes to save" on a clean tree.
+  if (!await run('git', ['-C', appPath, '-c', 'user.name=PS Panel', '-c', 'user.email=ps-panel@localhost',
+                         'stash', 'push', '-m', 'ps-panel auto-stash before deploy']))
+    return { ok: false, output: outParts.join(''), steps };
+
   if (!await run('git', ['-C', appPath, 'pull', 'origin', safeBranch], { env: gitEnv }))
     return { ok: false, output: outParts.join(''), steps };
 
