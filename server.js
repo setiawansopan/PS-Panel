@@ -1220,8 +1220,15 @@ app.post('/api/clone', auth, (req, res) => {
 
 // ── Deploy ──
 app.post('/api/deploy', auth, async (req,res)=>{
-  const {path:p,branch,laravel}=req.body;
+  let {path:p,branch,laravel}=req.body;
   if(!p||!path.isAbsolute(p)) return res.status(400).json({error:'Absolute path required'});
+  // The Deploy page's vhost dropdown sends the vhost docroot, which for a
+  // Laravel app is `<project>/public` — but git/composer/npm/artisan must run
+  // in the project root. Step up to it instead of failing at composer install.
+  if (laravel && !fs.existsSync(path.join(p, 'composer.json'))
+      && path.basename(p) === 'public' && fs.existsSync(path.join(p, '..', 'composer.json'))) {
+    p = path.dirname(p);
+  }
   const result = await deployAndRecord({ path:p, branch, laravel }, 'manual');
   res.json(result);
 });

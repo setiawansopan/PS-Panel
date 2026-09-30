@@ -2183,7 +2183,7 @@ async function deploy(){
   out.textContent='Running deploy'+(isLaravel?' (Laravel mode)':'')+' ...\n';
   const r=await api('POST','/api/deploy',{path:p,branch,laravel:isLaravel});
   btn.innerHTML='▲ &nbsp;Run Deploy';btn.disabled=false;
-  out.textContent=r?r.output:'[error] No response';
+  out.textContent=r?(r.output||('[error] '+(r.error||'Unknown error'))):'[error] No response';
   out.style.color=r?.ok?'var(--accent)':'var(--danger)';
   loadDeployHistory();
 }
