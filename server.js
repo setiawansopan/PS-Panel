@@ -1576,10 +1576,17 @@ function cmpVer(a,b){
   return 0;
 }
 
+// Node's connect failures are often an AggregateError with an empty .message; surface the code/cause.
+function errMsg(e){
+  if(!e) return 'unknown error';
+  const parts = e.errors && e.errors.length ? e.errors.map(x=>x.code||x.message) : [];
+  return [e.message, e.code, ...parts].filter(Boolean).join(' ') || String(e);
+}
+
 // GET a URL, returning the body as a string (follows one redirect).
 function httpsGet(url, redirects=2){
   return new Promise((resolve,reject)=>{
-    const req = https.get(url, { timeout: 20000, headers:{'User-Agent':'PS-Panel'} }, res=>{
+    const req = https.get(url, { timeout: 20000, family: 4, headers:{'User-Agent':'PS-Panel'} }, res=>{
       if(res.statusCode>=300 && res.statusCode<400 && res.headers.location && redirects>0){
         res.resume(); return resolve(httpsGet(res.headers.location, redirects-1));
       }
@@ -1596,7 +1603,7 @@ function httpsGet(url, redirects=2){
 function httpsDownload(url, dest, redirects=2){
   return new Promise((resolve,reject)=>{
     const file = fs.createWriteStream(dest);
-    const req = https.get(url, { timeout: 60000, headers:{'User-Agent':'PS-Panel'} }, res=>{
+    const req = https.get(url, { timeout: 60000, family: 4, headers:{'User-Agent':'PS-Panel'} }, res=>{
       if(res.statusCode>=300 && res.statusCode<400 && res.headers.location && redirects>0){
         res.resume(); file.close(); fs.unlink(dest,()=>{});
         return resolve(httpsDownload(res.headers.location, dest, redirects-1));
@@ -1635,7 +1642,7 @@ app.get('/api/update/check', auth, async (req,res)=>{
       updateAvailable,
     });
   } catch(e){
-    res.status(502).json({ error:'Tidak bisa cek update: '+e.message, current: local.version });
+    res.status(502).json({ error:'Tidak bisa cek update: '+errMsg(e)+' ('+GITHUB_RAW+')', current: local.version });
   }
 });
 
@@ -1654,7 +1661,7 @@ app.post('/api/update/apply', auth, async (req,res)=>{
       catch(e){
         // version.json may not exist on very old branches — skip it, fail hard on the rest.
         if(rel==='version.json'){ out += `  • ${rel} (lewati, opsional)\n`; continue; }
-        out += `  ✗ ${rel} — ${e.message}\n[GAGAL] Download dibatalkan, tidak ada file yang diubah.\n`;
+        out += `  ✗ ${rel} — ${errMsg(e)}\n[GAGAL] Download dibatalkan, tidak ada file yang diubah.\n`;
         fs.rmSync(tmpDir,{recursive:true,force:true});
         return res.json({ ok:false, output:out });
       }
