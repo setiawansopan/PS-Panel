@@ -892,6 +892,37 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         </div>
       </div>
 
+      <div class="card" style="max-width:1040px;margin-top:14px">
+        <div class="ct">Ubah Password Panel <span class="ct-badge">Security</span></div>
+        <div class="g2">
+          <div>
+            <div class="fg">
+              <label class="inp-lbl">Password lama</label>
+              <input class="inp" type="password" id="pw-old" autocomplete="current-password">
+            </div>
+            <div class="fg">
+              <label class="inp-lbl">Password baru <span style="color:var(--dim);text-transform:none;letter-spacing:0">— minimal 8 karakter</span></label>
+              <input class="inp" type="password" id="pw-new" autocomplete="new-password">
+            </div>
+            <div class="fg">
+              <label class="inp-lbl">Konfirmasi password baru</label>
+              <input class="inp" type="password" id="pw-new2" autocomplete="new-password">
+            </div>
+            <button class="btn" onclick="changePassword()">✓ &nbsp;Simpan Password</button>
+            <div id="pw-msg" style="font-family:var(--mono);font-size:11px;margin-top:10px"></div>
+          </div>
+          <div style="background:var(--ink3);border-radius:9px;padding:14px">
+            <div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.9">
+              • Setelah diganti, semua sesi login lama dibatalkan<br>
+              • Anda akan diminta login ulang dengan password baru<br>
+              • Lupa password? Di server jalankan:<br>
+              <span style="color:var(--accent)">cd /opt/ps-panel &amp;&amp; node server.js --reset-password</span><br>
+              lalu <span style="color:var(--accent)">pm2 restart ps-panel</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div id="st-result" style="display:none;max-width:1040px;margin-top:14px"></div>
     </div>
 
@@ -1186,6 +1217,17 @@ async function login(){
   else document.getElementById('lerr').textContent='// '+(d.error||'invalid access key');
 }
 function logout(){localStorage.removeItem('psp_tok');location.reload();}
+async function changePassword(){
+  const o=document.getElementById('pw-old').value,n=document.getElementById('pw-new').value,n2=document.getElementById('pw-new2').value;
+  const msg=document.getElementById('pw-msg');
+  const show=(t,ok)=>{msg.style.color=ok?'var(--accent)':'var(--danger,#f87171)';msg.textContent=t;};
+  if(!o||!n) return show('// isi password lama dan baru');
+  if(n.length<8) return show('// password baru minimal 8 karakter');
+  if(n!==n2) return show('// konfirmasi password tidak cocok');
+  const d=await api('POST','/api/password',{oldPassword:o,newPassword:n});
+  if(d&&d.ok){show('// password diganti. mengalihkan ke login...',true);setTimeout(logout,1500);}
+  else show('// '+((d&&d.error)||'gagal mengganti password'));
+}
 
 function go(name){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));

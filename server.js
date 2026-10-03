@@ -19,9 +19,9 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-const SECRET = process.env.PANEL_SECRET || require('crypto').randomBytes(32).toString('hex');
 const PORT = process.env.PANEL_PORT || 8765;
 const CREDS_FILE = '/root/.pspanel_credentials';
+const AUTH_FILE  = process.env.PANEL_AUTH_FILE || '/root/.pspanel_auth';
 
 // ── Self-update config ──
 const https = require('https');
@@ -47,15 +47,61 @@ function getCreds() {
 }
 
 // ── Auth ──
-// Read the panel password from the credentials file first (same source as PG_PASSWORD),
-// falling back to the env var and then the default. This matters because how the process
-// is started (pm2 start, pm2 resurrect after reboot, systemd, manual `node server.js`)
-// does not reliably carry env vars across restarts, but the creds file always does.
-const ADMIN_HASH = bcrypt.hashSync(getCreds().PANEL_PASS || process.env.PANEL_PASS || 'admin123', 10);
+// Persistent auth state lives in AUTH_FILE (mode 600): { hash, secret, tv }.
+//  - hash   bcrypt hash of the admin password. Once the file exists it is the source of
+//           truth; PANEL_PASS (creds file / env) is only the initial password and is ignored
+//           afterwards, so a password changed from the panel survives restarts.
+//  - secret JWT signing secret, persisted so sessions survive restarts (PANEL_SECRET env wins).
+//  - tv     token version, bumped on password change to invalidate every existing token.
+function loadAuthState() {
+  try { return JSON.parse(fs.readFileSync(AUTH_FILE, 'utf8')); } catch { return {}; }
+}
+function saveAuthState(st) {
+  const tmp = AUTH_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(st), { mode: 0o600 });
+  fs.renameSync(tmp, AUTH_FILE);
+}
+const authState = loadAuthState();
+let dirty = false;
+if (!authState.hash) {
+  authState.hash = bcrypt.hashSync(getCreds().PANEL_PASS || process.env.PANEL_PASS || 'admin123', 10);
+  dirty = true;
+}
+if (!authState.secret) { authState.secret = crypto.randomBytes(32).toString('hex'); dirty = true; }
+if (!Number.isInteger(authState.tv)) { authState.tv = 0; dirty = true; }
+if (dirty) { try { saveAuthState(authState); } catch (e) { console.warn('[auth] cannot persist', AUTH_FILE, e.message); } }
+
+const SECRET = process.env.PANEL_SECRET || authState.secret;
+const MIN_PASS_LEN = 8;
+function signToken() { return jwt.sign({ role: 'admin', tv: authState.tv }, SECRET, { expiresIn: '8h' }); }
+function verifyToken(t) {
+  const p = jwt.verify(t, SECRET);
+  if ((p.tv || 0) !== authState.tv) throw new Error('token revoked');
+  return p;
+}
+function setPassword(newPass) {
+  authState.hash = bcrypt.hashSync(newPass, 10);
+  authState.tv += 1;
+  saveAuthState(authState);
+}
+
+// CLI: node server.js --reset-password [newpassword]
+if (process.argv.includes('--reset-password')) {
+  const i = process.argv.indexOf('--reset-password');
+  const pw = process.argv[i + 1] && !process.argv[i + 1].startsWith('--')
+    ? process.argv[i + 1]
+    : crypto.randomBytes(9).toString('base64url');
+  if (pw.length < MIN_PASS_LEN) { console.error(`Password minimal ${MIN_PASS_LEN} karakter.`); process.exit(1); }
+  setPassword(pw);
+  console.log(`Password panel direset. Password baru: ${pw}`);
+  console.log('Semua sesi login lama dibatalkan. Jika panel sedang berjalan: pm2 restart ps-panel');
+  process.exit(0);
+}
+
 function auth(req,res,next){
   const t = req.headers.authorization?.split(' ')[1];
   if(!t) return res.status(401).json({error:'Unauthorized'});
-  try { req.user = jwt.verify(t,SECRET); next(); }
+  try { req.user = verifyToken(t); next(); }
   catch { res.status(401).json({error:'Invalid token'}); }
 }
 
@@ -74,9 +120,27 @@ function checkRateLimit(ip) {
 app.post('/api/login',(req,res)=>{
   const ip = req.ip || req.socket.remoteAddress;
   if (checkRateLimit(ip)) return res.status(429).json({error:'Too many attempts. Try again in 15 minutes.'});
-  if(bcrypt.compareSync(req.body.password, ADMIN_HASH))
-    res.json({token: jwt.sign({role:'admin'},SECRET,{expiresIn:'8h'})});
+  if(typeof req.body.password === 'string' && bcrypt.compareSync(req.body.password, authState.hash))
+    res.json({token: signToken()});
   else res.status(401).json({error:'Wrong password'});
+});
+
+app.post('/api/password', auth, (req, res) => {
+  const ip = req.ip || req.socket.remoteAddress;
+  if (checkRateLimit('pw:' + ip)) return res.status(429).json({error:'Too many attempts. Try again in 15 minutes.'});
+  const { oldPassword, newPassword } = req.body || {};
+  if (typeof oldPassword !== 'string' || typeof newPassword !== 'string')
+    return res.status(400).json({error:'Password lama dan baru wajib diisi'});
+  if (!bcrypt.compareSync(oldPassword, authState.hash))
+    return res.status(401).json({error:'Password lama salah'});
+  if (newPassword.length < MIN_PASS_LEN)
+    return res.status(400).json({error:`Password baru minimal ${MIN_PASS_LEN} karakter`});
+  if (newPassword === oldPassword)
+    return res.status(400).json({error:'Password baru tidak boleh sama dengan yang lama'});
+  try { setPassword(newPassword); }
+  catch (e) { return res.status(500).json({error:'Gagal menyimpan: ' + e.message}); }
+  loginAttempts.delete('pw:' + ip);
+  res.json({ok:true});
 });
 
 // ── Services ──
@@ -742,7 +806,7 @@ app.get('/api/settings', auth, (req, res) => {
 
 app.post('/api/settings/update', auth, (req, res) => {
   const { password, php, frankenphp } = req.body || {};
-  if (!password || !bcrypt.compareSync(password, ADMIN_HASH))
+  if (!password || !bcrypt.compareSync(password, authState.hash))
     return res.status(401).json({ error: 'Wrong password' });
 
   try {
@@ -1373,7 +1437,7 @@ app.post('/api/files/upload', auth, (req,res)=>{
 
 // Download a file. Token via query param so a plain browser link works (same as WebSocket).
 app.get('/api/files/download', (req,res)=>{
-  try { jwt.verify(req.query.token, SECRET); }
+  try { verifyToken(req.query.token); }
   catch { return res.status(401).json({error:'Unauthorized'}); }
   const f = fmResolve(req.query.path);
   if(!f) return res.status(400).json({error:'Invalid path'});
@@ -1637,7 +1701,7 @@ app.post('/api/update/apply', auth, async (req,res)=>{
 // ── WebSocket real-time ──
 wss.on('connection', (ws, req)=>{
   const url = new URL(req.url, 'http://localhost');
-  try { jwt.verify(url.searchParams.get('token'), SECRET); }
+  try { verifyToken(url.searchParams.get('token')); }
   catch { ws.close(4001, 'Unauthorized'); return; }
   const iv = setInterval(async()=>{
     if(ws.readyState!==WebSocket.OPEN){clearInterval(iv);return;}

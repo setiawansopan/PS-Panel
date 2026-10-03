@@ -38,11 +38,14 @@ The server serves static files from `./public/`. The HTML file is not served dir
 
 JWT-based. Login POSTs to `/api/login` → receives a token → stored in `localStorage` as `psp_tok` → passed as `Authorization: Bearer <token>` on all subsequent API calls. Token expiry is 8 hours.
 
+The password hash and JWT secret are persisted in `/root/.pspanel_auth` (mode 600, override with `PANEL_AUTH_FILE`). Once that file exists it is the source of truth; `PANEL_PASS` is only the initial password. Changing the password (Settings page → *Ubah Password*) bumps a token version so old tokens stop working. Forgotten password: `node server.js --reset-password [newpass]` on the server, then `pm2 restart ps-panel`.
+
 ### Backend API surface (`server.js`)
 
 | Route | What it does |
 |---|---|
 | `POST /api/login` | bcrypt password check → JWT |
+| `POST /api/password` | change admin password (old + new); revokes all existing tokens |
 | `GET /api/metrics` | CPU, RAM, disk, network, top 5 processes via `systeminformation` |
 | `GET /api/services` | `systemctl is-active` for each managed service |
 | `POST /api/services/:name/:action` | `systemctl start/stop/restart` |
