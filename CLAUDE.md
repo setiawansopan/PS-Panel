@@ -46,6 +46,7 @@ The password hash and JWT secret are persisted in `/root/.pspanel_auth` (mode 60
 |---|---|
 | `POST /api/login` | bcrypt password check → JWT |
 | `POST /api/password` | change admin password (old + new); revokes all existing tokens |
+| `GET /api/autotune`, `POST /api/autotune/{apply,revert,boot}` | auto-tune FrankenPHP `num_threads` + PostgreSQL memory from cores/RAM (writes need the panel password) |
 | `GET /api/metrics` | CPU, RAM, disk, network, top 5 processes via `systeminformation` |
 | `GET /api/services` | `systemctl is-active` for each managed service |
 | `POST /api/services/:name/:action` | `systemctl start/stop/restart` |
@@ -63,6 +64,10 @@ The password hash and JWT secret are persisted in `/root/.pspanel_auth` (mode 60
 Single-page app with no framework or build step. Navigation hides/shows `<div class="page">` sections. Each page loads data from the API on entry via `go(name)`. The dashboard auto-refreshes metrics every 5 seconds and services every 10 seconds via `setInterval`.
 
 CSS uses short utility class names (`mc` = metric card, `sr` = status row, `ir` = info row, `ni` = nav item, etc.) defined in the `<style>` block.
+
+## Auto-tune
+
+`computeTuneProfile(cores, ramMB)` in `server.js` is a pure function that recommends `num_threads` and PostgreSQL memory settings. PostgreSQL values go to `/etc/postgresql/<ver>/main/conf.d/90-ps-panel-autotune.conf` (validated with `postgres -C`, rolled back on failure); `num_threads` is merged into the Caddyfile's single global `{ frankenphp }` block (Caddy rejects a second global block). The optional boot unit `ps-panel-autotune.service` runs `node server.js --autotune` before PostgreSQL/FrankenPHP start. Keep all panel code in `server.js`: the self-update only downloads the files listed in `UPDATE_FILES`, so a new `require`d file would crash older installs after an update.
 
 ## SSL / Let's Encrypt
 

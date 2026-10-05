@@ -1,7 +1,7 @@
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
-const { exec, execFile } = require('child_process');
+const { exec, execFile, spawnSync } = require('child_process');
 const { promisify } = require('util');
 const execFileAsync = promisify(execFile);
 // reloadFrankenPHP is a function declaration further down (hoisted), safe to wrap here.
@@ -132,7 +132,7 @@ app.post('/api/password', auth, (req, res) => {
   if (typeof oldPassword !== 'string' || typeof newPassword !== 'string')
     return res.status(400).json({error:'Password lama dan baru wajib diisi'});
   if (!bcrypt.compareSync(oldPassword, authState.hash))
-    return res.status(401).json({error:'Password lama salah'});
+    return res.status(403).json({error:'Password lama salah'});
   if (newPassword.length < MIN_PASS_LEN)
     return res.status(400).json({error:`Password baru minimal ${MIN_PASS_LEN} karakter`});
   if (newPassword === oldPassword)
@@ -327,7 +327,7 @@ app.get('/api/frankenphp', auth, async (req, res) => {
 // ── Virtual Hosts ──
 const VHOSTS_DIR = '/etc/frankenphp/sites';
 fs.mkdirSync(VHOSTS_DIR,{recursive:true});
-const CADDYFILE_PATH = '/etc/frankenphp/Caddyfile';
+const CADDYFILE_PATH = process.env.PANEL_CADDYFILE || '/etc/frankenphp/Caddyfile';
 
 // CRITICAL self-heal: FrankenPHP's PHP app is only provisioned if the Caddyfile's
 // global options block (the very first block, before any site) declares
@@ -340,6 +340,14 @@ const CADDYFILE_PATH = '/etc/frankenphp/Caddyfile';
 function ensureFrankenPHPGlobalBlock() {
   if (!fs.existsSync(CADDYFILE_PATH)) return false;
   const content = fs.readFileSync(CADDYFILE_PATH, 'utf8');
+  // Older panel versions prepended a SECOND global block when saving num_threads; Caddy
+  // refuses to start with two. Merge them into one.
+  if (content.includes('# PS-PANEL-MANAGED-START') && (content.match(/^\{[ \t]*$/gm) || []).length > 1) {
+    const t = parseInt((content.match(/num_threads\s+(\d+)/) || [])[1], 10);
+    fs.copyFileSync(CADDYFILE_PATH, CADDYFILE_PATH + '.bak.' + Date.now());
+    fs.writeFileSync(CADDYFILE_PATH, tuneCaddyContent(content, Number.isInteger(t) ? t : null));
+    return true;
+  }
   const stripped = content.split('\n').filter(l => !l.trim().startsWith('#')).join('\n').trim();
   if (stripped.startsWith('{')) {
     const firstBlock = stripped.match(/^\{([\s\S]*?)\n\}/);
@@ -761,35 +769,271 @@ function readFrankenphpSettings() {
   } catch { return { num_threads: null }; }
 }
 
+// Caddy allows exactly ONE global options block and it must be first, and install.sh already
+// ships `{ frankenphp }`. So num_threads is merged INTO that block rather than prepended as a
+// second block (which made Caddy refuse to start). Also folds in the legacy managed block that
+// older panel versions prepended. threads = null removes the setting.
+function tuneCaddyContent(content, threads) {
+  content = content.replace(/# PS-PANEL-MANAGED-START[\s\S]*?# PS-PANEL-MANAGED-END\n*/, '');
+  const tpl = (ind) => `${ind}frankenphp {\n${ind}\tnum_threads ${threads}\n${ind}}`;
+  const m = content.match(/^((?:[ \t]*(?:#[^\n]*)?\n)*)\{[ \t]*\n([\s\S]*?)\n\}[ \t]*(?=\n|$)/);
+  if (!m) {
+    if (threads == null) return content;
+    return `{\n${tpl('\t')}\n}\n\n` + content;
+  }
+  let body = m[2];
+  if (/num_threads\s+\d+/.test(body)) {
+    body = threads == null ? body.replace(/^[ \t]*num_threads\s+\d+[ \t]*\n?/m, '').replace(/^([ \t]*frankenphp)[ \t]*\{\s*\}[ \t]*$/m, '$1')
+                           : body.replace(/(num_threads\s+)\d+/, `$1${threads}`);
+  } else if (threads != null) {
+    if (/^[ \t]*frankenphp[ \t]*\{/m.test(body))
+      body = body.replace(/^([ \t]*)(frankenphp[ \t]*\{[ \t]*\n?)/m, (_, ind, open) => `${ind}${open.replace(/\n$/, '')}\n${ind}\tnum_threads ${threads}\n`);
+    else if (/^[ \t]*frankenphp[ \t]*$/m.test(body))
+      body = body.replace(/^([ \t]*)frankenphp[ \t]*$/m, (_, ind) => tpl(ind));
+    else body = body + '\n' + tpl('\t');
+  }
+  return content.slice(0, m.index) + m[1] + '{\n' + body + '\n}' + content.slice(m.index + m[0].length);
+}
+
 function updateFrankenphpSettings(updates) {
   if (!fs.existsSync(CADDYFILE_PATH)) throw new Error('Caddyfile not found');
   const threads = parseInt(updates.num_threads);
   if (!Number.isInteger(threads) || threads < 1 || threads > 256)
     throw new Error('num_threads must be 1-256');
 
-  // Backup
   fs.copyFileSync(CADDYFILE_PATH, CADDYFILE_PATH + '.bak.' + Date.now());
-  let content = fs.readFileSync(CADDYFILE_PATH, 'utf8');
-
-  const MARK_START = '# PS-PANEL-MANAGED-START';
-  const MARK_END   = '# PS-PANEL-MANAGED-END';
-  const block =
-`${MARK_START}
-{
-\tfrankenphp {
-\t\tnum_threads ${threads}
-\t}
+  fs.writeFileSync(CADDYFILE_PATH, tuneCaddyContent(fs.readFileSync(CADDYFILE_PATH, 'utf8'), threads));
 }
-${MARK_END}`;
 
-  const blockRe = new RegExp(`${MARK_START}[\\s\\S]*?${MARK_END}`);
-  if (blockRe.test(content)) {
-    content = content.replace(blockRe, block);
-  } else {
-    content = block + '\n\n' + content;
+// ── Auto-tune ──
+// Sizes FrankenPHP threads and PostgreSQL memory settings to the machine's cores/RAM.
+//  - FrankenPHP: `num_threads` inside the Caddyfile's global `frankenphp` block.
+//  - PostgreSQL: a dedicated drop-in file in the cluster's conf.d (never edits postgresql.conf
+//    values in place), validated with `postgres -C` and rolled back on failure.
+//  - Optional boot unit re-applies the profile before Postgres/FrankenPHP start, for VMs whose
+//    cores/RAM change between boots. Run by hand: node server.js --autotune [--dry-run [--cores=N --ram=MB]]
+const os = require('os');
+const PG_ETC = process.env.PANEL_PG_ETC || '/etc/postgresql';
+const PG_LIB = process.env.PANEL_PG_LIB || '/usr/lib/postgresql';
+const AUTOTUNE_PG_FILE = '90-ps-panel-autotune.conf';
+const AUTOTUNE_UNIT_NAME = 'ps-panel-autotune';
+const AUTOTUNE_UNIT = process.env.PANEL_AUTOTUNE_UNIT || `/etc/systemd/system/${AUTOTUNE_UNIT_NAME}.service`;
+const AUTOTUNE_LOG = process.env.PANEL_AUTOTUNE_LOG || '/var/log/ps-panel-autotune.log';
+
+function machineSpecs() {
+  const cores = (os.availableParallelism ? os.availableParallelism() : os.cpus().length) || 1;
+  return { cores, ramMB: Math.round(os.totalmem() / 1048576) };
+}
+
+// Pure function: specs → recommended values. Conservative because FrankenPHP, Redis and
+// PostgreSQL share the box.
+function computeTuneProfile(cores, ramMB) {
+  cores = Math.max(1, parseInt(cores, 10) || 1);
+  ramMB = Math.max(256, parseInt(ramMB, 10) || 256);
+  const clamp   = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const floorTo = (v, step) => Math.floor(v / step) * step;
+  // PHP requests mostly wait on the DB, so allow ~3 threads per core, but cap by a ~64 MB
+  // budget per thread out of 40% of RAM so small VMs don't swap.
+  const threads = clamp(Math.min(cores * 3, Math.floor(ramMB * 0.4 / 64)), 2, 256);
+  const sb      = clamp(floorTo(ramMB * 0.25, 16), 16, 8192);
+  const ecs     = clamp(floorTo(ramMB * 0.5, 64), 128, 65536);
+  const maxConn = clamp(Math.ceil((threads * 2 + 20) / 50) * 50, 100, 300);
+  const wm      = clamp(Math.floor((ramMB - sb) / (maxConn * 3)), 4, 64);
+  const mwm     = clamp(floorTo(ramMB / 16, 16), 64, 1024);
+  return {
+    num_threads: threads,
+    shared_buffers: sb + 'MB',
+    effective_cache_size: ecs + 'MB',
+    work_mem: wm + 'MB',
+    maintenance_work_mem: mwm + 'MB',
+    max_connections: maxConn,
+  };
+}
+const TUNE_PG_KEYS = ['shared_buffers','effective_cache_size','work_mem','maintenance_work_mem','max_connections'];
+
+function findPgCluster() {
+  try {
+    const vers = fs.readdirSync(PG_ETC)
+      .filter(v => /^\d+$/.test(v) && fs.existsSync(path.join(PG_ETC, v, 'main', 'postgresql.conf')))
+      .sort((a, b) => b - a);
+    if (!vers.length) return null;
+    const v = vers[0], dir = path.join(PG_ETC, v, 'main');
+    return { version: v, dir, conf: path.join(dir, 'postgresql.conf'), confD: path.join(dir, 'conf.d'),
+             bin: path.join(PG_LIB, v, 'bin', 'postgres') };
+  } catch { return null; }
+}
+
+// Returns null when the config parses, an error string when it does not, or
+// 'skip' when there is no postgres binary to validate with.
+function pgValidate(pg) {
+  if (!fs.existsSync(pg.bin)) return 'skip';
+  const r = spawnSync('runuser', ['-u', 'postgres', '--', pg.bin, '-C', 'shared_buffers', '-c', 'config_file=' + pg.conf],
+    { encoding: 'utf8', timeout: 15000 });
+  return r.status === 0 ? null : ((r.stderr || (r.error && r.error.message) || 'validation failed').trim());
+}
+
+function pgTuneFileContent(profile) {
+  return '# Managed by PS Panel auto-tune (Settings → Auto-Tune). Do not edit by hand:\n' +
+    '# it is rewritten on apply. Remove this file (or use Reset in the panel) to revert.\n' +
+    TUNE_PG_KEYS.map(k => `${k} = ${profile[k]}`).join('\n') + '\n';
+}
+
+function ensurePgIncludeDir(pg) {
+  const c = fs.readFileSync(pg.conf, 'utf8');
+  if (/^\s*include_dir\s*=\s*'conf\.d'/m.test(c)) return;
+  fs.copyFileSync(pg.conf, pg.conf + '.bak.' + Date.now());
+  fs.appendFileSync(pg.conf, "\ninclude_dir = 'conf.d'\n");
+}
+
+// Applies the profile to files only (services are not restarted here). Idempotent: unchanged
+// values are not rewritten, so a boot-time run does not pile up backups.
+function applyTune(profile) {
+  const steps = [];
+  let ok = true;
+  // FrankenPHP
+  try {
+    if (!fs.existsSync(CADDYFILE_PATH)) steps.push({ name: 'frankenphp', status: 'skipped', detail: 'Caddyfile tidak ditemukan' });
+    else if (readFrankenphpSettings().num_threads === profile.num_threads)
+      steps.push({ name: 'frankenphp', status: 'unchanged', detail: `num_threads ${profile.num_threads}` });
+    else { updateFrankenphpSettings({ num_threads: profile.num_threads });
+           steps.push({ name: 'frankenphp', status: 'changed', detail: `num_threads ${profile.num_threads}` }); }
+  } catch (e) { ok = false; steps.push({ name: 'frankenphp', status: 'error', detail: e.message }); }
+  // PostgreSQL
+  const pg = findPgCluster();
+  if (!pg) steps.push({ name: 'postgresql', status: 'skipped', detail: 'cluster PostgreSQL tidak ditemukan' });
+  else {
+    const file = path.join(pg.confD, AUTOTUNE_PG_FILE);
+    const next = pgTuneFileContent(profile);
+    let prev = null; try { prev = fs.readFileSync(file, 'utf8'); } catch {}
+    if (prev === next) steps.push({ name: 'postgresql', status: 'unchanged', detail: file });
+    else {
+      try {
+        ensurePgIncludeDir(pg);
+        fs.mkdirSync(pg.confD, { recursive: true });
+        fs.writeFileSync(file + '.tmp', next, { mode: 0o644 });
+        fs.renameSync(file + '.tmp', file);
+        const bad = pgValidate(pg);
+        if (bad && bad !== 'skip') {
+          if (prev === null) fs.rmSync(file, { force: true }); else fs.writeFileSync(file, prev);
+          ok = false; steps.push({ name: 'postgresql', status: 'error', detail: 'validasi gagal, dikembalikan: ' + bad });
+        } else steps.push({ name: 'postgresql', status: 'changed', detail: file + (bad === 'skip' ? ' (tidak divalidasi: biner postgres tidak ada)' : '') });
+      } catch (e) { ok = false; steps.push({ name: 'postgresql', status: 'error', detail: e.message }); }
+    }
   }
-  fs.writeFileSync(CADDYFILE_PATH, content);
+  return { ok, steps };
 }
+
+function revertTune() {
+  const steps = [];
+  try {
+    const cur = fs.existsSync(CADDYFILE_PATH) ? fs.readFileSync(CADDYFILE_PATH, 'utf8') : null;
+    const nxt = cur === null ? null : tuneCaddyContent(cur, null);
+    if (cur !== null && nxt !== cur) {
+      fs.copyFileSync(CADDYFILE_PATH, CADDYFILE_PATH + '.bak.' + Date.now());
+      fs.writeFileSync(CADDYFILE_PATH, nxt);
+      ensureFrankenPHPGlobalBlock();
+      steps.push({ name: 'frankenphp', status: 'changed', detail: 'num_threads kembali ke default' });
+    } else steps.push({ name: 'frankenphp', status: 'unchanged', detail: 'tidak ada setelan terkelola' });
+  } catch (e) { steps.push({ name: 'frankenphp', status: 'error', detail: e.message }); }
+  try {
+    const pg = findPgCluster();
+    const file = pg && path.join(pg.confD, AUTOTUNE_PG_FILE);
+    if (file && fs.existsSync(file)) { fs.rmSync(file); steps.push({ name: 'postgresql', status: 'changed', detail: 'setelan auto-tune dihapus' }); }
+    else steps.push({ name: 'postgresql', status: 'unchanged', detail: 'tidak ada setelan terkelola' });
+  } catch (e) { steps.push({ name: 'postgresql', status: 'error', detail: e.message }); }
+  return { ok: !steps.some(s => s.status === 'error'), steps };
+}
+
+function autotuneLog(msg) {
+  const line = `${new Date().toISOString()} ps-panel-autotune: ${msg}`;
+  console.log(line);
+  try { fs.appendFileSync(AUTOTUNE_LOG, line + '\n'); } catch {}
+}
+
+function bootUnitText() {
+  return `[Unit]
+Description=PS Panel auto-tune (FrankenPHP threads + PostgreSQL memory) sesuai core & RAM
+DefaultDependencies=no
+After=local-fs.target
+Before=postgresql.service ${(() => { const p = findPgCluster(); return p ? `postgresql@${p.version}-main.service ` : ''; })()}frankenphp.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=${process.execPath} ${path.join(PANEL_DIR, 'server.js')} --autotune
+TimeoutSec=60
+
+[Install]
+WantedBy=multi-user.target
+`;
+}
+
+function checkPanelPassword(req, res) {
+  const { password } = req.body || {};
+  if (typeof password !== 'string' || !bcrypt.compareSync(password, authState.hash)) {
+    res.status(403).json({ error: 'Wrong password' }); // not 401: the frontend api() logs out on 401
+    return false;
+  }
+  return true;
+}
+function restartTuned(cb) {
+  exec('systemctl restart postgresql', (e1, _o1, se1) => {
+    exec('systemctl restart frankenphp', (e2, _o2, se2) => {
+      cb({ postgresql: e1 ? (se1 || e1.message) : null, frankenphp: e2 ? (se2 || e2.message) : null });
+    });
+  });
+}
+
+app.get('/api/autotune', auth, async (req, res) => {
+  const specs = machineSpecs();
+  const profile = computeTuneProfile(specs.cores, specs.ramMB);
+  const current = { num_threads: readFrankenphpSettings().num_threads };
+  const pg = findPgCluster();
+  if (pg && fs.existsSync(pg.bin)) {
+    await Promise.all(TUNE_PG_KEYS.map(async k => {
+      try {
+        const { stdout } = await execFileAsync('runuser', ['-u', 'postgres', '--', pg.bin, '-C', k, '-c', 'config_file=' + pg.conf], { timeout: 10000 });
+        current[k] = stdout.trim();
+      } catch { current[k] = null; }
+    }));
+  }
+  const boot = { installed: fs.existsSync(AUTOTUNE_UNIT), enabled: false };
+  if (boot.installed) boot.enabled = await new Promise(r => exec(`systemctl is-enabled ${AUTOTUNE_UNIT_NAME}`, (e, o) => r(!e && o.trim() === 'enabled')));
+  res.json({ ok: true, specs, profile, current, postgres: pg ? { version: pg.version } : null, boot });
+});
+
+app.post('/api/autotune/apply', auth, (req, res) => {
+  if (!checkPanelPassword(req, res)) return;
+  const specs = machineSpecs();
+  const profile = computeTuneProfile(specs.cores, specs.ramMB);
+  const result = applyTune(profile);
+  autotuneLog(`apply (${specs.cores} core / ${specs.ramMB} MB): ` + result.steps.map(s => `${s.name}=${s.status}`).join(' '));
+  if (!req.body.restart || !result.ok) return res.json({ ...result, profile, restarted: false });
+  restartTuned(errs => res.json({ ...result, profile, restarted: true, restartErrors: errs }));
+});
+
+app.post('/api/autotune/revert', auth, (req, res) => {
+  if (!checkPanelPassword(req, res)) return;
+  const result = revertTune();
+  autotuneLog('revert: ' + result.steps.map(s => `${s.name}=${s.status}`).join(' '));
+  if (!req.body.restart || !result.ok) return res.json({ ...result, restarted: false });
+  restartTuned(errs => res.json({ ...result, restarted: true, restartErrors: errs }));
+});
+
+app.post('/api/autotune/boot', auth, (req, res) => {
+  if (!checkPanelPassword(req, res)) return;
+  const enable = !!req.body.enabled;
+  const cmds = enable
+    ? () => { fs.writeFileSync(AUTOTUNE_UNIT, bootUnitText()); return 'systemctl daemon-reload && systemctl enable ' + AUTOTUNE_UNIT_NAME; }
+    : () => 'systemctl disable ' + AUTOTUNE_UNIT_NAME;
+  try {
+    exec(cmds(), (err, _o, se) => {
+      if (err) return res.status(500).json({ error: se || err.message });
+      autotuneLog('boot auto-tune ' + (enable ? 'enabled' : 'disabled'));
+      res.json({ ok: true, enabled: enable });
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 app.get('/api/settings', auth, (req, res) => {
   try {
@@ -1724,6 +1968,21 @@ wss.on('connection', (ws, req)=>{
   }, 2000);
   ws.on('close',()=>clearInterval(iv));
 });
+
+// CLI: node server.js --autotune [--dry-run [--cores=N --ram=MB]]  (boot unit entry point)
+if (process.argv.includes('--autotune')) {
+  const dry = process.argv.includes('--dry-run');
+  const argNum = n => { const a = process.argv.find(x => x.startsWith(`--${n}=`)); return a ? parseInt(a.split('=')[1], 10) : null; };
+  const sp = machineSpecs();
+  const cores = (dry && argNum('cores')) || sp.cores, ramMB = (dry && argNum('ram')) || sp.ramMB;
+  const profile = computeTuneProfile(cores, ramMB);
+  const desc = `${cores} core / ${ramMB} MB -> threads=${profile.num_threads} ` + TUNE_PG_KEYS.map(k => `${k}=${profile[k]}`).join(' ');
+  if (dry) { console.log('DRY-RUN (tidak ada yang diubah, log tidak ditulis): ' + desc); process.exit(0); }
+  autotuneLog('terdeteksi ' + desc);
+  const result = applyTune(profile);
+  result.steps.forEach(s => autotuneLog(`${s.name}: ${s.status} — ${s.detail}`));
+  process.exit(result.ok ? 0 : 1);
+}
 
 server.listen(PORT,'0.0.0.0',()=>console.log(`PS Panel → http://0.0.0.0:${PORT}`));
 

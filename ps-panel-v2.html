@@ -893,6 +893,41 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       </div>
 
       <div class="card" style="max-width:1040px;margin-top:14px">
+        <div class="ct">Auto-Tune Performa <span class="ct-badge" id="at-specs">—</span></div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.8;margin-bottom:12px">
+          Menyesuaikan jumlah thread FrankenPHP dan memori PostgreSQL dengan jumlah core &amp; RAM server ini.
+        </div>
+        <div id="at-table" style="font-family:var(--mono);font-size:12px;margin-bottom:14px"></div>
+        <div class="g2">
+          <div>
+            <div class="fg">
+              <label class="inp-lbl">Password panel <span style="color:var(--dim);text-transform:none;letter-spacing:0">— untuk konfirmasi perubahan</span></label>
+              <input class="inp" type="password" id="at-pw" autocomplete="current-password">
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn" onclick="autotuneAct('apply',false)">✓ &nbsp;Terapkan</button>
+              <button class="btn btn-ghost" onclick="autotuneAct('apply',true)">↻ &nbsp;Terapkan &amp; restart</button>
+              <button class="btn btn-ghost" onclick="autotuneAct('revert',false)">⎌ &nbsp;Reset ke default</button>
+            </div>
+            <div style="margin-top:12px;display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;color:var(--dim)">
+              <span>Otomatis saat boot: <b id="at-boot-state">—</b></span>
+              <button class="btn btn-ghost" id="at-boot-btn" onclick="autotuneBoot()">—</button>
+            </div>
+            <div id="at-msg" style="font-family:var(--mono);font-size:11px;margin-top:10px;line-height:1.7"></div>
+          </div>
+          <div style="background:var(--ink3);border-radius:9px;padding:14px">
+            <div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.9">
+              • <b>Terapkan</b> hanya menulis konfigurasi; efeknya setelah service di-restart atau server reboot<br>
+              • <b>Terapkan &amp; restart</b> me-restart PostgreSQL dan FrankenPHP, koneksi terputus beberapa detik. Jangan saat jam sibuk<br>
+              • Konfigurasi PostgreSQL divalidasi dulu dan dibatalkan otomatis bila ditolak<br>
+              • <b>Otomatis saat boot</b> berguna bila core/RAM VM sering berubah; nilai <span style="color:var(--accent)">num_threads</span> manual akan ditimpa<br>
+              • CLI: <span style="color:var(--accent)">node server.js --autotune --dry-run</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="max-width:1040px;margin-top:14px">
         <div class="ct">Ubah Password Panel <span class="ct-badge">Security</span></div>
         <div class="g2">
           <div>
@@ -1217,6 +1252,50 @@ async function login(){
   else document.getElementById('lerr').textContent='// '+(d.error||'invalid access key');
 }
 function logout(){localStorage.removeItem('psp_tok');location.reload();}
+// ── Auto-Tune ──
+const AT_ROWS=[['num_threads','FrankenPHP num_threads'],['shared_buffers','PostgreSQL shared_buffers'],['effective_cache_size','PostgreSQL effective_cache_size'],['work_mem','PostgreSQL work_mem'],['maintenance_work_mem','PostgreSQL maintenance_work_mem'],['max_connections','PostgreSQL max_connections']];
+async function loadAutotune(){
+  const t=document.getElementById('at-table');
+  const d=await api('GET','/api/autotune');
+  if(!d||!d.ok){t.innerHTML='<span style="color:var(--danger)">// gagal memuat data auto-tune</span>';return;}
+  document.getElementById('at-specs').textContent=`${d.specs.cores} core · ${d.specs.ramMB} MB`;
+  let h='<div style="display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:6px 14px"><div style="color:var(--muted)">SETELAN</div><div style="color:var(--muted)">SAAT INI</div><div style="color:var(--muted)">REKOMENDASI</div>';
+  for(const [k,label] of AT_ROWS){
+    const cur=d.current[k], rec=d.profile[k];
+    const same=cur!=null&&String(cur).toLowerCase()===String(rec).toLowerCase();
+    h+=`<div>${esc(label)}</div><div>${cur==null?'—':esc(cur)}</div><div style="color:${same?'var(--accent)':'var(--warn)'}">${esc(rec)}${same?' ✓':''}</div>`;
+  }
+  t.innerHTML=h+'</div>'+(d.postgres?'':'<div style="color:var(--muted);margin-top:8px">// PostgreSQL tidak terdeteksi, hanya FrankenPHP yang disetel</div>');
+  document.getElementById('at-boot-state').textContent=d.boot.enabled?'AKTIF':'nonaktif';
+  const b=document.getElementById('at-boot-btn');
+  b.textContent=d.boot.enabled?'Nonaktifkan':'Aktifkan';b.dataset.enable=d.boot.enabled?'0':'1';
+}
+function atShow(t,ok){const m=document.getElementById('at-msg');m.style.color=ok?'var(--accent)':'var(--danger)';m.innerHTML=t;}
+function atSteps(d){return (d.steps||[]).map(s=>`${esc(s.name)}: <b>${esc(s.status)}</b> — ${esc(s.detail)}`).join('<br>');}
+async function autotuneAct(kind,restart){
+  const pw=document.getElementById('at-pw').value;
+  if(!pw) return atShow('// isi password panel dulu');
+  if(restart&&!confirm('PostgreSQL dan FrankenPHP akan di-restart; koneksi terputus beberapa detik. Lanjutkan?')) return;
+  atShow('// memproses...',true);
+  const d=await api('POST','/api/autotune/'+kind,{password:pw,restart});
+  if(!d) return atShow('// gagal menghubungi server');
+  if(d.error) return atShow('// '+esc(d.error));
+  let msg=atSteps(d);
+  if(d.restarted){const e=d.restartErrors||{};msg+='<br>restart: '+((e.postgresql||e.frankenphp)?'<b>gagal</b> '+esc(e.postgresql||e.frankenphp):'<b>ok</b>');}
+  else if(d.ok) msg+='<br>// belum di-restart: efek berlaku setelah restart/reboot';
+  atShow(msg,d.ok);
+  document.getElementById('at-pw').value='';
+  loadAutotune();
+}
+async function autotuneBoot(){
+  const pw=document.getElementById('at-pw').value;
+  if(!pw) return atShow('// isi password panel dulu');
+  const enabled=document.getElementById('at-boot-btn').dataset.enable==='1';
+  const d=await api('POST','/api/autotune/boot',{password:pw,enabled});
+  if(d&&d.ok){atShow('// auto-tune saat boot '+(enabled?'diaktifkan':'dinonaktifkan'),true);document.getElementById('at-pw').value='';loadAutotune();}
+  else atShow('// '+esc((d&&d.error)||'gagal'));
+}
+
 async function changePassword(){
   const o=document.getElementById('pw-old').value,n=document.getElementById('pw-new').value,n2=document.getElementById('pw-new2').value;
   const msg=document.getElementById('pw-msg');
@@ -1242,7 +1321,7 @@ function go(name){
   if(name==='postgres')  loadPostgres();
   if(name==='frankenphp') loadFrankenphp();
   if(name==='deploy'){loadWebhookList();loadDeployVhosts();loadDeployHistory();}
-  if(name==='settings')  loadSettings();
+  if(name==='settings')  {loadSettings();loadAutotune();}
   if(name==='update')    checkUpdate();
 }
 

@@ -1,7 +1,10 @@
 {
-  "version": "2.6.1",
-  "released": "2026-10-03",
+  "version": "2.7.0",
+  "released": "2026-10-05",
   "notes": [
+    "Settings: fitur Auto-Tune Performa — menyetel num_threads FrankenPHP dan memori PostgreSQL (shared_buffers, effective_cache_size, work_mem, maintenance_work_mem, max_connections) sesuai jumlah core & RAM. Tabel \"saat ini vs rekomendasi\", tombol Terapkan / Terapkan & restart / Reset ke default, dan opsi otomatis saat boot (systemd) untuk VM yang spesifikasinya sering berubah. Setelan PostgreSQL ditulis ke conf.d/90-ps-panel-autotune.conf (postgresql.conf tidak disentuh), divalidasi dengan `postgres -C` dan dibatalkan otomatis bila ditolak. CLI: `node server.js --autotune [--dry-run --cores=N --ram=MB]`",
+    "Perbaikan: menyimpan num_threads di Settings sebelumnya menambah blok global kedua ke Caddyfile, padahal Caddy hanya mengizinkan satu dan hasil install.sh sudah punya `{ frankenphp }` — FrankenPHP bisa gagal start. Kini num_threads digabung ke blok global yang ada, dan Caddyfile ganda dari versi lama diperbaiki otomatis saat panel start",
+    "Perbaikan: password lama yang salah di Ubah Password sebelumnya melempar pengguna ke halaman login tanpa pesan; kini pesan error tampil dan sesi tetap aktif",
     "Update: cek/unduh update dipaksa lewat IPv4 dan pesan error kini menampilkan penyebab sebenarnya (sebelumnya kosong \"Tidak bisa cek update:\" di server dengan IPv6 rusak / GitHub tak terjangkau)",
     "Settings: menu Ubah Password Panel (password lama + baru, minimal 8 karakter); setelah diganti semua sesi login lama dibatalkan. Hash password & JWT secret kini disimpan permanen di /root/.pspanel_auth (sesi tidak lagi hilang saat restart). Lupa password: `node server.js --reset-password [passwordbaru]` di server lalu `pm2 restart ps-panel`",
     "Deploy manual: path docroot `public/` dari dropdown virtual host otomatis dinaikkan ke root project Laravel (folder berisi composer.json) — sebelumnya deploy manual project Laravel selalu gagal; pesan error dari server kini tampil di output deploy, bukan `undefined`",
