@@ -839,7 +839,7 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       </div>
 
       <div id="st-banner" style="display:none;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:var(--warn);font-family:var(--mono);font-size:11px;padding:10px 14px;border-radius:9px;margin-bottom:14px">
-        <span>⚿ Edit mode aktif — perubahan akan otomatis restart FrankenPHP service. Konfigurasi lama dibackup sebagai .bak.</span>
+        <span>⚿ Edit mode aktif — Save akan me-restart FrankenPHP (koneksi terputus beberapa detik), jadi jangan lakukan saat jam ujian/sibuk. Konfigurasi lama dibackup sebagai .bak.</span>
       </div>
 
       <div class="g2" style="max-width:1040px">
@@ -886,7 +886,8 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
               • Kosongkan untuk pakai default (auto-detect)<br>
               • <span style="color:var(--warn)">upload_max_filesize</span> harus ≤ <span style="color:var(--warn)">post_max_size</span><br>
               • Restart FrankenPHP otomatis setelah save<br>
-              • Konfigurasi lama otomatis dibackup
+              • Konfigurasi lama otomatis dibackup<br>
+              • PHP config disimpan di <span style="color:var(--accent)">/etc/frankenphp/php.ini</span> dan dibaca lewat <span style="color:var(--accent)">PHPRC</span> pada service frankenphp
             </div>
           </div>
         </div>
@@ -956,6 +957,15 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
             </div>
           </div>
         </div>
+      </div>
+
+      <div class="card" style="max-width:1040px;margin-top:14px">
+        <div class="ct">Nilai Efektif di FrankenPHP <span class="ct-badge" id="st-eff-via">—</span></div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.8;margin-bottom:10px">
+          Yang benar-benar dipakai proses web FrankenPHP yang sedang berjalan (bukan sekadar isi file). Diperiksa otomatis setelah Save.
+          <button class="btn btn-ghost" style="margin-left:8px;padding:4px 10px" onclick="loadEffective(false)">↻ &nbsp;Cek sekarang</button>
+        </div>
+        <div id="st-eff-body" style="font-family:var(--mono);font-size:12px;line-height:1.8"></div>
       </div>
 
       <div id="st-result" style="display:none;max-width:1040px;margin-top:14px"></div>
@@ -2365,13 +2375,14 @@ async function loadSettings(){
     el.value=d.php[k]||'';
     stOriginal[k]=d.php[k]||'';
   }
-  document.getElementById('st-php-path').textContent=d.phpIniPath?d.phpIniPath.split('/').pop():'php.ini';
+  document.getElementById('st-php-path').textContent=d.phpIniPath||'php.ini';
   // Populate FrankenPHP fields
   const nt=document.getElementById('st-num_threads');
   nt.value=d.frankenphp?.num_threads||'';
   stOriginal['num_threads']=d.frankenphp?.num_threads||'';
   // Reset UI to view mode
   lockSettingsEdit();
+  loadEffective(true);
 }
 
 function lockSettingsEdit(){
@@ -2424,6 +2435,33 @@ function cancelSettingsEdit(){
   document.getElementById('st-result').style.display='none';
 }
 
+async function loadEffective(fillBlanks){
+  const body=document.getElementById('st-eff-body');
+  body.innerHTML='<span style="color:var(--muted)">// memeriksa proses FrankenPHP yang berjalan...</span>';
+  const d=await api('GET','/api/settings/effective');
+  renderEffective(d);
+  // Kolom yang belum ada di php.ini diisi nilai efektif, supaya yang tampil = yang berlaku.
+  if(fillBlanks&&d&&d.ok) for(const k of ST_PHP_KEYS){
+    const el=document.getElementById('st-'+k);
+    if(el&&!el.value&&d.values[k]!=null&&d.values[k]!==''){el.value=d.values[k];stOriginal[k]=d.values[k];}
+  }
+}
+function renderEffective(d){
+  const body=document.getElementById('st-eff-body');
+  if(!d||!d.ok){body.innerHTML='<span style="color:var(--warn)">⚠ Tidak bisa memeriksa: '+esc((d&&d.error)||'tidak ada respons')+'</span>';document.getElementById('st-eff-via').textContent='—';return;}
+  document.getElementById('st-eff-via').textContent=d.sapi+' '+d.version;
+  const saved={};(d.rows||[]).forEach(r=>saved[r.key]=r);
+  let h='<div style="display:grid;grid-template-columns:1.6fr 1fr 1fr 40px;gap:4px 14px"><div style="color:var(--muted)">SETELAN</div><div style="color:var(--muted)">DISIMPAN</div><div style="color:var(--muted)">EFEKTIF</div><div></div>';
+  for(const k of ST_PHP_KEYS){
+    const r=saved[k], eff=d.values[k];
+    h+=`<div>${esc(k)}</div><div>${r?esc(r.saved):'—'}</div><div>${eff==null||eff===''?'—':esc(eff)}</div><div style="color:${!r?'var(--muted)':r.match?'var(--accent)':'var(--danger)'}">${!r?'':r.match?'✓':'✗'}</div>`;
+  }
+  h+='</div><div style="margin-top:8px;color:var(--muted)">php.ini dimuat: <span style="color:var(--text)">'+esc(d.loadedIni||'(tidak ada)')+'</span> · via '+esc(d.via)+'</div>';
+  if(d.mismatch) h+='<div style="margin-top:8px;color:var(--danger)">⚠ Belum aktif di server yang berjalan. FrankenPHP memuat '+esc(d.loadedIni||'tidak ada php.ini')+', sedangkan panel menulis ke '+esc(d.expectedIni)+'. Pastikan service frankenphp memakai <b>PHPRC='+esc(d.expectedIni.replace(/\/php\.ini$/,''))+'</b> (cek: <span style="color:var(--accent)">systemctl show frankenphp -p Environment</span>) lalu restart FrankenPHP.</div>';
+  else h+='<div style="margin-top:8px;color:var(--accent)">✓ Pengaturan yang tersimpan sudah berlaku di proses web.</div>';
+  body.innerHTML=h;
+}
+
 async function saveSettings(){
   if(!stUnlocked||!stPassword){alert('Edit mode not active');return;}
   // Collect changed PHP values
@@ -2441,6 +2479,20 @@ async function saveSettings(){
     return;
   }
 
+  // Validasi format & upload_max_filesize <= post_max_size
+  const SZ_RE=/^-?\d+[KMG]?$/i, IN_RE=/^-?\d+$/;
+  for(const [k,v] of Object.entries(phpChanges)){
+    if(!(['max_execution_time','max_input_vars','max_input_time'].includes(k)?IN_RE:SZ_RE).test(v)){
+      showSettingsResult('error',`Format ${k} tidak valid: "${esc(v)}" (contoh: 20M, 1G, 30, -1)`);return;
+    }
+  }
+  const toB=v=>{const m=String(v).match(/^(-?\d+)([KMG])?$/i);return m?parseInt(m[1],10)*({K:1024,M:1048576,G:1073741824}[(m[2]||'').toUpperCase()]||1):NaN;};
+  const upV=document.getElementById('st-upload_max_filesize').value.trim()||'2M';
+  const postV=document.getElementById('st-post_max_size').value.trim()||'8M';
+  if(toB(upV)>0&&toB(postV)>0&&toB(upV)>toB(postV)){
+    showSettingsResult('error',`upload_max_filesize (${esc(upV)}) tidak boleh lebih besar dari post_max_size (${esc(postV)}).`);return;
+  }
+
   const btn=document.getElementById('st-save-btn');
   btn.textContent='⏳ Saving...'; btn.disabled=true;
   showSettingsResult('info','Menyimpan & restart FrankenPHP...');
@@ -2455,11 +2507,20 @@ async function saveSettings(){
     btn.innerHTML='✓ &nbsp;Save Changes'; btn.disabled=false;
     if(!r.ok){showSettingsResult('error',d.error||'Save failed');return;}
     let msg='Settings tersimpan. ';
-    if(d.phpIniPath) msg+=`PHP: ${d.phpIniPath}. `;
+    if(d.phpIniPath) msg+=`PHP: ${esc(d.phpIniPath)}. `;
     if(d.frankenphpUpdated) msg+='FrankenPHP config updated. ';
+    if(d.phprcInstalled) msg+='PHPRC ditambahkan ke service frankenphp. ';
+    if(d.phprcError) msg+=`<br>⚠ Gagal memasang PHPRC: ${esc(d.phprcError)}<br>`;
     if(d.restartOk) msg+='Service restarted ✓';
-    else msg+=`Restart failed: ${d.restartError||'unknown'}`;
-    showSettingsResult(d.restartOk?'ok':'warn',msg);
+    else msg+=`Restart failed: ${esc(d.restartError||'unknown')}`;
+    let type=(d.restartOk&&!d.phprcError)?'ok':'warn';
+    if(d.effective){
+      renderEffective(d.effective);
+      if(d.effective.ok&&d.effective.mismatch){type='warn';msg+='<br>⚠ Belum aktif di server yang berjalan — lihat "Nilai Efektif di FrankenPHP" di bawah.';}
+      else if(d.effective.ok) msg+='<br>✓ Nilai efektif di FrankenPHP sudah sesuai.';
+      else {type='warn';msg+='<br>⚠ Nilai efektif belum bisa diperiksa: '+esc(d.effective.error||'');}
+    }
+    showSettingsResult(type,msg);
     // Refresh original snapshot
     Object.assign(stOriginal,phpChanges);
     if(fpChanges.num_threads!=null) stOriginal['num_threads']=fpChanges.num_threads;

@@ -686,11 +686,19 @@ app.post('/api/db-users/:username/grant', auth, async(req,res)=>{
 
 // ── Settings (PHP.ini + FrankenPHP) ──
 // CADDYFILE_PATH is declared earlier (Virtual Hosts section) since it's needed there too.
-const PHP_INI_PATHS = [
-  '/etc/php/8.3/embed/php.ini',
-  '/etc/php/8.3/cli/php.ini',
-  '/etc/php/8.3/fpm/php.ini',
-];
+//
+// FrankenPHP is a static binary with its own embedded PHP: it does NOT read the apt PHP's
+// /etc/php/8.3/*/php.ini, and (v1.3.2, verified) it does not look in /etc/frankenphp by itself
+// either, nor does the Caddyfile `php_ini` directive take effect. What does work is PHPRC: when
+// the service has PHPRC=/etc/frankenphp, FrankenPHP loads /etc/frankenphp/php.ini. So the panel
+// writes that file, makes sure the unit carries PHPRC (systemd drop-in), and then verifies the
+// EFFECTIVE values through the running web process (probe) instead of trusting the file.
+const FRANKENPHP_DIR   = process.env.PANEL_FRANKENPHP_DIR || '/etc/frankenphp';
+const PHP_INI_FILE     = path.join(FRANKENPHP_DIR, 'php.ini');
+const PHPRC_DROPIN_DIR = process.env.PANEL_PHPRC_DROPIN_DIR || '/etc/systemd/system/frankenphp.service.d';
+const PHPRC_DROPIN     = path.join(PHPRC_DROPIN_DIR, '10-ps-panel-php.conf');
+const PROBE_HTTP_PORT  = parseInt(process.env.PANEL_PROBE_HTTP_PORT, 10) || 80;
+const PROBE_HTTPS_PORT = parseInt(process.env.PANEL_PROBE_HTTPS_PORT, 10) || 443;
 
 const PHP_KEYS = [
   'upload_max_filesize',
@@ -700,6 +708,8 @@ const PHP_KEYS = [
   'max_input_vars',
   'max_input_time',
 ];
+// PHP's built-in defaults, used only for the upload ≤ post comparison when a key is unset.
+const PHP_DEFAULTS = { upload_max_filesize: '2M', post_max_size: '8M' };
 
 // Validate PHP ini value format
 // Size:    -?\d+[KMG]?     (e.g. 128M, 1G, -1)
@@ -715,49 +725,164 @@ const PHP_VALIDATORS = {
   max_input_time:      INT_RE,
 };
 
-function findPhpIni() {
-  for (const p of PHP_INI_PATHS) {
-    if (fs.existsSync(p)) return p;
-  }
-  return null;
+// "20M" → bytes (NaN when not a size). Used for validation and for comparing saved vs effective.
+function sizeToBytes(v) {
+  const m = String(v).trim().match(/^(-?\d+)([KMG])?$/i);
+  if (!m) return NaN;
+  return parseInt(m[1], 10) * ({ K: 1024, M: 1048576, G: 1073741824 }[(m[2] || '').toUpperCase()] || 1);
+}
+function sameIniValue(a, b) {
+  if (a == null || b == null) return false;
+  const x = sizeToBytes(a), y = sizeToBytes(b);
+  return Number.isNaN(x) || Number.isNaN(y) ? String(a).trim().toLowerCase() === String(b).trim().toLowerCase() : x === y;
 }
 
 function readPhpIni() {
-  const iniPath = findPhpIni();
   const settings = {};
   for (const k of PHP_KEYS) settings[k] = null;
-  if (!iniPath) return { path: null, settings };
   try {
-    const content = fs.readFileSync(iniPath, 'utf8');
+    const content = fs.readFileSync(PHP_INI_FILE, 'utf8');
     for (const k of PHP_KEYS) {
       const m = content.match(new RegExp(`^\\s*${k}\\s*=\\s*(.+?)\\s*$`, 'm'));
       if (m) settings[k] = m[1].trim();
     }
   } catch {}
-  return { path: iniPath, settings };
+  return { path: PHP_INI_FILE, exists: fs.existsSync(PHP_INI_FILE), settings };
 }
 
 function updatePhpIni(updates) {
-  const iniPath = findPhpIni();
-  if (!iniPath) throw new Error('php.ini not found');
-  // Validate
+  // Validate each value
   for (const [k, v] of Object.entries(updates)) {
     if (!PHP_KEYS.includes(k)) throw new Error(`Unknown key: ${k}`);
     if (!PHP_VALIDATORS[k].test(String(v))) throw new Error(`Invalid value for ${k}: ${v}`);
   }
-  // Backup
-  fs.copyFileSync(iniPath, iniPath + '.bak.' + Date.now());
-  let content = fs.readFileSync(iniPath, 'utf8');
+  // upload_max_filesize must not exceed post_max_size (checked on the merged result)
+  const cur = readPhpIni().settings;
+  const up   = updates.upload_max_filesize ?? cur.upload_max_filesize ?? PHP_DEFAULTS.upload_max_filesize;
+  const post = updates.post_max_size       ?? cur.post_max_size       ?? PHP_DEFAULTS.post_max_size;
+  const upB = sizeToBytes(up), postB = sizeToBytes(post);
+  if (upB > 0 && postB > 0 && upB > postB)
+    throw new Error(`upload_max_filesize (${up}) tidak boleh lebih besar dari post_max_size (${post})`);
+
+  fs.mkdirSync(FRANKENPHP_DIR, { recursive: true });
+  let content;
+  if (fs.existsSync(PHP_INI_FILE)) {
+    fs.copyFileSync(PHP_INI_FILE, PHP_INI_FILE + '.bak.' + Date.now());
+    content = fs.readFileSync(PHP_INI_FILE, 'utf8');
+  } else {
+    content = '; Managed by PS Panel (Settings > PHP Configuration). FrankenPHP loads this file through\n' +
+              `; PHPRC=${FRANKENPHP_DIR}. Only the keys below are set; everything else keeps PHP's defaults.\n`;
+  }
   for (const [k, v] of Object.entries(updates)) {
     const re = new RegExp(`^(\\s*;?\\s*)${k}(\\s*=\\s*).+$`, 'm');
     if (re.test(content)) {
       content = content.replace(re, `${k}$2${v}`);
     } else {
-      content += `\n${k} = ${v}\n`;
+      content += `${content.endsWith('\n') ? '' : '\n'}${k} = ${v}\n`;
     }
   }
-  fs.writeFileSync(iniPath, content);
-  return iniPath;
+  const tmp = PHP_INI_FILE + '.tmp';
+  fs.writeFileSync(tmp, content, { mode: 0o644 });
+  fs.renameSync(tmp, PHP_INI_FILE);
+  return PHP_INI_FILE;
+}
+
+// Make sure the frankenphp service runs with PHPRC=/etc/frankenphp (systemd drop-in, so the
+// installer's unit file is left alone). Idempotent; returns { changed }.
+async function ensurePhprc() {
+  let env = '';
+  try { env = (await execFileAsync('systemctl', ['show', 'frankenphp', '-p', 'Environment', '--value'], { timeout: 10000 })).stdout; } catch {}
+  if (env.split(/\s+/).includes('PHPRC=' + FRANKENPHP_DIR)) return { changed: false };
+  fs.mkdirSync(PHPRC_DROPIN_DIR, { recursive: true });
+  fs.writeFileSync(PHPRC_DROPIN, `[Service]\nEnvironment=PHPRC=${FRANKENPHP_DIR}\n`);
+  await execFileAsync('systemctl', ['daemon-reload'], { timeout: 20000 });
+  return { changed: true };
+}
+
+// Sites that can serve a PHP probe: the default catch-all site first, then PHP vhosts.
+function probeTargets() {
+  const targets = [];
+  try {
+    const cf = fs.readFileSync(CADDYFILE_PATH, 'utf8');
+    const m = cf.match(/http:\/\/:80\s*\{[^}]*?root\s+\*\s+(\S+)/);
+    if (m) targets.push({ label: 'situs default', docroot: m[1], host: null, https: false, port: PROBE_HTTP_PORT });
+  } catch {}
+  try {
+    for (const f of fs.readdirSync(VHOSTS_DIR).filter(f => f.endsWith('.conf'))) {
+      const content = fs.readFileSync(path.join(VHOSTS_DIR, f), 'utf8');
+      const rm = content.match(/root\s+\*\s+(.+?)(?:\n|$)/);
+      if (!rm || !content.includes('php_server')) continue;
+      const domain = f.replace(/\.conf$/, '');
+      const plain = /^\s*http:\/\//.test(content);   // http:// prefix = no SSL (see vhost creation)
+      targets.push({ label: domain, docroot: rm[1].trim(), host: domain, https: !plain, port: plain ? PROBE_HTTP_PORT : PROBE_HTTPS_PORT });
+    }
+  } catch {}
+  return targets;
+}
+
+function probeRequest(t, file) {
+  return new Promise(resolve => {
+    const opts = { host: '127.0.0.1', port: t.port, path: '/' + file, method: 'GET', timeout: 5000, headers: t.host ? { Host: t.host } : {} };
+    if (t.https) { opts.servername = t.host; opts.rejectUnauthorized = false; }
+    const req = (t.https ? https : http).request(opts, res => {
+      let body = ''; res.setEncoding('utf8');
+      res.on('data', c => body += c); res.on('end', () => resolve({ status: res.statusCode, body }));
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', e => resolve({ error: e.message }));
+    req.end();
+  });
+}
+
+// Asks the RUNNING FrankenPHP web process what it actually uses. A throw-away PHP file with a
+// random name is placed in a served docroot, requested over localhost, and removed again.
+async function probeEffectivePhp(keys = PHP_KEYS) {
+  const targets = probeTargets();
+  if (!targets.length) return { ok: false, error: 'tidak ada situs PHP yang bisa dipakai untuk memeriksa' };
+  const errors = [];
+  for (const t of targets) {
+    if (!fs.existsSync(t.docroot)) { errors.push(`${t.label}: docroot ${t.docroot} tidak ada`); continue; }
+    const file = 'psprobe-' + crypto.randomBytes(8).toString('hex') + '.php';
+    const full = path.join(t.docroot, file);
+    try {
+      fs.writeFileSync(full, `<?php header('Content-Type: application/json'); header('Cache-Control: no-store');
+$o=['sapi'=>PHP_SAPI,'version'=>PHP_VERSION,'loaded_ini'=>php_ini_loaded_file(),'values'=>[]];
+foreach(json_decode('${JSON.stringify(keys)}') as $k){$o['values'][$k]=ini_get($k);}
+echo json_encode($o);\n`, { mode: 0o644 });
+      const r = await probeRequest(t, file);
+      if (r.error) { errors.push(`${t.label}: ${r.error}`); continue; }
+      let j = null; try { j = JSON.parse(r.body); } catch {}
+      if (!j || !j.values) { errors.push(`${t.label}: HTTP ${r.status}, bukan respons PHP`); continue; }
+      return { ok: true, via: t.label, sapi: j.sapi, version: j.version, loadedIni: j.loaded_ini || null, values: j.values };
+    } catch (e) { errors.push(`${t.label}: ${e.message}`); }
+    finally { try { fs.rmSync(full, { force: true }); } catch {} }
+  }
+  return { ok: false, error: errors.join('; ') };
+}
+
+// After a restart FrankenPHP needs a moment before it answers; retry for up to ~20 s.
+async function probeWhenReady(keys, tries = 20) {
+  let last = { ok: false, error: 'belum dicoba' };
+  for (let i = 0; i < tries; i++) {
+    last = await probeEffectivePhp(keys);
+    if (last.ok) return last;
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  return last;
+}
+
+// Saved (file) vs effective (running process) for every key that is set in the file.
+function compareEffective(probe) {
+  if (!probe.ok) return { ok: false, error: probe.error };
+  const saved = readPhpIni().settings;
+  const rows = PHP_KEYS.filter(k => saved[k] != null).map(k => ({
+    key: k, saved: saved[k], effective: probe.values[k] ?? null, match: sameIniValue(saved[k], probe.values[k]),
+  }));
+  let iniMatch = false;
+  try { iniMatch = !!probe.loadedIni && fs.realpathSync(probe.loadedIni) === fs.realpathSync(PHP_INI_FILE); } catch {}
+  return { ok: true, via: probe.via, sapi: probe.sapi, version: probe.version, loadedIni: probe.loadedIni,
+           expectedIni: PHP_INI_FILE, iniMatch, rows, mismatch: !iniMatch || rows.some(r => !r.match),
+           values: probe.values };
 }
 
 function readFrankenphpSettings() {
@@ -1048,7 +1173,13 @@ app.get('/api/settings', auth, (req, res) => {
   } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
-app.post('/api/settings/update', auth, (req, res) => {
+// What the running FrankenPHP web process really uses (not just what is in the file).
+app.get('/api/settings/effective', auth, async (req, res) => {
+  try { res.json(compareEffective(await probeEffectivePhp())); }
+  catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
+app.post('/api/settings/update', auth, async (req, res) => {
   const { password, php, frankenphp } = req.body || {};
   if (!password || !bcrypt.compareSync(password, authState.hash))
     return res.status(401).json({ error: 'Wrong password' });
@@ -1063,15 +1194,21 @@ app.post('/api/settings/update', auth, (req, res) => {
       updateFrankenphpSettings(frankenphp);
       fpUpdated = true;
     }
+    // The service must carry PHPRC or FrankenPHP never reads the php.ini we just wrote.
+    let phprc = { changed: false }, phprcError = null;
+    try { phprc = await ensurePhprc(); } catch (e) { phprcError = e.message; }
     // Restart FrankenPHP to apply
-    exec('systemctl restart frankenphp', (err, _, se) => {
-      res.json({
-        ok: true,
-        phpIniPath: phpPath,
-        frankenphpUpdated: fpUpdated,
-        restartOk: !err,
-        restartError: err ? (se || err.message) : null,
-      });
+    const restart = await new Promise(resolve => exec('systemctl restart frankenphp', (err, _, se) => resolve({ err, se })));
+    const effective = restart.err ? null : compareEffective(await probeWhenReady(PHP_KEYS));
+    res.json({
+      ok: true,
+      phpIniPath: phpPath,
+      frankenphpUpdated: fpUpdated,
+      restartOk: !restart.err,
+      restartError: restart.err ? (restart.se || restart.err.message) : null,
+      phprcInstalled: phprc.changed,
+      phprcError,
+      effective,
     });
   } catch (e) {
     res.status(400).json({ error: e.message });

@@ -47,6 +47,7 @@ The password hash and JWT secret are persisted in `/root/.pspanel_auth` (mode 60
 | `POST /api/login` | bcrypt password check → JWT |
 | `POST /api/password` | change admin password (old + new); revokes all existing tokens |
 | `GET /api/autotune`, `POST /api/autotune/{apply,revert,boot}` | auto-tune FrankenPHP `num_threads` + PostgreSQL memory from cores/RAM (writes need the panel password) |
+| `GET /api/settings`, `GET /api/settings/effective`, `POST /api/settings/update` | PHP ini + FrankenPHP threads; `effective` probes the running web process |
 | `GET /api/metrics` | CPU, RAM, disk, network, top 5 processes via `systeminformation` |
 | `GET /api/services` | `systemctl is-active` for each managed service |
 | `POST /api/services/:name/:action` | `systemctl start/stop/restart` |
@@ -64,6 +65,10 @@ The password hash and JWT secret are persisted in `/root/.pspanel_auth` (mode 60
 Single-page app with no framework or build step. Navigation hides/shows `<div class="page">` sections. Each page loads data from the API on entry via `go(name)`. The dashboard auto-refreshes metrics every 5 seconds and services every 10 seconds via `setInterval`.
 
 CSS uses short utility class names (`mc` = metric card, `sr` = status row, `ir` = info row, `ni` = nav item, etc.) defined in the `<style>` block.
+
+## PHP configuration (Settings page)
+
+FrankenPHP is a static binary with its own embedded PHP. It does **not** read the apt PHP's `/etc/php/8.3/*/php.ini`. Verified on v1.3.2: `/etc/frankenphp/php.ini` is only loaded when the service has `PHPRC=/etc/frankenphp` (`PHP_INI_SCAN_DIR` also works), and the Caddyfile `php_ini` directive parses but has **no effect**. So the panel writes `/etc/frankenphp/php.ini`, installs a systemd drop-in (`/etc/systemd/system/frankenphp.service.d/10-ps-panel-php.conf`, `Environment=PHPRC=/etc/frankenphp`) when the unit lacks it, restarts FrankenPHP, then verifies the EFFECTIVE values through the running web process (`probeEffectivePhp`: a throw-away `psprobe-<random>.php` in a served docroot, fetched over localhost and deleted). A mismatch is shown as a warning in the UI. Saving restarts FrankenPHP, so avoid doing it during peak/exam hours. `frankenphp php-cli -i` does not work on v1.3.2; use the probe instead.
 
 ## Auto-tune
 
