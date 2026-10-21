@@ -617,12 +617,20 @@ install_frankenphp() {
 }
 
 http://:80 {
-  root * /var/www/html
-  php_server
+	root * /var/www/html
+	php_server
 }
 
 import /etc/frankenphp/sites/*.conf
 CADDYFILE
+
+  # php.ini for FrankenPHP's embedded PHP. FrankenPHP is a static binary: it does not read
+  # the apt PHP's /etc/php/8.3/*/php.ini, and finds this file only because the unit below
+  # sets PHPRC=/etc/frankenphp. The panel (Settings > PHP Configuration) edits this file.
+  [[ -f /etc/frankenphp/php.ini ]] || cat > /etc/frankenphp/php.ini << 'PHPINI'
+; Managed by PS Panel (Settings > PHP Configuration). FrankenPHP loads this file through
+; PHPRC=/etc/frankenphp. Only the keys below are set; everything else keeps PHP's defaults.
+PHPINI
 
   cat > /etc/systemd/system/frankenphp.service << 'SVC'
 [Unit]
@@ -633,6 +641,7 @@ After=network.target
 Type=simple
 User=www-data
 WorkingDirectory=/var/www
+Environment=PHPRC=/etc/frankenphp
 ExecStart=/usr/local/bin/frankenphp run --config /etc/frankenphp/Caddyfile
 ExecReload=/usr/local/bin/frankenphp reload --config /etc/frankenphp/Caddyfile
 Restart=always

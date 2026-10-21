@@ -1,7 +1,10 @@
 {
-  "version": "2.7.0",
-  "released": "2026-10-05",
+  "version": "2.7.1",
+  "released": "2026-10-21",
   "notes": [
+    "Perbaikan: pengaturan Settings > PHP Configuration (upload_max_filesize, post_max_size, dll) kini benar-benar berlaku di PHP yang melayani web. Penyebab: panel menulis ke /etc/php/8.3/*/php.ini milik PHP apt, padahal FrankenPHP (biner statis) punya PHP sendiri dan tidak membacanya. Kini panel menulis /etc/frankenphp/php.ini dan memasang PHPRC=/etc/frankenphp pada service frankenphp (systemd drop-in) — diverifikasi di FrankenPHP v1.3.2; direktif Caddyfile `php_ini` ternyata tidak berlaku di versi itu sehingga tidak dipakai",
+    "Settings: setelah Save + restart, panel memeriksa nilai EFEKTIF dari proses web yang berjalan (probe PHP sementara lewat localhost) dan menampilkannya di kartu \"Nilai Efektif di FrankenPHP\"; bila tidak sama muncul peringatan beserta php.ini yang dimuat. Tombol \"Cek sekarang\" tersedia kapan saja. Validasi: format nilai dan upload_max_filesize ≤ post_max_size. Catatan: Save me-restart FrankenPHP, jangan saat jam ujian/sibuk",
+    "Installer: Caddyfile awal kini terformat rapi (tidak lagi memicu warning \"Caddyfile input is not formatted\"), unit frankenphp memuat PHPRC, dan /etc/frankenphp/php.ini dibuat. Server lama: `frankenphp fmt --overwrite /etc/frankenphp/Caddyfile`",
     "Settings: fitur Auto-Tune Performa — menyetel num_threads FrankenPHP dan memori PostgreSQL (shared_buffers, effective_cache_size, work_mem, maintenance_work_mem, max_connections) sesuai jumlah core & RAM. Tabel \"saat ini vs rekomendasi\", tombol Terapkan / Terapkan & restart / Reset ke default, dan opsi otomatis saat boot (systemd) untuk VM yang spesifikasinya sering berubah. Setelan PostgreSQL ditulis ke conf.d/90-ps-panel-autotune.conf (postgresql.conf tidak disentuh), divalidasi dengan `postgres -C` dan dibatalkan otomatis bila ditolak. CLI: `node server.js --autotune [--dry-run --cores=N --ram=MB]`",
     "Perbaikan: menyimpan num_threads di Settings sebelumnya menambah blok global kedua ke Caddyfile, padahal Caddy hanya mengizinkan satu dan hasil install.sh sudah punya `{ frankenphp }` — FrankenPHP bisa gagal start. Kini num_threads digabung ke blok global yang ada, dan Caddyfile ganda dari versi lama diperbaiki otomatis saat panel start",
     "Perbaikan: password lama yang salah di Ubah Password sebelumnya melempar pengguna ke halaman login tanpa pesan; kini pesan error tampil dan sesi tetap aktif",
