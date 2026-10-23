@@ -1109,17 +1109,36 @@ function restartTuned(cb) {
   });
 }
 
+// `postgres -C` prints a setting in its INTERNAL unit (8 kB blocks for shared_buffers and
+// effective_cache_size, kB for work_mem and maintenance_work_mem), e.g. 253952 for 1984MB.
+// Convert to the "NNNMB" form the profile uses so current vs recommended compare correctly.
+function pgInternalToMB(key, raw, blockBytes) {
+  raw = String(raw).trim();
+  if (!/^\d+$/.test(raw)) return raw;               // already carries a unit (e.g. 128MB)
+  const n = parseInt(raw, 10);
+  let mb;
+  if (key === 'shared_buffers' || key === 'effective_cache_size') mb = n * blockBytes / 1048576;
+  else if (key === 'work_mem' || key === 'maintenance_work_mem') mb = n / 1024;
+  else return raw;                                   // max_connections: plain count
+  return `${Math.round(mb * 100) / 100}MB`;
+}
+
 app.get('/api/autotune', auth, async (req, res) => {
   const specs = machineSpecs();
   const profile = computeTuneProfile(specs.cores, specs.ramMB);
   const current = { num_threads: readFrankenphpSettings().num_threads };
   const pg = findPgCluster();
   if (pg && fs.existsSync(pg.bin)) {
-    await Promise.all(TUNE_PG_KEYS.map(async k => {
+    const pgC = async k => {
       try {
         const { stdout } = await execFileAsync('runuser', ['-u', 'postgres', '--', pg.bin, '-C', k, '-c', 'config_file=' + pg.conf], { timeout: 10000 });
-        current[k] = stdout.trim();
-      } catch { current[k] = null; }
+        return stdout.trim();
+      } catch { return null; }
+    };
+    const blockBytes = parseInt(await pgC('block_size'), 10) || 8192;
+    await Promise.all(TUNE_PG_KEYS.map(async k => {
+      const raw = await pgC(k);
+      current[k] = raw == null ? null : pgInternalToMB(k, raw, blockBytes);
     }));
   }
   const boot = { installed: fs.existsSync(AUTOTUNE_UNIT), enabled: false };
