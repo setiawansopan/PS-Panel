@@ -1,7 +1,8 @@
 {
-  "version": "2.7.1",
-  "released": "2026-10-21",
+  "version": "2.7.2",
+  "released": "2026-10-23",
   "notes": [
+    "Auto-Tune: kolom \"Saat ini\" PostgreSQL kini ditampilkan dalam MB/GB (sebelumnya angka mentah satuan internal, mis. 253952 untuk 1984MB, sehingga nilai yang sebenarnya sudah sesuai tampak berbeda dari rekomendasi)",
     "Perbaikan: pengaturan Settings > PHP Configuration (upload_max_filesize, post_max_size, dll) kini benar-benar berlaku di PHP yang melayani web. Penyebab: panel menulis ke /etc/php/8.3/*/php.ini milik PHP apt, padahal FrankenPHP (biner statis) punya PHP sendiri dan tidak membacanya. Kini panel menulis /etc/frankenphp/php.ini dan memasang PHPRC=/etc/frankenphp pada service frankenphp (systemd drop-in) — diverifikasi di FrankenPHP v1.3.2; direktif Caddyfile `php_ini` ternyata tidak berlaku di versi itu sehingga tidak dipakai",
     "Settings: setelah Save + restart, panel memeriksa nilai EFEKTIF dari proses web yang berjalan (probe PHP sementara lewat localhost) dan menampilkannya di kartu \"Nilai Efektif di FrankenPHP\"; bila tidak sama muncul peringatan beserta php.ini yang dimuat. Tombol \"Cek sekarang\" tersedia kapan saja. Validasi: format nilai dan upload_max_filesize ≤ post_max_size. Catatan: Save me-restart FrankenPHP, jangan saat jam ujian/sibuk",
     "Installer: Caddyfile awal kini terformat rapi (tidak lagi memicu warning \"Caddyfile input is not formatted\"), unit frankenphp memuat PHPRC, dan /etc/frankenphp/php.ini dibuat. Server lama: `frankenphp fmt --overwrite /etc/frankenphp/Caddyfile`",
