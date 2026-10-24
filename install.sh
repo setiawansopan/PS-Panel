@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ============================================================
 #  PS Panel Installer  v2.3
-#  Stack: FrankenPHP + PHP 8.3 + PostgreSQL 16 + Redis + Node.js 20
+#  Stack: FrankenPHP (web server) + PHP 8.5 (PHP-FPM) + PostgreSQL 16 + Redis + Node.js 20
 #  Target: Ubuntu 24.04 LTS
 #  Usage : curl -fsSL https://raw.githubusercontent.com/setiawansopan/PS-Panel/main/install.sh | sudo bash
 # ============================================================
@@ -26,6 +26,10 @@ MIN_RAM_MB=512
 MAX_RETRIES=3
 RETRY_DELAY=5
 FRANKENPHP_FALLBACK="v1.3.2"
+# PHP version served through PHP-FPM (Ondrej PPA). 8.5 is the target; override with e.g.
+#   PS_PHP_VER=8.4 bash install.sh
+# Fixed against PHP2Shell (CVE-2026-109618/109619): 8.5.12, 8.4.27, 8.3.36, 8.2.35 or newer.
+PS_PHP_VER="${PS_PHP_VER:-8.5}"
 
 # ── Colors ───────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -45,7 +49,7 @@ UFW_INACTIVE=false
 # ── Step definitions: name|estimated_time ────────────────────
 declare -a STEPS=(
   "System Update|~1-2 min"
-  "PHP 8.3|~2-3 min"
+  "PHP ${PS_PHP_VER}|~2-3 min"
   "FrankenPHP|~1-2 min"
   "PostgreSQL 16|~1-2 min"
   "Redis|~30 sec"
@@ -273,7 +277,7 @@ print_banner() {
   echo -e "${CYAN}" >&2
   echo "  ╔══════════════════════════════════════════════╗" >&2
   echo "  ║           PS Panel Installer v2.3            ║" >&2
-  echo "  ║  FrankenPHP · PHP 8.3 · PostgreSQL 16        ║" >&2
+  echo "  ║  FrankenPHP · PHP 8.5 · PostgreSQL 16        ║" >&2
   echo "  ║  Redis · Node.js v${NODE_VERSION} · PM2                 ║" >&2
   echo "  ╚══════════════════════════════════════════════╝" >&2
   echo -e "${RESET}" >&2
@@ -389,40 +393,95 @@ update_system() {
 }
 
 # ════════════════════════════════════════════════════════════
-#  STEP: PHP 8.3
+#  STEP: PHP (PHP-FPM, version PS_PHP_VER, default 8.5)
 # ════════════════════════════════════════════════════════════
 
-install_php() {
-  section "PHP 8.3" "~2-3 min"
+# Warns when the installed PHP is older than the release that fixes PHP2Shell
+# (CVE-2026-109618 / CVE-2026-109619, per public reports: 8.5.12, 8.4.27, 8.3.36, 8.2.35).
+php_security_check() {
+  local ver patched
+  ver=$(php -r 'echo PHP_VERSION;' 2>/dev/null || echo "")
+  case "${ver%.*}" in
+    8.5) patched="8.5.12" ;;
+    8.4) patched="8.4.27" ;;
+    8.3) patched="8.3.36" ;;
+    8.2) patched="8.2.35" ;;
+    *)   patched="" ;;
+  esac
+  if [[ -z "$patched" ]]; then
+    warn "PHP ${ver:-?}: no PHP2Shell fix is published for this branch — use PHP 8.5, 8.4 or 8.3"
+  elif [[ "$(printf '%s\n%s\n' "$patched" "$ver" | sort -V | head -n1)" != "$patched" ]]; then
+    warn "PHP ${ver} is older than ${patched} (vulnerable to PHP2Shell). Run: apt-get update && apt-get upgrade"
+  else
+    log "PHP ${ver} includes the PHP2Shell fix (>= ${patched})"
+  fi
+}
 
-  if php -v 2>/dev/null | grep -q "8\.3" && command -v composer &>/dev/null; then
-    skip "PHP 8.3 + Composer"; return
+install_php() {
+  local V="$PS_PHP_VER"
+  section "PHP ${V}" "~2-3 min"
+
+  if dpkg -s "php${V}-fpm" &>/dev/null && php -v 2>/dev/null | grep -q "^PHP ${V}\." && command -v composer &>/dev/null; then
+    systemctl enable --now "php${V}-fpm" >> "$LOG_FILE" 2>&1 || true
+    skip "PHP ${V} (CLI + FPM) + Composer"; php_security_check; return
   fi
 
-  if ! php -v 2>/dev/null | grep -q "8\.3"; then
+  if ! dpkg -s "php${V}-fpm" &>/dev/null; then
     spinner_start "Adding Ondrej PHP PPA..."
     retry_run "add-apt-repository php" \
       add-apt-repository -y ppa:ondrej/php
     retry_run "apt-get update" apt-get update -qq
     spinner_stop ok
 
-    spinner_start "Installing PHP 8.3 extensions... (this may take a while)"
-    # Deliberately NOT the bare `php8.3` metapackage: it depends on
-    # libapache2-mod-php8.3 | php8.3-fpm | php8.3-cgi, and apt resolves that to
-    # Apache — which is then enabled at boot and grabs port 80 before FrankenPHP
-    # on the next reboot. FrankenPHP embeds its own PHP; only the CLI is needed
-    # here (composer, artisan).
-    apt_install \
-      php8.3-cli php8.3-common \
-      php8.3-pgsql php8.3-mysql php8.3-sqlite3 \
-      php8.3-redis php8.3-curl php8.3-mbstring \
-      php8.3-xml php8.3-zip php8.3-bcmath php8.3-intl \
-      php8.3-gd php8.3-opcache php8.3-tokenizer \
-      php8.3-fileinfo php8.3-iconv php8.3-soap
+    # Fail early and clearly if this PHP version is not published, instead of a cryptic apt error.
+    if ! apt-cache show "php${V}-fpm" &>/dev/null; then
+      fatal "PHP ${V} (php${V}-fpm) is not available in the apt repositories" \
+        "Check https://launchpad.net/~ondrej/+archive/ubuntu/php or re-run with PS_PHP_VER=8.4 (fixed releases: 8.5.12, 8.4.27, 8.3.36)"
+    fi
+
+    # Deliberately NOT the bare `php${V}` metapackage: it depends on
+    # libapache2-mod-php | php-fpm | php-cgi, and apt can resolve that to Apache — which is
+    # then enabled at boot and grabs port 80 before FrankenPHP on the next reboot. Only the
+    # CLI (composer, artisan) and FPM (serves the sites) are installed explicitly.
+    # Extension packages that are built into core or renamed in a given PHP version (e.g.
+    # opcache in 8.5) are skipped; what is really loaded is verified with `php -m` below.
+    local pkgs=("php${V}-cli" "php${V}-common" "php${V}-fpm") p
+    for p in pgsql mysql sqlite3 redis curl mbstring xml zip bcmath intl gd opcache tokenizer fileinfo iconv soap; do
+      if apt-cache show "php${V}-${p}" &>/dev/null; then
+        pkgs+=("php${V}-${p}")
+      else
+        log_raw "SKIP: php${V}-${p} is not a separate package in this repo"
+      fi
+    done
+
+    spinner_start "Installing PHP ${V} (CLI + FPM + extensions)... (this may take a while)"
+    apt_install "${pkgs[@]}"
     spinner_stop ok
 
-    log "PHP $(php -r 'echo PHP_VERSION;') installed"
+    # Make the chosen version the default `php` CLI when several are installed
+    update-alternatives --set php "/usr/bin/php${V}" >> "$LOG_FILE" 2>&1 || true
   fi
+
+  # PHP-FPM serves the sites (FrankenPHP only handles HTTP and forwards to the FPM socket).
+  if [[ ! -x "/usr/sbin/php-fpm${V}" ]]; then
+    fatal "php-fpm${V} binary not found after installation" "Check ${LOG_FILE}"
+  fi
+  run_logged systemctl enable --now "php${V}-fpm"
+  if ! systemctl is-active --quiet "php${V}-fpm"; then
+    fatal "php${V}-fpm is not running" "Check: journalctl -u php${V}-fpm --no-pager | tail -30"
+  fi
+
+  # Report (not fail on) extensions Laravel-style apps normally need.
+  local ext missing=()
+  for ext in pdo_pgsql mbstring xml curl zip bcmath intl gd redis tokenizer fileinfo iconv; do
+    php -m 2>/dev/null | grep -qix "$ext" || missing+=("$ext")
+  done
+  if (( ${#missing[@]} > 0 )); then
+    warn "PHP ${V}: extensions not loaded: ${missing[*]} (install them with apt if your apps need them)"
+  fi
+
+  log "PHP $(php -r 'echo PHP_VERSION;') + PHP-FPM installed"
+  php_security_check
 
   # Install Composer (Laravel & PHP package manager)
   if ! command -v composer &>/dev/null; then
@@ -611,18 +670,15 @@ install_frankenphp() {
   # app is never provisioned — php_server directives still show up in Caddy's
   # routing table, but every PHP request then hangs forever (no error, no log,
   # just a connection that never completes) the moment a real vhost is added.
-  cat > /etc/frankenphp/Caddyfile << 'CADDYFILE'
-{
-	frankenphp
-}
-
-http://:80 {
-	root * /var/www/html
-	php_server
-}
-
-import /etc/frankenphp/sites/*.conf
-CADDYFILE
+  # The default site goes through PHP-FPM when it is installed (security updates then arrive
+  # through apt, independent of the FrankenPHP binary); FrankenPHP's embedded PHP otherwise.
+  local default_site
+  if [[ -x "/usr/sbin/php-fpm${PS_PHP_VER}" ]]; then
+    default_site=$'\troot * /var/www/html\n\tencode zstd gzip\n\tphp_fastcgi unix//run/php/php'"${PS_PHP_VER}"$'-fpm.sock\n\tfile_server'
+  else
+    default_site=$'\troot * /var/www/html\n\tphp_server'
+  fi
+  printf '{\n\tfrankenphp\n}\n\nhttp://:80 {\n%s\n}\n\nimport /etc/frankenphp/sites/*.conf\n' "$default_site" > /etc/frankenphp/Caddyfile
 
   # php.ini for FrankenPHP's embedded PHP. FrankenPHP is a static binary: it does not read
   # the apt PHP's /etc/php/8.3/*/php.ini, and finds this file only because the unit below
@@ -681,11 +737,11 @@ SVC
   if [[ "$php_body" != "pspanel-ok" ]]; then
     spinner_stop fail
     fatal "FrankenPHP is running but a PHP request did not return the expected response (got: '${php_body}')." \
-      "Ensure /etc/frankenphp/Caddyfile starts with a global '{ frankenphp }' options block, then run: systemctl restart frankenphp"
+      "Check php${PS_PHP_VER}-fpm (systemctl status php${PS_PHP_VER}-fpm) and that /etc/frankenphp/Caddyfile starts with a global '{ frankenphp }' options block, then run: systemctl restart frankenphp"
   fi
   spinner_stop ok
 
-  log "FrankenPHP ${latest} installed and verified serving PHP"
+  log "FrankenPHP ${latest} installed and verified serving PHP (via ${default_site:+PHP-FPM ${PS_PHP_VER}})"
 }
 
 # ════════════════════════════════════════════════════════════

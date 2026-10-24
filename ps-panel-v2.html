@@ -554,8 +554,12 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       <div class="ph">
         <div class="sec-hdr">
           <div><h1>Virtual Hosts</h1><p>// FrankenPHP site configurations</p></div>
-          <button class="btn" onclick="document.getElementById('m-vhost').classList.add('open')">+ Add Domain</button>
+          <button class="btn" onclick="openVhostModal()">+ Add Domain</button>
         </div>
+      </div>
+      <div class="card" style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div style="font-family:var(--mono);font-size:12px">Situs default <span style="color:var(--muted)">(http://:80, semua host tanpa vhost)</span> &nbsp;·&nbsp; runtime: <b id="vhost-default-rt">—</b></div>
+        <button class="btn btn-ghost" style="padding:4px 11px;font-size:11px" onclick="openRuntimeModal('default')">⇄ Ubah runtime</button>
       </div>
       <div class="card tbl-w">
         <table><thead><tr><th>Domain</th><th>Document Root</th><th>PHP</th><th>SSL</th><th>Created</th><th>Size</th><th>Action</th></tr></thead>
@@ -839,7 +843,7 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       </div>
 
       <div id="st-banner" style="display:none;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:var(--warn);font-family:var(--mono);font-size:11px;padding:10px 14px;border-radius:9px;margin-bottom:14px">
-        <span>⚿ Edit mode aktif — Save akan me-restart FrankenPHP (koneksi terputus beberapa detik), jadi jangan lakukan saat jam ujian/sibuk. Konfigurasi lama dibackup sebagai .bak.</span>
+        <span>⚿ Edit mode aktif — Save me-reload PHP-FPM (tanpa memutus request) dan, bila ada situs yang memakai PHP bawaan FrankenPHP, me-restart FrankenPHP (koneksi terputus beberapa detik). Jangan lakukan saat jam ujian/sibuk. Konfigurasi lama dibackup sebagai .bak.</span>
       </div>
 
       <div class="g2" style="max-width:1040px">
@@ -960,9 +964,9 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       </div>
 
       <div class="card" style="max-width:1040px;margin-top:14px">
-        <div class="ct">Nilai Efektif di FrankenPHP <span class="ct-badge" id="st-eff-via">—</span></div>
+        <div class="ct">Nilai Efektif di Server <span class="ct-badge" id="st-eff-via">—</span></div>
         <div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.8;margin-bottom:10px">
-          Yang benar-benar dipakai proses web FrankenPHP yang sedang berjalan (bukan sekadar isi file). Diperiksa otomatis setelah Save.
+          Yang benar-benar dipakai proses web yang sedang berjalan (FrankenPHP dan/atau PHP-FPM), bukan sekadar isi file. Diperiksa otomatis setelah Save.
           <button class="btn btn-ghost" style="margin-left:8px;padding:4px 10px" onclick="loadEffective(false)">↻ &nbsp;Cek sekarang</button>
         </div>
         <div id="st-eff-body" style="font-family:var(--mono);font-size:12px;line-height:1.8"></div>
@@ -1012,6 +1016,29 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
 </div>
 
 <!-- Modal Password Confirmation -->
+<div class="mbg" id="m-runtime">
+  <div class="modal" style="width:420px">
+    <h3>Ubah Runtime PHP <span id="rt-target" style="color:var(--accent);font-size:13px;font-weight:400"></span></h3>
+    <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.7">
+      Config lama dibackup, divalidasi dengan <b>frankenphp validate</b>, lalu di-reload (koneksi berjalan tidak diputus). Bila validasi gagal, config dikembalikan otomatis. Jangan lakukan saat jam ujian/sibuk.
+    </div>
+    <div class="fg">
+      <label class="inp-lbl">Runtime</label>
+      <select class="inp" id="rt-select" onchange="rtNote()"></select>
+      <div id="rt-note" style="font-family:var(--mono);font-size:10px;color:var(--warn);margin-top:6px;line-height:1.6"></div>
+    </div>
+    <div class="fg" style="margin-bottom:0">
+      <label class="inp-lbl">Password panel</label>
+      <input type="password" class="inp" id="rt-pw" onkeydown="if(event.key==='Enter')applyRuntime()">
+      <div id="rt-msg" style="font-family:var(--mono);font-size:11px;margin-top:8px;line-height:1.6"></div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="document.getElementById('m-runtime').classList.remove('open')">Cancel</button>
+      <button class="btn" onclick="applyRuntime()">Terapkan</button>
+    </div>
+  </div>
+</div>
+
 <div class="mbg" id="m-pw-confirm">
   <div class="modal" style="width:380px">
     <h3>Confirm Password</h3>
@@ -1052,7 +1079,12 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         </div>
       </div>
     </div>
-    <label class="check-lbl" style="margin-top:12px;margin-bottom:8px"><input type="checkbox" id="v-php" checked> Enable PHP</label>
+    <label class="check-lbl" style="margin-top:12px;margin-bottom:8px"><input type="checkbox" id="v-php" checked onchange="document.getElementById('v-runtime').disabled=!this.checked"> Enable PHP</label>
+    <div class="fg" style="margin:6px 0 4px 22px">
+      <label class="inp-lbl">Runtime PHP</label>
+      <select class="inp" id="v-runtime"></select>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:6px;line-height:1.6">PHP-FPM disarankan: update keamanan PHP datang lewat apt, tidak tergantung biner FrankenPHP.</div>
+    </div>
     <label class="check-lbl" style="margin-top:6px"><input type="checkbox" id="v-ssl"> Enable SSL (Let's Encrypt)</label>
     <label class="check-lbl" style="margin-top:6px"><input type="checkbox" id="v-laravel" onchange="updateVhostPreview()"> Laravel app <span style="color:var(--muted);font-weight:400">(serve from public/)</span></label>
     <div class="mf">
@@ -1760,17 +1792,71 @@ async function loadServices(){
 async function svcAct(name,action){await api('POST',`/api/services/${name}/${action}`);loadServices();loadDashSvc();}
 
 // ── Virtual Hosts ──
+// ── PHP runtime (FrankenPHP embedded vs PHP-FPM) ──
+let _rt=null, _rtTarget=null;
+async function loadRuntimes(){ _rt=await api('GET','/api/php/runtimes'); return _rt; }
+const rtLabel=(runtime,ver)=>runtime==='fpm'?'PHP-FPM'+(ver?' '+ver:''):runtime==='frankenphp'?'FrankenPHP':'—';
+const rtPayload=v=>v.startsWith('fpm:')?{runtime:'fpm',phpVersion:v.slice(4)}:{runtime:'frankenphp'};
+function rtOptions(){
+  const o=[];
+  if(_rt) for(const f of _rt.fpm) o.push({value:'fpm:'+f.version,label:`PHP-FPM ${f.version}${f.phpVersion?' ('+f.phpVersion+')':''}${f.active?'':' — tidak aktif'}`,disabled:!f.active});
+  o.push({value:'frankenphp',label:'FrankenPHP (PHP bawaan biner)'});
+  return o;
+}
+function fillRtSelect(sel,current){
+  const opts=rtOptions();
+  sel.innerHTML=opts.map(o=>`<option value="${esc(o.value)}"${o.disabled?' disabled':''}>${esc(o.label)}</option>`).join('');
+  const pref=_rt&&_rt.fpm.find(f=>f.active&&f.version===_rt.preferred)||_rt&&_rt.fpm.find(f=>f.active);
+  const want=current||(pref?'fpm:'+pref.version:'frankenphp');
+  if([...sel.options].some(o=>o.value===want&&!o.disabled)) sel.value=want;
+}
+async function openVhostModal(){
+  await loadRuntimes();
+  fillRtSelect(document.getElementById('v-runtime'));
+  document.getElementById('v-runtime').disabled=!document.getElementById('v-php').checked;
+  document.getElementById('m-vhost').classList.add('open');
+}
+function rtNote(){
+  const v=document.getElementById('rt-select').value;
+  document.getElementById('rt-note').textContent=v==='frankenphp'?'⚠ FrankenPHP v1.3.2 diketahui crash (segfault) bila banyak koneksi HTTPS keluar paralel. PHP-FPM disarankan.':'';
+}
+async function openRuntimeModal(target){
+  await loadRuntimes(); _rtTarget=target;
+  let cur=null;
+  if(target==='default'){const d=_rt&&_rt.defaultSite;if(d&&d.runtime)cur=d.runtime==='fpm'&&d.version?'fpm:'+d.version:d.runtime;}
+  else{const v=(await api('GET','/api/vhosts')||[]).find(x=>x.domain===target);if(v&&v.runtime)cur=v.runtime==='fpm'&&v.phpVersion?'fpm:'+v.phpVersion:v.runtime;}
+  document.getElementById('rt-target').textContent='— '+(target==='default'?'situs default':target);
+  fillRtSelect(document.getElementById('rt-select'),cur); rtNote();
+  document.getElementById('rt-pw').value=''; document.getElementById('rt-msg').textContent='';
+  document.getElementById('m-runtime').classList.add('open');
+}
+async function applyRuntime(){
+  const pw=document.getElementById('rt-pw').value, msg=document.getElementById('rt-msg');
+  const show=(t,ok)=>{msg.style.color=ok?'var(--accent)':'var(--danger)';msg.textContent=t;};
+  if(!pw) return show('// isi password panel');
+  show('// memvalidasi & menerapkan...',true);
+  const r=await api('POST','/api/runtime/convert',{password:pw,target:_rtTarget,...rtPayload(document.getElementById('rt-select').value)});
+  if(!r||!r.ok) return show('// '+((r&&r.error)||'gagal'));
+  if(r.unchanged) return show('// runtime sudah sesuai, tidak ada perubahan',true);
+  if(r.reloaded===false) return show('// config tersimpan tetapi reload gagal: '+(r.reloadError||'')+' — jalankan: systemctl restart frankenphp');
+  document.getElementById('m-runtime').classList.remove('open'); loadVhosts();
+}
+
 async function loadVhosts(){
+  await loadRuntimes();
+  const dr=_rt&&_rt.defaultSite;
+  document.getElementById('vhost-default-rt').textContent=dr&&dr.runtime?rtLabel(dr.runtime,dr.version):'bukan situs PHP';
   const d=await api('GET','/api/vhosts');if(!d)return;
   document.getElementById('vhost-tb').innerHTML=d.length
     ?d.map(v=>`<tr>
       <td style="font-weight:600"><a href="${v.ssl==='HTTPS'?'https':'http'}://${v.domain}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='inherit'">${v.domain} <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;display:inline;vertical-align:middle;opacity:.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></td>
       <td class="td-mono" style="font-size:11px;max-width:300px;overflow:hidden;text-overflow:ellipsis">${v.docroot}</td>
-      <td><span class="pill ${v.phpEnabled?'p-on':'p-unk'}" style="font-size:9px">${v.phpEnabled?'✓ Enabled':'—'}</span></td>
+      <td><span class="pill ${v.phpEnabled?'p-on':'p-unk'}" style="font-size:9px">${v.phpEnabled?'✓ '+rtLabel(v.runtime,v.phpVersion):'—'}</span></td>
       <td><span class="pill ${v.ssl==='HTTPS'?'p-on':'p-unk'}" style="font-size:9px">${v.ssl==='HTTPS'?'🔒 HTTPS':'HTTP'}</span></td>
       <td style="font-size:11px;color:var(--muted)">${v.created}</td>
       <td style="font-size:11px;color:var(--muted);text-align:right">${v.size}</td>
       <td style="display:flex;gap:5px;justify-content:flex-end">
+        ${v.phpEnabled?`<button class="btn btn-ghost" style="padding:4px 11px;font-size:11px" onclick="openRuntimeModal('${v.domain}')">⇄ PHP</button>`:''}
         <button class="btn btn-ghost" style="padding:4px 11px;font-size:11px" onclick="openEnvEditor('${v.domain}')">⚙ ENV</button>
         <button class="btn btn-red" style="padding:4px 11px;font-size:11px" onclick="delVhost('${v.domain}')">Remove</button>
       </td>
@@ -1787,7 +1873,7 @@ function updateVhostPreview(){
 }
 async function addVhost(){
   const domain=document.getElementById('v-domain').value.trim();if(!domain)return;
-  const r=await api('POST','/api/vhosts',{domain,root:document.getElementById('v-root').value.trim(),php:document.getElementById('v-php').checked,ssl:document.getElementById('v-ssl').checked,laravel:document.getElementById('v-laravel').checked});
+  const r=await api('POST','/api/vhosts',{domain,root:document.getElementById('v-root').value.trim(),php:document.getElementById('v-php').checked,...rtPayload(document.getElementById('v-runtime').value),ssl:document.getElementById('v-ssl').checked,laravel:document.getElementById('v-laravel').checked});
   if(!r||!r.ok){alert(r?.error||'Failed to add vhost');return;}
   if(r.reloaded===false) alert('Vhost saved, but FrankenPHP failed to reload the new config — the site may still show the default page.\n\n'+(r.reloadError||'')+'\n\nRun: systemctl restart frankenphp');
   document.getElementById('m-vhost').classList.remove('open');document.getElementById('v-domain').value='';loadVhosts();
@@ -2449,16 +2535,26 @@ async function loadEffective(fillBlanks){
 function renderEffective(d){
   const body=document.getElementById('st-eff-body');
   if(!d||!d.ok){body.innerHTML='<span style="color:var(--warn)">⚠ Tidak bisa memeriksa: '+esc((d&&d.error)||'tidak ada respons')+'</span>';document.getElementById('st-eff-via').textContent='—';return;}
-  document.getElementById('st-eff-via').textContent=d.sapi+' '+d.version;
-  const saved={};(d.rows||[]).forEach(r=>saved[r.key]=r);
-  let h='<div style="display:grid;grid-template-columns:1.6fr 1fr 1fr 40px;gap:4px 14px"><div style="color:var(--muted)">SETELAN</div><div style="color:var(--muted)">DISIMPAN</div><div style="color:var(--muted)">EFEKTIF</div><div></div>';
-  for(const k of ST_PHP_KEYS){
-    const r=saved[k], eff=d.values[k];
-    h+=`<div>${esc(k)}</div><div>${r?esc(r.saved):'—'}</div><div>${eff==null||eff===''?'—':esc(eff)}</div><div style="color:${!r?'var(--muted)':r.match?'var(--accent)':'var(--danger)'}">${!r?'':r.match?'✓':'✗'}</div>`;
+  const list=d.results&&d.results.length?d.results:[d];
+  document.getElementById('st-eff-via').textContent=list.map(r=>rtLabel(r.runtime,r.runtime==='fpm'?r.version:null)+' '+r.phpVersion).join(' · ');
+  let h='';
+  for(const r of list){
+    const saved={};(r.rows||[]).forEach(x=>saved[x.key]=x);
+    h+=`<div style="margin:${h?'16px':'0'} 0 6px;color:var(--text)"><b>${esc(rtLabel(r.runtime,r.runtime==='fpm'?r.version:null))}</b> <span style="color:var(--muted)">· PHP ${esc(r.phpVersion)} · ${esc(r.sapi)} · via ${esc(r.via)}</span></div>`;
+    h+='<div style="display:grid;grid-template-columns:1.6fr 1fr 1fr 40px;gap:4px 14px"><div style="color:var(--muted)">SETELAN</div><div style="color:var(--muted)">DISIMPAN</div><div style="color:var(--muted)">EFEKTIF</div><div></div>';
+    for(const k of ST_PHP_KEYS){
+      const x=saved[k], eff=r.values[k];
+      h+=`<div>${esc(k)}</div><div>${x?esc(x.saved):'—'}</div><div>${eff==null||eff===''||eff===false?'—':esc(eff)}</div><div style="color:${!x?'var(--muted)':x.match?'var(--accent)':'var(--danger)'}">${!x?'':x.match?'✓':'✗'}</div>`;
+    }
+    h+='</div>';
+    h+='<div style="margin-top:6px;color:var(--muted)">'+(r.runtime==='fpm'?'file ini yang dibaca: ':'php.ini dimuat: ')+'<span style="color:var(--text)">'+esc(r.runtime==='fpm'?(r.scanned?r.scanned.trim().split(/\s*\n\s*|,\s*/).filter(Boolean).pop():'(tidak ada)'):(r.loadedIni||'(tidak ada)'))+'</span></div>';
+    if(r.mismatch){
+      h+='<div style="margin-top:6px;color:var(--danger)">⚠ Belum aktif di server yang berjalan. '+(r.runtime==='fpm'
+        ?'PHP-FPM belum memuat '+esc(r.expectedIni)+'. Cek: <span style="color:var(--accent)">php-fpm'+esc(r.version)+' -t</span> lalu <span style="color:var(--accent)">systemctl reload php'+esc(r.version)+'-fpm</span>.'
+        :'FrankenPHP memuat '+esc(r.loadedIni||'tidak ada php.ini')+', sedangkan panel menulis ke '+esc(r.expectedIni)+'. Pastikan service frankenphp memakai <b>PHPRC='+esc(r.expectedIni.replace(/\/php\.ini$/,''))+'</b> (cek: <span style="color:var(--accent)">systemctl show frankenphp -p Environment</span>) lalu restart FrankenPHP.')+'</div>';
+    }
   }
-  h+='</div><div style="margin-top:8px;color:var(--muted)">php.ini dimuat: <span style="color:var(--text)">'+esc(d.loadedIni||'(tidak ada)')+'</span> · via '+esc(d.via)+'</div>';
-  if(d.mismatch) h+='<div style="margin-top:8px;color:var(--danger)">⚠ Belum aktif di server yang berjalan. FrankenPHP memuat '+esc(d.loadedIni||'tidak ada php.ini')+', sedangkan panel menulis ke '+esc(d.expectedIni)+'. Pastikan service frankenphp memakai <b>PHPRC='+esc(d.expectedIni.replace(/\/php\.ini$/,''))+'</b> (cek: <span style="color:var(--accent)">systemctl show frankenphp -p Environment</span>) lalu restart FrankenPHP.</div>';
-  else h+='<div style="margin-top:8px;color:var(--accent)">✓ Pengaturan yang tersimpan sudah berlaku di proses web.</div>';
+  h+=d.mismatch?'':'<div style="margin-top:10px;color:var(--accent)">✓ Pengaturan yang tersimpan sudah berlaku di semua runtime yang melayani web.</div>';
   body.innerHTML=h;
 }
 
@@ -2511,9 +2607,11 @@ async function saveSettings(){
     if(d.frankenphpUpdated) msg+='FrankenPHP config updated. ';
     if(d.phprcInstalled) msg+='PHPRC ditambahkan ke service frankenphp. ';
     if(d.phprcError) msg+=`<br>⚠ Gagal memasang PHPRC: ${esc(d.phprcError)}<br>`;
-    if(d.restartOk) msg+='Service restarted ✓';
+    if(d.restarted===false) msg+='FrankenPHP tidak di-restart (semua situs memakai PHP-FPM). ';
+    else if(d.restartOk) msg+='Service restarted ✓';
     else msg+=`Restart failed: ${esc(d.restartError||'unknown')}`;
-    let type=(d.restartOk&&!d.phprcError)?'ok':'warn';
+    (d.fpmIni||[]).forEach(f=>{ if(f.error) msg+=`<br>⚠ PHP-FPM ${esc(f.version)}: ${esc(f.error)}`; else if(f.changed) msg+=` PHP-FPM ${esc(f.version)} di-reload ✓`; });
+    let type=(d.restartOk&&!d.phprcError&&!(d.fpmIni||[]).some(f=>f.error))?'ok':'warn';
     if(d.effective){
       renderEffective(d.effective);
       if(d.effective.ok&&d.effective.mismatch){type='warn';msg+='<br>⚠ Belum aktif di server yang berjalan — lihat "Nilai Efektif di FrankenPHP" di bawah.';}
