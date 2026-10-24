@@ -370,8 +370,154 @@ function reloadFrankenPHP(cb) {
     exec('systemctl restart frankenphp', (err2) => cb(err2));
   });
 }
+// ── PHP runtimes: FrankenPHP's embedded PHP (`php_server`) or PHP-FPM (`php_fastcgi`) ──
+// FrankenPHP stays the web server either way. With FPM the PHP version is whatever php<ver>-fpm
+// packages are installed (PHP 8.5 is the target: PREFERRED_PHP), so PHP security updates arrive
+// through apt instead of a new FrankenPHP binary, and the (v1.3.2) embedded OpenSSL is bypassed.
+const PHP_ETC        = process.env.PANEL_PHP_ETC  || '/etc/php';
+const PHP_SBIN       = process.env.PANEL_PHP_SBIN || '/usr/sbin';
+const FPM_RUN        = process.env.PANEL_FPM_RUN  || '/run/php';
+const FRANKENPHP_BIN = process.env.PANEL_FRANKENPHP_BIN || '/usr/local/bin/frankenphp';
+const PREFERRED_PHP  = process.env.PANEL_PHP_VERSION || '8.5';
+
+const cmpPhpVerDesc = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); return (y[0] - x[0]) || (y[1] - x[1]); };
+
+// Installed php<ver>-fpm packages, newest first.
+function fpmRuntimes() {
+  let dirs = [];
+  try { dirs = fs.readdirSync(PHP_ETC); } catch {}
+  return dirs.filter(d => /^\d+\.\d+$/.test(d)).sort(cmpPhpVerDesc).map(v => ({
+    version: v,
+    bin: path.join(PHP_SBIN, `php-fpm${v}`),
+    service: `php${v}-fpm`,
+    socket: path.join(FPM_RUN, `php${v}-fpm.sock`),
+    confD: path.join(PHP_ETC, v, 'fpm', 'conf.d'),
+  })).filter(r => fs.existsSync(r.bin));
+}
+// Requested version, else the preferred one (8.5), else the newest installed. null = no FPM at all.
+function pickFpm(version) {
+  const all = fpmRuntimes();
+  if (version) return all.find(r => r.version === version) || null;
+  return all.find(r => r.version === PREFERRED_PHP) || all[0] || null;
+}
+async function fpmActive(rt) {
+  return new Promise(r => exec(`systemctl is-active ${rt.service}`, (e, o) => r(!e && o.trim() === 'active')));
+}
+
+// Which runtime does a Caddy site block use? (comment lines are ignored)
+function parseRuntime(content) {
+  const text = content.split('\n').filter(l => !l.trim().startsWith('#')).join('\n');
+  if (/^\s*php_server\b/m.test(text)) return { runtime: 'frankenphp', version: null };
+  const m = text.match(/^\s*php_fastcgi\s+unix\/\/\S*php(\d+\.\d+)-fpm\.sock/m);
+  if (m) return { runtime: 'fpm', version: m[1] };
+  if (/^\s*php_fastcgi\b/m.test(text)) return { runtime: 'fpm', version: null };   // custom socket / TCP
+  return { runtime: null, version: null };
+}
+
+// Directive lines for a new PHP site block.
+function runtimeLines(runtime, rt, indent = '\t') {
+  if (runtime === 'frankenphp') return [`${indent}php_server`];
+  return [`${indent}encode zstd gzip`, `${indent}php_fastcgi unix/${rt.socket}`, `${indent}file_server`];
+}
+
+// Rewrites the runtime directives inside ONE block body, keeping everything else
+// (headers, redirects, extra directives). Returns null when the block has no PHP directive.
+function switchRuntimeInBody(body, runtime, rt) {
+  const lines = body.split('\n');
+  const indent = ((lines.find(l => /^[ \t]+\S/.test(l)) || '').match(/^[ \t]*/) || ['\t'])[0] || '\t';
+  const hasEncode = lines.some(l => /^\s*encode\b/.test(l));
+  const out = []; let placed = false;
+  for (const l of lines) {
+    const t = l.trim();
+    if (/^php_server\b/.test(t) || /^php_fastcgi\b/.test(t)) {
+      if (!placed) {
+        placed = true;
+        for (const x of runtimeLines(runtime, rt, indent)) if (!(hasEncode && /^\s*encode\b/.test(x))) out.push(x);
+      }
+    } else if (/^file_server\b/.test(t)) { /* re-added (FPM) or implied by php_server */ }
+    else out.push(l);
+  }
+  return placed ? out.join('\n') : null;
+}
+
+const DEFAULT_SITE_RE = /(^http:\/\/:80[ \t]*\{[ \t]*\n)([\s\S]*?)(\n\}[ \t]*(?=\n|$))/m;
+const SITE_BLOCK_RE   = /^([^\n{]*\{[ \t]*\n)([\s\S]*?)(\n\}[ \t]*(?=\n|$))/m;
+
+function readDefaultSite() {
+  try {
+    const m = fs.readFileSync(CADDYFILE_PATH, 'utf8').match(DEFAULT_SITE_RE);
+    if (!m) return null;
+    const rm = m[2].match(/root\s+\*\s+(\S+)/);
+    return { body: m[2], docroot: rm ? rm[1] : null, ...parseRuntime(m[2]) };
+  } catch { return null; }
+}
+
+// `frankenphp validate`: catches a broken Caddyfile BEFORE the running server sees it.
+// Resolves to null when valid (or when there is no binary to check with), else the error text.
+async function validateCaddy() {
+  if (!fs.existsSync(FRANKENPHP_BIN)) return null;
+  try { await execFileAsync(FRANKENPHP_BIN, ['validate', '--config', CADDYFILE_PATH, '--adapter', 'caddyfile'], { timeout: 30000 }); return null; }
+  catch (e) { return String((e.stderr || e.message || 'validation failed')).split('\n').filter(Boolean).slice(-3).join(' | '); }
+}
+
+// Switches a site (domain, or 'default' for the http://:80 block) to another runtime.
+// Backup → write → validate → on failure restore. Returns { file, error } (error = null on success).
+async function convertRuntime(target, runtime, version) {
+  let rt = null;
+  if (runtime === 'fpm') {
+    rt = pickFpm(version || null);
+    if (!rt) return { error: version ? `php${version}-fpm tidak terpasang` : 'PHP-FPM belum terpasang' };
+    if (!(await fpmActive(rt))) return { error: `${rt.service} tidak aktif (systemctl start ${rt.service})` };
+  } else if (runtime !== 'frankenphp') return { error: 'runtime harus frankenphp atau fpm' };
+
+  let file, re;
+  if (target === 'default') { file = CADDYFILE_PATH; re = DEFAULT_SITE_RE; }
+  else {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,}$/.test(target)) return { error: 'domain tidak valid' };
+    file = path.join(VHOSTS_DIR, `${target}.conf`); re = SITE_BLOCK_RE;
+    if (!fs.existsSync(file)) return { error: 'virtual host tidak ditemukan' };
+  }
+  let orig;
+  try { orig = fs.readFileSync(file, 'utf8'); } catch (e) { return { error: e.message }; }
+  const m = orig.match(re);
+  if (!m) return { error: 'blok situs tidak ditemukan / format tidak dikenali' };
+  const body = switchRuntimeInBody(m[2], runtime, rt);
+  if (body == null) return { error: 'situs ini bukan situs PHP (tidak ada php_server / php_fastcgi)' };
+  const next = orig.slice(0, m.index) + m[1] + body + m[3] + orig.slice(m.index + m[0].length);
+  if (next === orig) return { file, error: null, unchanged: true };
+
+  const backup = file + '.bak.' + Date.now();      // *.conf.bak.* is not matched by `import sites/*.conf`
+  fs.copyFileSync(file, backup);
+  fs.writeFileSync(file, next);
+  const bad = await validateCaddy();
+  if (bad) { fs.writeFileSync(file, orig); return { file, error: 'validasi Caddyfile gagal, dikembalikan: ' + bad }; }
+  return { file, backup, error: null };
+}
+
+// Runtimes actually referenced by the Caddyfile default site and all site files.
+function runtimesInUse() {
+  const use = { frankenphp: false, fpm: new Set() };
+  const add = r => { if (r.runtime === 'frankenphp') use.frankenphp = true; else if (r.runtime === 'fpm') use.fpm.add(r.version || (pickFpm() || {}).version); };
+  const d = readDefaultSite(); if (d) add(d);
+  try { for (const f of fs.readdirSync(VHOSTS_DIR).filter(f => f.endsWith('.conf'))) add(parseRuntime(fs.readFileSync(path.join(VHOSTS_DIR, f), 'utf8'))); } catch {}
+  use.fpm.delete(undefined);
+  return use;
+}
+
+app.get('/api/php/runtimes', auth, async (req, res) => {
+  const fpm = await Promise.all(fpmRuntimes().map(async rt => {
+    let phpVersion = null;
+    try { phpVersion = ((await execFileAsync(rt.bin, ['-v'], { timeout: 8000 })).stdout.match(/^PHP (\S+)/) || [])[1] || null; } catch {}
+    return { version: rt.version, service: rt.service, socket: rt.socket, active: await fpmActive(rt), phpVersion };
+  }));
+  const def = readDefaultSite();
+  res.json({ ok: true, preferred: PREFERRED_PHP, fpm,
+             frankenphp: { installed: fs.existsSync(FRANKENPHP_BIN) },
+             defaultSite: def ? { runtime: def.runtime, version: def.version } : null });
+});
+
 app.get('/api/vhosts', auth,(req,res)=>{
-  const files = fs.existsSync(VHOSTS_DIR)?fs.readdirSync(VHOSTS_DIR):[];
+  const files = (fs.existsSync(VHOSTS_DIR)?fs.readdirSync(VHOSTS_DIR):[]).filter(f=>f.endsWith('.conf'));
   res.json(files.map(f=>{
     const fpath=path.join(VHOSTS_DIR,f);
     const content=fs.readFileSync(fpath,'utf8');
@@ -380,8 +526,9 @@ app.get('/api/vhosts', auth,(req,res)=>{
     // Parse document root
     const m=content.match(/root\s+\*\s+(.+?)(?:\n|$)/);
     const docroot=m?m[1].trim():'/var/www/'+domain;
-    // Check if PHP enabled
-    const phpEnabled=content.includes('php_server');
+    // Which PHP runtime (if any) serves this site
+    const rtm=parseRuntime(content);
+    const phpEnabled=rtm.runtime!==null;
     // Check if SSL enabled
     const sslEnabled=!content.match(/^http:\/\//m);
     return {
@@ -390,18 +537,32 @@ app.get('/api/vhosts', auth,(req,res)=>{
       content,
       docroot,
       phpEnabled,
+      runtime:rtm.runtime,
+      phpVersion:rtm.version,
       ssl:sslEnabled?'HTTPS':'HTTP',
       created:new Date(stats.mtime).toLocaleDateString('id-ID',{year:'numeric',month:'short',day:'numeric'}),
       size:Math.round(stats.size/1024)+'KB'
     };
   }));
 });
-app.post('/api/vhosts', auth,(req,res)=>{
-  const {domain,root,php,ssl,laravel}=req.body;
+app.post('/api/vhosts', auth, async (req,res)=>{
+  const {domain,root,php,ssl,laravel,runtime,phpVersion}=req.body||{};
   if(!domain) return res.status(400).json({error:'Domain required'});
   if(!/^[a-zA-Z0-9][a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,}$/.test(domain)) return res.status(400).json({error:'Invalid domain name'});
   const projectRoot = root||`/var/www/${domain}`;
   if(!path.isAbsolute(projectRoot)) return res.status(400).json({error:'Document root must be an absolute path'});
+  // The path is written into the Caddyfile: refuse anything that could break out of the directive.
+  if(!/^\/[\w.\-\/@+]+$/.test(projectRoot)) return res.status(400).json({error:'Document root hanya boleh berisi huruf, angka dan . _ - / @ +'});
+  // PHP runtime: explicit, or FPM when installed (preferred), else FrankenPHP's embedded PHP.
+  let rtName=null, rt=null;
+  if(php){
+    rtName = runtime || (pickFpm(phpVersion||null) ? 'fpm' : 'frankenphp');
+    if(rtName==='fpm'){
+      rt = pickFpm(phpVersion||null);
+      if(!rt) return res.status(400).json({error: phpVersion ? `php${phpVersion}-fpm tidak terpasang` : 'PHP-FPM belum terpasang'});
+      if(!(await fpmActive(rt))) return res.status(400).json({error:`${rt.service} tidak aktif (systemctl start ${rt.service})`});
+    } else if(rtName!=='frankenphp') return res.status(400).json({error:'runtime harus frankenphp atau fpm'});
+  }
   fs.mkdirSync(projectRoot,{recursive:true});
   // Laravel's index.php lives in <project>/public, not the project root — pointing
   // Caddy at the project root means every request 404s straight from Caddy before
@@ -409,12 +570,34 @@ app.post('/api/vhosts', auth,(req,res)=>{
   // though the deployed app itself is perfectly fine.
   const docroot = laravel ? path.join(projectRoot,'public') : projectRoot;
   const host = ssl ? domain : `http://${domain}`;
-  const config = php
-    ? `${host} {\n  root * ${docroot}\n  php_server\n}\n`
-    : `${host} {\n  root * ${docroot}\n  file_server\n}\n`;
-  fs.writeFileSync(path.join(VHOSTS_DIR,`${domain}.conf`),config);
+  const lines = rtName ? runtimeLines(rtName, rt) : ['\tfile_server'];
+  const config = `${host} {\n\troot * ${docroot}\n${lines.join('\n')}\n}\n`;
+  const file = path.join(VHOSTS_DIR,`${domain}.conf`);
+  const prev = fs.existsSync(file) ? fs.readFileSync(file,'utf8') : null;
+  fs.writeFileSync(file,config);
+  const bad = await validateCaddy();
+  if(bad){ // never leave a config on disk that the server would refuse
+    if(prev===null) fs.rmSync(file,{force:true}); else fs.writeFileSync(file,prev);
+    return res.status(400).json({error:'Validasi Caddyfile gagal, dibatalkan: '+bad});
+  }
+  if(rt) { try { await syncFpmIni([rt.version]); } catch {} }
   reloadFrankenPHP((err)=>{
-    res.json({ok:true, reloaded:!err, reloadError: err ? String(err.message||err) : null});
+    res.json({ok:true, runtime:rtName, phpVersion:rt?rt.version:null, reloaded:!err, reloadError: err ? String(err.message||err) : null});
+  });
+});
+
+// Move a site (or the http://:80 default site) between FrankenPHP's PHP and PHP-FPM.
+app.post('/api/runtime/convert', auth, async (req,res)=>{
+  const {password,target,runtime,phpVersion}=req.body||{};
+  if(typeof password!=='string' || !bcrypt.compareSync(password, authState.hash)) return res.status(403).json({error:'Wrong password'});
+  if(!target) return res.status(400).json({error:'target wajib diisi'});
+  const r = await convertRuntime(target, runtime, phpVersion||null);
+  if(r.error) return res.status(400).json({ok:false, error:r.error});
+  let fpmIni = null;
+  if(runtime==='fpm'){ try { fpmIni = await syncFpmIni([pickFpm(phpVersion||null).version]); } catch(e){ fpmIni=[{error:e.message}]; } }
+  if(r.unchanged) return res.json({ok:true, unchanged:true, fpmIni});
+  reloadFrankenPHP((err)=>{
+    res.json({ok:true, backup:r.backup, reloaded:!err, reloadError: err ? String(err.message||err) : null, fpmIni});
   });
 });
 app.delete('/api/vhosts/:domain', auth,(req,res)=>{
@@ -799,22 +982,54 @@ async function ensurePhprc() {
   return { changed: true };
 }
 
-// Sites that can serve a PHP probe: the default catch-all site first, then PHP vhosts.
+// Mirrors the managed PHP settings (/etc/frankenphp/php.ini) into PHP-FPM's conf.d, then RELOADS
+// the pool (reload lets running requests finish; restart would cut them). `php-fpm -t` validates
+// first and the previous file is restored if the config is rejected.
+const FPM_INI_NAME = '99-ps-panel.ini';
+async function syncFpmIni(versions) {
+  const saved = readPhpIni().settings;
+  const lines = PHP_KEYS.filter(k => saved[k] != null).map(k => `${k} = ${saved[k]}`);
+  const results = [];
+  for (const v of versions) {
+    const rt = pickFpm(v);
+    if (!rt) { results.push({ version: v, error: 'tidak terpasang' }); continue; }
+    const file = path.join(rt.confD, FPM_INI_NAME);
+    const next = '; Managed by PS Panel (Settings > PHP Configuration): mirror of /etc/frankenphp/php.ini.\n' + lines.join('\n') + '\n';
+    let prev = null; try { prev = fs.readFileSync(file, 'utf8'); } catch {}
+    if (prev === next || (prev === null && !lines.length)) { results.push({ version: v, changed: false }); continue; }
+    try {
+      fs.mkdirSync(rt.confD, { recursive: true });
+      fs.writeFileSync(file + '.tmp', next, { mode: 0o644 });
+      fs.renameSync(file + '.tmp', file);
+      try { await execFileAsync(rt.bin, ['-t'], { timeout: 15000 }); }
+      catch (e) {
+        if (prev === null) fs.rmSync(file, { force: true }); else fs.writeFileSync(file, prev);
+        results.push({ version: v, error: 'php-fpm -t gagal, dikembalikan: ' + String(e.stderr || e.message).trim().split('\n').slice(-2).join(' | ') });
+        continue;
+      }
+      await execFileAsync('systemctl', ['reload', rt.service], { timeout: 20000 });
+      results.push({ version: v, changed: true, reloaded: true });
+    } catch (e) { results.push({ version: v, error: e.message }); }
+  }
+  return results;
+}
+
+// One probe target per PHP site (default site first): { runtime, version, docroot, host, https, port }.
 function probeTargets() {
   const targets = [];
-  try {
-    const cf = fs.readFileSync(CADDYFILE_PATH, 'utf8');
-    const m = cf.match(/http:\/\/:80\s*\{[^}]*?root\s+\*\s+(\S+)/);
-    if (m) targets.push({ label: 'situs default', docroot: m[1], host: null, https: false, port: PROBE_HTTP_PORT });
-  } catch {}
+  const d = readDefaultSite();
+  if (d && d.runtime && d.docroot)
+    targets.push({ label: 'situs default', runtime: d.runtime, version: d.version || (d.runtime === 'fpm' ? (pickFpm() || {}).version : null), docroot: d.docroot, host: null, https: false, port: PROBE_HTTP_PORT });
   try {
     for (const f of fs.readdirSync(VHOSTS_DIR).filter(f => f.endsWith('.conf'))) {
       const content = fs.readFileSync(path.join(VHOSTS_DIR, f), 'utf8');
       const rm = content.match(/root\s+\*\s+(.+?)(?:\n|$)/);
-      if (!rm || !content.includes('php_server')) continue;
+      const r = parseRuntime(content);
+      if (!rm || !r.runtime) continue;
       const domain = f.replace(/\.conf$/, '');
       const plain = /^\s*http:\/\//.test(content);   // http:// prefix = no SSL (see vhost creation)
-      targets.push({ label: domain, docroot: rm[1].trim(), host: domain, https: !plain, port: plain ? PROBE_HTTP_PORT : PROBE_HTTPS_PORT });
+      targets.push({ label: domain, runtime: r.runtime, version: r.version || (r.runtime === 'fpm' ? (pickFpm() || {}).version : null),
+                     docroot: rm[1].trim(), host: domain, https: !plain, port: plain ? PROBE_HTTP_PORT : PROBE_HTTPS_PORT });
     }
   } catch {}
   return targets;
@@ -834,30 +1049,35 @@ function probeRequest(t, file) {
   });
 }
 
-// Asks the RUNNING FrankenPHP web process what it actually uses. A throw-away PHP file with a
-// random name is placed in a served docroot, requested over localhost, and removed again.
+// Asks the RUNNING web processes what they really use: one probe per distinct runtime
+// (FrankenPHP's PHP, and each PHP-FPM version). A throw-away PHP file with a random name is
+// placed in a served docroot, requested over localhost, and removed again.
 async function probeEffectivePhp(keys = PHP_KEYS) {
   const targets = probeTargets();
   if (!targets.length) return { ok: false, error: 'tidak ada situs PHP yang bisa dipakai untuk memeriksa' };
-  const errors = [];
+  const results = [], errors = [], done = new Set();
   for (const t of targets) {
+    const rkey = t.runtime === 'fpm' ? `fpm:${t.version || '?'}` : 'frankenphp';
+    if (done.has(rkey)) continue;
     if (!fs.existsSync(t.docroot)) { errors.push(`${t.label}: docroot ${t.docroot} tidak ada`); continue; }
     const file = 'psprobe-' + crypto.randomBytes(8).toString('hex') + '.php';
     const full = path.join(t.docroot, file);
     try {
       fs.writeFileSync(full, `<?php header('Content-Type: application/json'); header('Cache-Control: no-store');
-$o=['sapi'=>PHP_SAPI,'version'=>PHP_VERSION,'loaded_ini'=>php_ini_loaded_file(),'values'=>[]];
+$o=['sapi'=>PHP_SAPI,'version'=>PHP_VERSION,'loaded_ini'=>php_ini_loaded_file(),'scanned'=>php_ini_scanned_files(),'values'=>[]];
 foreach(json_decode('${JSON.stringify(keys)}') as $k){$o['values'][$k]=ini_get($k);}
 echo json_encode($o);\n`, { mode: 0o644 });
       const r = await probeRequest(t, file);
       if (r.error) { errors.push(`${t.label}: ${r.error}`); continue; }
       let j = null; try { j = JSON.parse(r.body); } catch {}
       if (!j || !j.values) { errors.push(`${t.label}: HTTP ${r.status}, bukan respons PHP`); continue; }
-      return { ok: true, via: t.label, sapi: j.sapi, version: j.version, loadedIni: j.loaded_ini || null, values: j.values };
+      results.push({ runtimeKey: rkey, runtime: t.runtime, version: t.version, via: t.label, sapi: j.sapi, phpVersion: j.version,
+                     loadedIni: j.loaded_ini || null, scanned: j.scanned || null, values: j.values });
+      done.add(rkey);
     } catch (e) { errors.push(`${t.label}: ${e.message}`); }
     finally { try { fs.rmSync(full, { force: true }); } catch {} }
   }
-  return { ok: false, error: errors.join('; ') };
+  return results.length ? { ok: true, results, errors } : { ok: false, error: errors.join('; ') };
 }
 
 // After a restart FrankenPHP needs a moment before it answers; retry for up to ~20 s.
@@ -871,18 +1091,27 @@ async function probeWhenReady(keys, tries = 20) {
   return last;
 }
 
-// Saved (file) vs effective (running process) for every key that is set in the file.
+// Saved (file) vs effective (running process), for every runtime that was probed.
 function compareEffective(probe) {
   if (!probe.ok) return { ok: false, error: probe.error };
   const saved = readPhpIni().settings;
-  const rows = PHP_KEYS.filter(k => saved[k] != null).map(k => ({
-    key: k, saved: saved[k], effective: probe.values[k] ?? null, match: sameIniValue(saved[k], probe.values[k]),
-  }));
-  let iniMatch = false;
-  try { iniMatch = !!probe.loadedIni && fs.realpathSync(probe.loadedIni) === fs.realpathSync(PHP_INI_FILE); } catch {}
-  return { ok: true, via: probe.via, sapi: probe.sapi, version: probe.version, loadedIni: probe.loadedIni,
-           expectedIni: PHP_INI_FILE, iniMatch, rows, mismatch: !iniMatch || rows.some(r => !r.match),
-           values: probe.values };
+  const expectFile = fs.existsSync(PHP_INI_FILE);
+  const results = probe.results.map(r => {
+    const rows = PHP_KEYS.filter(k => saved[k] != null).map(k => ({
+      key: k, saved: saved[k], effective: r.values[k] ?? null, match: sameIniValue(saved[k], r.values[k]),
+    }));
+    let iniMatch = false, expectedIni;
+    if (r.runtime === 'frankenphp') {
+      expectedIni = PHP_INI_FILE;
+      try { iniMatch = !!r.loadedIni && fs.realpathSync(r.loadedIni) === fs.realpathSync(PHP_INI_FILE); } catch {}
+    } else {
+      expectedIni = path.join(PHP_ETC, r.version || '?', 'fpm', 'conf.d', FPM_INI_NAME);
+      iniMatch = !!r.scanned && r.scanned.includes(FPM_INI_NAME);
+    }
+    const needIni = expectFile && (r.runtime === 'frankenphp' || rows.length > 0);
+    return { ...r, rows, iniMatch, expectedIni, mismatch: rows.some(x => !x.match) || (needIni && !iniMatch) };
+  });
+  return { ok: true, ...results[0], results, mismatch: results.some(r => r.mismatch) };
 }
 
 function readFrankenphpSettings() {
@@ -1109,17 +1338,36 @@ function restartTuned(cb) {
   });
 }
 
+// `postgres -C` prints a setting in its INTERNAL unit (8 kB blocks for shared_buffers and
+// effective_cache_size, kB for work_mem and maintenance_work_mem), e.g. 253952 for 1984MB.
+// Convert to the "NNNMB" form the profile uses so current vs recommended compare correctly.
+function pgInternalToMB(key, raw, blockBytes) {
+  raw = String(raw).trim();
+  if (!/^\d+$/.test(raw)) return raw;               // already carries a unit (e.g. 128MB)
+  const n = parseInt(raw, 10);
+  let mb;
+  if (key === 'shared_buffers' || key === 'effective_cache_size') mb = n * blockBytes / 1048576;
+  else if (key === 'work_mem' || key === 'maintenance_work_mem') mb = n / 1024;
+  else return raw;                                   // max_connections: plain count
+  return `${Math.round(mb * 100) / 100}MB`;
+}
+
 app.get('/api/autotune', auth, async (req, res) => {
   const specs = machineSpecs();
   const profile = computeTuneProfile(specs.cores, specs.ramMB);
   const current = { num_threads: readFrankenphpSettings().num_threads };
   const pg = findPgCluster();
   if (pg && fs.existsSync(pg.bin)) {
-    await Promise.all(TUNE_PG_KEYS.map(async k => {
+    const pgC = async k => {
       try {
         const { stdout } = await execFileAsync('runuser', ['-u', 'postgres', '--', pg.bin, '-C', k, '-c', 'config_file=' + pg.conf], { timeout: 10000 });
-        current[k] = stdout.trim();
-      } catch { current[k] = null; }
+        return stdout.trim();
+      } catch { return null; }
+    };
+    const blockBytes = parseInt(await pgC('block_size'), 10) || 8192;
+    await Promise.all(TUNE_PG_KEYS.map(async k => {
+      const raw = await pgC(k);
+      current[k] = raw == null ? null : pgInternalToMB(k, raw, blockBytes);
     }));
   }
   const boot = { installed: fs.existsSync(AUTOTUNE_UNIT), enabled: false };
@@ -1173,7 +1421,7 @@ app.get('/api/settings', auth, (req, res) => {
   } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
-// What the running FrankenPHP web process really uses (not just what is in the file).
+// What the running web processes really use (not just what is in the files).
 app.get('/api/settings/effective', auth, async (req, res) => {
   try { res.json(compareEffective(await probeEffectivePhp())); }
   catch (e) { res.json({ ok: false, error: e.message }); }
@@ -1194,20 +1442,35 @@ app.post('/api/settings/update', auth, async (req, res) => {
       updateFrankenphpSettings(frankenphp);
       fpUpdated = true;
     }
-    // The service must carry PHPRC or FrankenPHP never reads the php.ini we just wrote.
+    const use = runtimesInUse();
+    // PHP-FPM pools: mirror the ini and RELOAD (never restart: running requests finish).
+    const fpmIni = use.fpm.size ? await syncFpmIni([...use.fpm]) : [];
+    // FrankenPHP's own PHP needs PHPRC on the service or it never reads the php.ini we wrote,
+    // and a restart to pick it up. Sites on PHP-FPM don't need FrankenPHP restarted for php.ini.
     let phprc = { changed: false }, phprcError = null;
-    try { phprc = await ensurePhprc(); } catch (e) { phprcError = e.message; }
-    // Restart FrankenPHP to apply
-    const restart = await new Promise(resolve => exec('systemctl restart frankenphp', (err, _, se) => resolve({ err, se })));
-    const effective = restart.err ? null : compareEffective(await probeWhenReady(PHP_KEYS));
+    const restartNeeded = use.frankenphp || fpUpdated || (!use.fpm.size);
+    if (use.frankenphp || !use.fpm.size) { try { phprc = await ensurePhprc(); } catch (e) { phprcError = e.message; } }
+    let restart = { err: null, se: null };
+    if (restartNeeded) restart = await new Promise(resolve => exec('systemctl restart frankenphp', (err, _, se) => resolve({ err, se })));
+    // A graceful FPM reload lets new workers pick the ini up a moment later: re-check briefly.
+    let effective = null;
+    if (!restart.err) {
+      for (let i = 0; i < 6; i++) {
+        effective = compareEffective(await probeWhenReady(PHP_KEYS));
+        if (!effective.ok || !effective.mismatch) break;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
     res.json({
       ok: true,
       phpIniPath: phpPath,
       frankenphpUpdated: fpUpdated,
+      restarted: restartNeeded,
       restartOk: !restart.err,
       restartError: restart.err ? (restart.se || restart.err.message) : null,
       phprcInstalled: phprc.changed,
       phprcError,
+      fpmIni,
       effective,
     });
   } catch (e) {
