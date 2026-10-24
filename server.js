@@ -583,6 +583,7 @@ app.post('/api/vhosts', auth, async (req,res)=>{
   if(rt) { try { await syncFpmIni([rt.version]); } catch {} }
   reloadFrankenPHP((err)=>{
     res.json({ok:true, runtime:rtName, phpVersion:rt?rt.version:null, reloaded:!err, reloadError: err ? String(err.message||err) : null});
+    if(rtName) setImmediate(()=>autotuneTick('runtime situs berubah (vhost baru '+domain+')').catch(()=>{}));
   });
 });
 
@@ -598,6 +599,7 @@ app.post('/api/runtime/convert', auth, async (req,res)=>{
   if(r.unchanged) return res.json({ok:true, unchanged:true, fpmIni});
   reloadFrankenPHP((err)=>{
     res.json({ok:true, backup:r.backup, reloaded:!err, reloadError: err ? String(err.message||err) : null, fpmIni});
+    setImmediate(()=>autotuneTick('runtime situs berubah ('+(target==='default'?'situs default':target)+' → '+(runtime==='fpm'?'PHP-FPM '+(phpVersion||''):'FrankenPHP')+')').catch(()=>{}));
   });
 });
 app.delete('/api/vhosts/:domain', auth,(req,res)=>{
@@ -890,6 +892,8 @@ const PHP_KEYS = [
   'max_execution_time',
   'max_input_vars',
   'max_input_time',
+  'opcache.memory_consumption',
+  'opcache.max_accelerated_files',
 ];
 // PHP's built-in defaults, used only for the upload ≤ post comparison when a key is unset.
 const PHP_DEFAULTS = { upload_max_filesize: '2M', post_max_size: '8M' };
@@ -906,7 +910,10 @@ const PHP_VALIDATORS = {
   max_execution_time:  INT_RE,
   max_input_vars:      INT_RE,
   max_input_time:      INT_RE,
+  'opcache.memory_consumption':   INT_RE,
+  'opcache.max_accelerated_files': INT_RE,
 };
+const reEsc = k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // "20M" → bytes (NaN when not a size). Used for validation and for comparing saved vs effective.
 function sizeToBytes(v) {
@@ -926,7 +933,7 @@ function readPhpIni() {
   try {
     const content = fs.readFileSync(PHP_INI_FILE, 'utf8');
     for (const k of PHP_KEYS) {
-      const m = content.match(new RegExp(`^\\s*${k}\\s*=\\s*(.+?)\\s*$`, 'm'));
+      const m = content.match(new RegExp(`^\\s*${reEsc(k)}\\s*=\\s*(.+?)\\s*$`, 'm'));
       if (m) settings[k] = m[1].trim();
     }
   } catch {}
@@ -957,7 +964,7 @@ function updatePhpIni(updates) {
               `; PHPRC=${FRANKENPHP_DIR}. Only the keys below are set; everything else keeps PHP's defaults.\n`;
   }
   for (const [k, v] of Object.entries(updates)) {
-    const re = new RegExp(`^(\\s*;?\\s*)${k}(\\s*=\\s*).+$`, 'm');
+    const re = new RegExp(`^(\\s*;?\\s*)${reEsc(k)}(\\s*=\\s*).+$`, 'm');
     if (re.test(content)) {
       content = content.replace(re, `${k}$2${v}`);
     } else {
@@ -1159,13 +1166,18 @@ function updateFrankenphpSettings(updates) {
   fs.writeFileSync(CADDYFILE_PATH, tuneCaddyContent(fs.readFileSync(CADDYFILE_PATH, 'utf8'), threads));
 }
 
-// ── Auto-tune ──
-// Sizes FrankenPHP threads and PostgreSQL memory settings to the machine's cores/RAM.
-//  - FrankenPHP: `num_threads` inside the Caddyfile's global `frankenphp` block.
-//  - PostgreSQL: a dedicated drop-in file in the cluster's conf.d (never edits postgresql.conf
-//    values in place), validated with `postgres -C` and rolled back on failure.
-//  - Optional boot unit re-applies the profile before Postgres/FrankenPHP start, for VMs whose
-//    cores/RAM change between boots. Run by hand: node server.js --autotune [--dry-run [--cores=N --ram=MB]]
+// ── Auto-tune: worker capacity (FrankenPHP threads, PHP-FPM pools) + PostgreSQL memory ──
+// Everything here is automatic: there is deliberately no way to type a worker count into the panel.
+//  WHEN it runs: at boot (ps-panel-autotune.service, always enabled), when core/RAM change, when a
+//  site's runtime changes, when php.ini's max_execution_time changes, and every 10 minutes (PHP-FPM
+//  only: pm.max_children follows the real memory used per worker).
+//  HOW it applies: every file is backed up/validated/rolled back. PHP-FPM is RELOADED (running
+//  requests finish). Changes that need a restart (FrankenPHP threads, PostgreSQL memory) are written
+//  but only take effect at the next restart/boot; the panel never restarts a serving service by
+//  itself (the PHP Worker page offers a confirmed restart). Under high load such writes are deferred.
+//  SAFETY NET: if a service restarts more than 3 times within a minute after a change, the previous
+//  value is restored, the same values are blocked for 24 h, and an alert is raised.
+//  Manual run: node server.js --autotune [--dry-run [--cores=N --ram=MB]]
 const os = require('os');
 const PG_ETC = process.env.PANEL_PG_ETC || '/etc/postgresql';
 const PG_LIB = process.env.PANEL_PG_LIB || '/usr/lib/postgresql';
@@ -1173,38 +1185,154 @@ const AUTOTUNE_PG_FILE = '90-ps-panel-autotune.conf';
 const AUTOTUNE_UNIT_NAME = 'ps-panel-autotune';
 const AUTOTUNE_UNIT = process.env.PANEL_AUTOTUNE_UNIT || `/etc/systemd/system/${AUTOTUNE_UNIT_NAME}.service`;
 const AUTOTUNE_LOG = process.env.PANEL_AUTOTUNE_LOG || '/var/log/ps-panel-autotune.log';
+const AUTOTUNE_STATE = process.env.PANEL_AUTOTUNE_STATE || '/root/.pspanel_autotune.json';
+const AUTOTUNE_INTERVAL_MS = parseInt(process.env.PANEL_AUTOTUNE_INTERVAL_MS, 10) || 10 * 60 * 1000;
+const GUARD_MS = parseInt(process.env.PANEL_AUTOTUNE_GUARD_MS, 10) || 60 * 1000;
+const POOL_FILE = 'zz-ps-panel.conf';          // sorts after typical manual zz-*.conf so panel values win
+const FPM_STATUS_PATH = '/ps-panel-fpm-status'; // reachable only over FastCGI, never through the web
+const POOL_KEYS = ['pm', 'pm.max_children', 'pm.start_servers', 'pm.min_spare_servers', 'pm.max_spare_servers', 'pm.max_requests', 'request_terminate_timeout'];
+const POOL_MANAGED = new Set([...POOL_KEYS, 'pm.status_path', 'pm.process_idle_timeout']);
+const TUNE_PG_KEYS = ['shared_buffers', 'effective_cache_size', 'work_mem', 'maintenance_work_mem', 'max_connections'];
+const FRANKENPHP_THREAD_WARNING = 'FrankenPHP v1.3.2 diketahui crash (segfault) bila banyak thread PHP bertemu koneksi HTTPS keluar paralel. PHP-FPM disarankan untuk situs yang memanggil API/Google.';
 
 function machineSpecs() {
   const cores = (os.availableParallelism ? os.availableParallelism() : os.cpus().length) || 1;
   return { cores, ramMB: Math.round(os.totalmem() / 1048576) };
 }
-
-// Pure function: specs → recommended values. Conservative because FrankenPHP, Redis and
-// PostgreSQL share the box.
-function computeTuneProfile(cores, ramMB) {
-  cores = Math.max(1, parseInt(cores, 10) || 1);
-  ramMB = Math.max(256, parseInt(ramMB, 10) || 256);
-  const clamp   = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-  const floorTo = (v, step) => Math.floor(v / step) * step;
-  // PHP requests mostly wait on the DB, so allow ~3 threads per core, but cap by a ~64 MB
-  // budget per thread out of 40% of RAM so small VMs don't swap.
-  const threads = clamp(Math.min(cores * 3, Math.floor(ramMB * 0.4 / 64)), 2, 256);
-  const sb      = clamp(floorTo(ramMB * 0.25, 16), 16, 8192);
-  const ecs     = clamp(floorTo(ramMB * 0.5, 64), 128, 65536);
-  const maxConn = clamp(Math.ceil((threads * 2 + 20) / 50) * 50, 100, 300);
-  const wm      = clamp(Math.floor((ramMB - sb) / (maxConn * 3)), 4, 64);
-  const mwm     = clamp(floorTo(ramMB / 16, 16), 64, 1024);
-  return {
-    num_threads: threads,
-    shared_buffers: sb + 'MB',
-    effective_cache_size: ecs + 'MB',
-    work_mem: wm + 'MB',
-    maintenance_work_mem: mwm + 'MB',
-    max_connections: maxConn,
-  };
+function cpuModel() {
+  try { const m = fs.readFileSync('/proc/cpuinfo', 'utf8').match(/^model name\s*:\s*(.+)$/m); if (m) return m[1].trim(); } catch {}
+  return (os.cpus()[0] || {}).model || null;
 }
-const TUNE_PG_KEYS = ['shared_buffers','effective_cache_size','work_mem','maintenance_work_mem','max_connections'];
 
+// ── persisted state + history log ──
+function loadAutoState() { try { return JSON.parse(fs.readFileSync(AUTOTUNE_STATE, 'utf8')); } catch { return {}; } }
+let AUTO = loadAutoState();
+for (const k of ['pending', 'watch', 'alerts']) if (!Array.isArray(AUTO[k])) AUTO[k] = [];
+for (const k of ['awaitingRestart', 'blocked', 'avgRssMB']) if (!AUTO[k] || typeof AUTO[k] !== 'object') AUTO[k] = {};
+function refreshAuto() {
+  AUTO = loadAutoState();
+  for (const k of ['pending', 'watch', 'alerts']) if (!Array.isArray(AUTO[k])) AUTO[k] = [];
+  for (const k of ['awaitingRestart', 'blocked', 'avgRssMB']) if (!AUTO[k] || typeof AUTO[k] !== 'object') AUTO[k] = {};
+}
+function persistAuto() {
+  try { const tmp = AUTOTUNE_STATE + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(AUTO, null, 1), { mode: 0o600 }); fs.renameSync(tmp, AUTOTUNE_STATE); }
+  catch (e) { console.warn('[autotune] state not saved:', e.message); }
+}
+function autotuneLog(msg) {
+  const line = `${new Date().toISOString()} ps-panel-autotune: ${msg}`;
+  console.log(line);
+  try { fs.appendFileSync(AUTOTUNE_LOG, line + '\n'); } catch {}
+}
+function logChange(target, key, oldV, newV, reason) {
+  autotuneLog(`CHANGE target=${target} key=${key} old=${oldV ?? '-'} new=${newV ?? '-'} reason="${String(reason).replace(/"/g, "'")}"`);
+}
+// Raises an alert (history + state). Telegram delivery is hooked in here by the notification settings.
+function notify(msg) {
+  AUTO.alerts = [{ ts: new Date().toISOString(), msg }, ...AUTO.alerts].slice(0, 20);
+  persistAuto();
+  autotuneLog(`ALERT ${msg}`);
+  try { if (typeof sendTelegram === 'function') sendTelegram('PS Panel: ' + msg); } catch {}
+}
+function readHistory(limit = 100) {
+  let text = '';
+  try {
+    const st = fs.statSync(AUTOTUNE_LOG), len = Math.min(st.size, 512 * 1024), buf = Buffer.alloc(len);
+    const fd = fs.openSync(AUTOTUNE_LOG, 'r'); fs.readSync(fd, buf, 0, len, st.size - len); fs.closeSync(fd);
+    text = buf.toString('utf8');
+  } catch { return []; }
+  const out = [];
+  for (const line of text.split('\n')) {
+    const m = line.match(/^(\S+) ps-panel-autotune: (CHANGE|ALERT) (.*)$/);
+    if (!m) continue;
+    if (m[2] === 'CHANGE') {
+      const c = m[3].match(/^target=(\S+) key=(.+?) old=(.*?) new=(.*?) reason="(.*)"$/);
+      if (c) out.push({ ts: m[1], type: 'change', target: c[1], key: c[2], old: c[3], new: c[4], reason: c[5] });
+    } else out.push({ ts: m[1], type: 'alert', message: m[3] });
+  }
+  return out.slice(-limit).reverse();
+}
+
+// ── small system helpers ──
+function serviceActive(unit) { return new Promise(r => execFile('systemctl', ['is-active', unit], (e, o) => r(!e && String(o).trim() === 'active'))); }
+async function nRestarts(unit) {
+  try { return parseInt((await execFileAsync('systemctl', ['show', unit, '-p', 'NRestarts', '--value'], { timeout: 8000 })).stdout.trim(), 10) || 0; } catch { return 0; }
+}
+async function serviceStartedAfter(unit, iso) {
+  try {
+    const t = new Date((await execFileAsync('systemctl', ['show', unit, '-p', 'ActiveEnterTimestamp', '--value'], { timeout: 8000 })).stdout.trim()).getTime();
+    return !isNaN(t) && t > new Date(iso).getTime();
+  } catch { return false; }
+}
+function lowLoad(cores) {
+  if (process.env.PANEL_AUTOTUNE_FORCE_LOW_LOAD === '1') return true;
+  if (process.env.PANEL_AUTOTUNE_FORCE_LOW_LOAD === '0') return false;
+  return os.loadavg()[0] / Math.max(1, cores) <= 0.4;
+}
+const pgInstalled = () => !!findPgCluster();
+const redisInstalled = () => [process.env.PANEL_REDIS_BIN, '/usr/bin/redis-server', '/usr/local/bin/redis-server'].some(p => p && fs.existsSync(p));
+const clampN = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const floorTo = (v, step) => Math.floor(v / step) * step;
+
+// ── pure calculations ──
+const pgSharedBuffersMB = ramMB => clampN(floorTo(ramMB * 0.25, 16), 16, 8192);
+
+// PostgreSQL memory profile. `workers` = PHP workers that may each hold a connection.
+function computePgProfile(ramMB, workers) {
+  ramMB = Math.max(256, parseInt(ramMB, 10) || 256);
+  const sb      = pgSharedBuffersMB(ramMB);
+  const ecs     = clampN(floorTo(ramMB * 0.5, 64), 128, 65536);
+  const maxConn = clampN(Math.ceil(((workers || 0) * 2 + 20) / 50) * 50, 100, 500);
+  const wm      = clampN(Math.floor((ramMB - sb) / (maxConn * 3)), 4, 64);
+  const mwm     = clampN(floorTo(ramMB / 16, 16), 64, 1024);
+  return { shared_buffers: sb + 'MB', effective_cache_size: ecs + 'MB', work_mem: wm + 'MB', maintenance_work_mem: mwm + 'MB', max_connections: maxConn };
+}
+
+// PHP-FPM pool: pm.max_children = floor(available RAM / average RSS per worker), lower bound 8.
+function computeFpmPool({ availMB, avgRssMB, maxExecSec, cores }) {
+  // A freshly started/idle worker is far smaller than one that has served a real app, so a measured
+  // value is never trusted below 50 MB (an under-estimate here means OOM). Also never more than
+  // 8 workers per core: more only queues work on the CPU and holds DB connections.
+  const avg = clampN(avgRssMB || 70, 50, 400);
+  const mc = clampN(Math.floor(availMB / avg), 8, clampN((cores || 1) * 8, 8, 400));
+  const start = clampN(Math.round(mc * 0.3), 2, mc);
+  const minSp = clampN(Math.round(mc * 0.2), 1, start);
+  const maxSp = clampN(Math.round(mc * 0.5), start, mc);
+  const timeout = Number.isInteger(maxExecSec) && maxExecSec <= 0 ? '0' : ((Number.isInteger(maxExecSec) ? maxExecSec : 30) + 10) + 's';
+  return { pm: 'dynamic', 'pm.max_children': mc, 'pm.start_servers': start, 'pm.min_spare_servers': minSp, 'pm.max_spare_servers': maxSp,
+           'pm.max_requests': 1000, request_terminate_timeout: timeout };
+}
+
+// ctx: { cores, ramMB, use:{frankenphp, fpm:Set}, avgRss:{ver:MB}, measured:{ver:bool}, pgInstalled, redisInstalled, maxExecSec }
+function computePlan(ctx) {
+  const ramMB = Math.max(256, ctx.ramMB | 0), cores = Math.max(1, ctx.cores | 0);
+  const embedded = !!ctx.use.frankenphp;
+  const versions = [...ctx.use.fpm].sort(cmpPhpVerDesc);
+  const sb = pgSharedBuffersMB(ramMB);
+  const reserves = {
+    pgMB: ctx.pgInstalled ? sb + 768 : 0,
+    redisMB: ctx.redisInstalled ? clampN(floorTo(ramMB * 0.125, 64), 128, 1024) : 0,
+    systemMB: 1024,
+  };
+  // FrankenPHP: with embedded PHP in use never above 2 × cores; when it only forwards to PHP-FPM it needs little.
+  const threads = embedded ? clampN(Math.min(cores * 2, Math.floor(ramMB * 0.4 / 64)), 2, 256) : 2;
+  const frankenphp = {
+    num_threads: threads,
+    basis: embedded ? `min(2 × ${cores} core, 40% RAM ÷ 64 MB) — batas aman FrankenPHP v1.3.2`
+                    : (versions.length ? 'semua situs PHP memakai PHP-FPM; FrankenPHP hanya web server (thread kecil)' : 'tidak ada situs yang memakai PHP bawaan FrankenPHP'),
+    warning: embedded ? FRANKENPHP_THREAD_WARNING : null,
+  };
+  let avail = ramMB - reserves.pgMB - reserves.redisMB - reserves.systemMB - (embedded ? threads * 64 : 0);
+  const fpm = versions.map(v => {
+    const avg = (ctx.avgRss && ctx.avgRss[v]) || 70;
+    const availMB = Math.floor(avail / versions.length);
+    return { version: v, pool: computeFpmPool({ availMB, avgRssMB: avg, maxExecSec: ctx.maxExecSec, cores }),
+             basis: { ramMB, availMB, avgRssMB: Math.max(50, avg), measured: !!(ctx.measured && ctx.measured[v]), coreCap: clampN(cores * 8, 8, 400), reserves } };
+  });
+  const workers = (embedded ? threads : 0) + fpm.reduce((a, f) => a + f.pool['pm.max_children'], 0);
+  return { specs: { cores, ramMB }, reserves, frankenphp, fpm, postgres: computePgProfile(ramMB, workers), workers };
+}
+
+// ── PostgreSQL helpers ──
 function findPgCluster() {
   try {
     const vers = fs.readdirSync(PG_ETC)
@@ -1216,128 +1344,24 @@ function findPgCluster() {
              bin: path.join(PG_LIB, v, 'bin', 'postgres') };
   } catch { return null; }
 }
-
-// Returns null when the config parses, an error string when it does not, or
-// 'skip' when there is no postgres binary to validate with.
+// Returns null when the config parses, an error string when it does not, or 'skip' with no postgres binary.
 function pgValidate(pg) {
   if (!fs.existsSync(pg.bin)) return 'skip';
   const r = spawnSync('runuser', ['-u', 'postgres', '--', pg.bin, '-C', 'shared_buffers', '-c', 'config_file=' + pg.conf],
     { encoding: 'utf8', timeout: 15000 });
   return r.status === 0 ? null : ((r.stderr || (r.error && r.error.message) || 'validation failed').trim());
 }
-
 function pgTuneFileContent(profile) {
-  return '# Managed by PS Panel auto-tune (Settings → Auto-Tune). Do not edit by hand:\n' +
-    '# it is rewritten on apply. Remove this file (or use Reset in the panel) to revert.\n' +
+  return '# Managed by PS Panel auto-tune (halaman PHP Worker). Do not edit by hand:\n' +
+    '# it is rewritten automatically. Remove this file to revert to PostgreSQL defaults.\n' +
     TUNE_PG_KEYS.map(k => `${k} = ${profile[k]}`).join('\n') + '\n';
 }
-
 function ensurePgIncludeDir(pg) {
   const c = fs.readFileSync(pg.conf, 'utf8');
   if (/^\s*include_dir\s*=\s*'conf\.d'/m.test(c)) return;
   fs.copyFileSync(pg.conf, pg.conf + '.bak.' + Date.now());
   fs.appendFileSync(pg.conf, "\ninclude_dir = 'conf.d'\n");
 }
-
-// Applies the profile to files only (services are not restarted here). Idempotent: unchanged
-// values are not rewritten, so a boot-time run does not pile up backups.
-function applyTune(profile) {
-  const steps = [];
-  let ok = true;
-  // FrankenPHP
-  try {
-    if (!fs.existsSync(CADDYFILE_PATH)) steps.push({ name: 'frankenphp', status: 'skipped', detail: 'Caddyfile tidak ditemukan' });
-    else if (readFrankenphpSettings().num_threads === profile.num_threads)
-      steps.push({ name: 'frankenphp', status: 'unchanged', detail: `num_threads ${profile.num_threads}` });
-    else { updateFrankenphpSettings({ num_threads: profile.num_threads });
-           steps.push({ name: 'frankenphp', status: 'changed', detail: `num_threads ${profile.num_threads}` }); }
-  } catch (e) { ok = false; steps.push({ name: 'frankenphp', status: 'error', detail: e.message }); }
-  // PostgreSQL
-  const pg = findPgCluster();
-  if (!pg) steps.push({ name: 'postgresql', status: 'skipped', detail: 'cluster PostgreSQL tidak ditemukan' });
-  else {
-    const file = path.join(pg.confD, AUTOTUNE_PG_FILE);
-    const next = pgTuneFileContent(profile);
-    let prev = null; try { prev = fs.readFileSync(file, 'utf8'); } catch {}
-    if (prev === next) steps.push({ name: 'postgresql', status: 'unchanged', detail: file });
-    else {
-      try {
-        ensurePgIncludeDir(pg);
-        fs.mkdirSync(pg.confD, { recursive: true });
-        fs.writeFileSync(file + '.tmp', next, { mode: 0o644 });
-        fs.renameSync(file + '.tmp', file);
-        const bad = pgValidate(pg);
-        if (bad && bad !== 'skip') {
-          if (prev === null) fs.rmSync(file, { force: true }); else fs.writeFileSync(file, prev);
-          ok = false; steps.push({ name: 'postgresql', status: 'error', detail: 'validasi gagal, dikembalikan: ' + bad });
-        } else steps.push({ name: 'postgresql', status: 'changed', detail: file + (bad === 'skip' ? ' (tidak divalidasi: biner postgres tidak ada)' : '') });
-      } catch (e) { ok = false; steps.push({ name: 'postgresql', status: 'error', detail: e.message }); }
-    }
-  }
-  return { ok, steps };
-}
-
-function revertTune() {
-  const steps = [];
-  try {
-    const cur = fs.existsSync(CADDYFILE_PATH) ? fs.readFileSync(CADDYFILE_PATH, 'utf8') : null;
-    const nxt = cur === null ? null : tuneCaddyContent(cur, null);
-    if (cur !== null && nxt !== cur) {
-      fs.copyFileSync(CADDYFILE_PATH, CADDYFILE_PATH + '.bak.' + Date.now());
-      fs.writeFileSync(CADDYFILE_PATH, nxt);
-      ensureFrankenPHPGlobalBlock();
-      steps.push({ name: 'frankenphp', status: 'changed', detail: 'num_threads kembali ke default' });
-    } else steps.push({ name: 'frankenphp', status: 'unchanged', detail: 'tidak ada setelan terkelola' });
-  } catch (e) { steps.push({ name: 'frankenphp', status: 'error', detail: e.message }); }
-  try {
-    const pg = findPgCluster();
-    const file = pg && path.join(pg.confD, AUTOTUNE_PG_FILE);
-    if (file && fs.existsSync(file)) { fs.rmSync(file); steps.push({ name: 'postgresql', status: 'changed', detail: 'setelan auto-tune dihapus' }); }
-    else steps.push({ name: 'postgresql', status: 'unchanged', detail: 'tidak ada setelan terkelola' });
-  } catch (e) { steps.push({ name: 'postgresql', status: 'error', detail: e.message }); }
-  return { ok: !steps.some(s => s.status === 'error'), steps };
-}
-
-function autotuneLog(msg) {
-  const line = `${new Date().toISOString()} ps-panel-autotune: ${msg}`;
-  console.log(line);
-  try { fs.appendFileSync(AUTOTUNE_LOG, line + '\n'); } catch {}
-}
-
-function bootUnitText() {
-  return `[Unit]
-Description=PS Panel auto-tune (FrankenPHP threads + PostgreSQL memory) sesuai core & RAM
-DefaultDependencies=no
-After=local-fs.target
-Before=postgresql.service ${(() => { const p = findPgCluster(); return p ? `postgresql@${p.version}-main.service ` : ''; })()}frankenphp.service
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=${process.execPath} ${path.join(PANEL_DIR, 'server.js')} --autotune
-TimeoutSec=60
-
-[Install]
-WantedBy=multi-user.target
-`;
-}
-
-function checkPanelPassword(req, res) {
-  const { password } = req.body || {};
-  if (typeof password !== 'string' || !bcrypt.compareSync(password, authState.hash)) {
-    res.status(403).json({ error: 'Wrong password' }); // not 401: the frontend api() logs out on 401
-    return false;
-  }
-  return true;
-}
-function restartTuned(cb) {
-  exec('systemctl restart postgresql', (e1, _o1, se1) => {
-    exec('systemctl restart frankenphp', (e2, _o2, se2) => {
-      cb({ postgresql: e1 ? (se1 || e1.message) : null, frankenphp: e2 ? (se2 || e2.message) : null });
-    });
-  });
-}
-
 // `postgres -C` prints a setting in its INTERNAL unit (8 kB blocks for shared_buffers and
 // effective_cache_size, kB for work_mem and maintenance_work_mem), e.g. 253952 for 1984MB.
 // Convert to the "NNNMB" form the profile uses so current vs recommended compare correctly.
@@ -1352,10 +1376,389 @@ function pgInternalToMB(key, raw, blockBytes) {
   return `${Math.round(mb * 100) / 100}MB`;
 }
 
+// ── PHP-FPM pool helpers ──
+const poolDir = rt => path.join(PHP_ETC, rt.version, 'fpm', 'pool.d');
+function parseIniLike(text) {
+  const o = {};
+  if (!text) return o;
+  for (const l of text.split('\n')) { const m = l.match(/^\s*([a-z_.]+)\s*=\s*(.+?)\s*$/i); if (m) o[m[1]] = m[2]; }
+  return o;
+}
+function poolFileContent(pool) {
+  return '; Managed by PS Panel auto-tune (halaman PHP Worker). Do not edit by hand: values are rewritten\n' +
+         '; automatically from cores, RAM and the real memory used per worker.\n[www]\n' +
+         POOL_KEYS.map(k => `${k} = ${pool[k]}`).join('\n') + `\npm.status_path = ${FPM_STATUS_PATH}\n`;
+}
+// Manual pool files that only set panel-managed keys are safe to adopt (the panel file replaces them).
+function findManualPoolFiles(rt) {
+  let files = []; try { files = fs.readdirSync(poolDir(rt)); } catch { return []; }
+  return files.filter(f => f.endsWith('.conf') && f !== 'www.conf' && f !== POOL_FILE).map(f => {
+    const p = path.join(poolDir(rt), f);
+    let lines = []; try { lines = fs.readFileSync(p, 'utf8').split('\n').map(l => l.trim()).filter(l => l && !l.startsWith(';') && !l.startsWith('#')); } catch {}
+    const headers = lines.filter(l => /^\[.+\]$/.test(l)), kvs = lines.filter(l => !/^\[.+\]$/.test(l)).map(l => (l.split('=')[0] || '').trim());
+    return { file: f, path: p, onlyManaged: headers.every(h => h === '[www]') && kvs.every(k => POOL_MANAGED.has(k)) };
+  });
+}
+// Effective [www] settings according to php-fpm itself (`php-fpm -tt` prints the merged config).
+async function fpmEffective(rt) {
+  try {
+    const r = await execFileAsync(rt.bin, ['-tt'], { timeout: 15000 });
+    const text = String(r.stderr || '') + String(r.stdout || '');
+    const out = {}; let inWww = false;
+    for (const l of text.split('\n')) {
+      const h = l.match(/NOTICE: \[([^\]]+)\]\s*$/);
+      if (h) { inWww = h[1] === 'www'; continue; }
+      const kv = l.match(/NOTICE: \t(\S+) = (.*)$/);
+      if (inWww && kv) out[kv[1]] = kv[2].trim();
+    }
+    return out;
+  } catch { return null; }
+}
+// Minimal FastCGI client: PHP-FPM's status page is only reachable over its socket.
+function fcgiGet(socketPath, scriptName, query = 'json') {
+  return new Promise((resolve, reject) => {
+    const sock = require('net').createConnection(socketPath);
+    let done = false, buf = Buffer.alloc(0); const out = [];
+    const finish = (err, val) => { if (done) return; done = true; sock.destroy(); err ? reject(err) : resolve(val); };
+    sock.setTimeout(3000, () => finish(new Error('timeout')));
+    sock.on('error', finish);
+    const rec = (type, body) => { const h = Buffer.alloc(8); h[0] = 1; h[1] = type; h.writeUInt16BE(1, 2); h.writeUInt16BE(body.length, 4); return Buffer.concat([h, body]); };
+    const nv = (n, v) => { const a = Buffer.from(n), b = Buffer.from(v); return Buffer.concat([Buffer.from([a.length, b.length]), a, b]); };
+    const params = Buffer.concat([nv('SCRIPT_NAME', scriptName), nv('SCRIPT_FILENAME', scriptName), nv('REQUEST_METHOD', 'GET'),
+                                  nv('QUERY_STRING', query), nv('SERVER_PROTOCOL', 'HTTP/1.1'), nv('GATEWAY_INTERFACE', 'CGI/1.1')]);
+    const begin = Buffer.alloc(8); begin.writeUInt16BE(1, 0);   // role: responder
+    sock.write(Buffer.concat([rec(1, begin), rec(4, params), rec(4, Buffer.alloc(0)), rec(5, Buffer.alloc(0))]));
+    sock.on('data', d => {
+      buf = Buffer.concat([buf, d]);
+      while (buf.length >= 8) {
+        const len = buf.readUInt16BE(4), pad = buf[6];
+        if (buf.length < 8 + len + pad) break;
+        const type = buf[1], body = buf.slice(8, 8 + len); buf = buf.slice(8 + len + pad);
+        if (type === 6) out.push(body);
+        if (type === 3) return finish(null, Buffer.concat(out).toString('utf8'));
+      }
+    });
+    sock.on('end', () => finish(null, Buffer.concat(out).toString('utf8')));
+  });
+}
+async function fpmStatus(rt) {
+  try {
+    const raw = await fcgiGet(rt.socket, FPM_STATUS_PATH);
+    const j = JSON.parse(raw.split(/\r?\n\r?\n/).slice(1).join('\n\n'));
+    return { ok: true, active: j['active processes'], idle: j['idle processes'], total: j['total processes'], maxActive: j['max active processes'],
+             maxChildrenReached: j['max children reached'], listenQueue: j['listen queue'], slowRequests: j['slow requests'] };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+// Average RSS (MB) of the running workers of one PHP-FPM version; null with fewer than 5 workers.
+async function fpmAvgRss(rt) {
+  try {
+    const { stdout } = await execFileAsync('ps', ['-C', `php-fpm${rt.version}`, '-o', 'rss=,args='], { timeout: 8000 });
+    const rss = stdout.split('\n').filter(l => /pool /.test(l)).map(l => parseInt(l.trim().split(/\s+/)[0], 10)).filter(n => n > 0);
+    if (rss.length < 5) return null;   // too few workers to say anything about a typical one
+    return { avgMB: Math.round(rss.reduce((a, b) => a + b, 0) / rss.length / 1024 * 10) / 10, workers: rss.length };
+  } catch { return null; }
+}
+
+// ── applying a plan ──
+async function buildContext(ov = {}) {
+  const real = machineSpecs();
+  const use = runtimesInUse();
+  const avgRss = {}, measured = {};
+  for (const v of use.fpm) {
+    const rt = pickFpm(v), m = rt ? await fpmAvgRss(rt) : null;
+    if (m) { avgRss[v] = m.avgMB; measured[v] = true; } else avgRss[v] = AUTO.avgRssMB[v] || 70;
+  }
+  const maxExec = parseInt(readPhpIni().settings.max_execution_time, 10);
+  return { cores: ov.cores || real.cores, ramMB: ov.ramMB || real.ramMB, use, avgRss, measured,
+           pgInstalled: pgInstalled(), redisInstalled: redisInstalled(), maxExecSec: Number.isInteger(maxExec) ? maxExec : null };
+}
+
+const isBlocked = (target, sig) => { const b = AUTO.blocked[target]; return b && b.sig === sig && Date.now() < b.until; };
+
+async function applyFrankenThreads(ctx, plan, opts) {
+  const steps = [], changes = [], want = plan.frankenphp.num_threads;
+  if (!fs.existsSync(CADDYFILE_PATH)) return { steps: [{ name: 'frankenphp', status: 'skipped', detail: 'Caddyfile tidak ditemukan' }], changes };
+  const cur = readFrankenphpSettings().num_threads;
+  if (cur === want) return { steps: [{ name: 'frankenphp', status: 'unchanged', detail: `num_threads ${want}` }], changes };
+  if (isBlocked('frankenphp', String(want))) return { steps: [{ name: 'frankenphp', status: 'blocked', detail: `num_threads ${want} diblokir sementara (restart berulang sebelumnya)` }], changes };
+  changes.push({ target: 'frankenphp', key: 'num_threads', old: cur ?? 'default', new: String(want) });
+  if (opts.dry) return { steps: [{ name: 'frankenphp', status: 'would-change', detail: `num_threads ${cur ?? 'default'} → ${want}` }], changes };
+  const active = await serviceActive('frankenphp');   // at boot this runs BEFORE the service starts → false
+  if (active && !lowLoad(ctx.cores)) {
+    AUTO.pending.push({ target: 'frankenphp', key: 'num_threads', old: cur ?? 'default', new: want, since: new Date().toISOString(), why: 'beban server tinggi: ditunda sampai beban rendah' });
+    return { steps: [{ name: 'frankenphp', status: 'deferred', detail: 'beban tinggi, ditunda' }], changes: [] };
+  }
+  try {
+    const n0 = active ? await nRestarts('frankenphp') : 0;
+    updateFrankenphpSettings({ num_threads: want });
+    const now = new Date().toISOString();
+    if (active) AUTO.awaitingRestart.frankenphp = now;
+    AUTO.watch.push({ kind: 'threads', service: 'frankenphp', target: 'frankenphp', sig: String(want), prevThreads: cur ?? null, n0, ts: now });
+    steps.push({ name: 'frankenphp', status: 'changed', detail: `num_threads ${want}` + (active ? ' (berlaku setelah FrankenPHP di-restart)' : '') });
+  } catch (e) { return { steps: [{ name: 'frankenphp', status: 'error', detail: e.message }], changes: [] }; }
+  return { steps, changes };
+}
+
+async function applyFpmPool(rt, entry, opts) {
+  const name = `php-fpm${rt.version}`, steps = [], changes = [];
+  const file = path.join(poolDir(rt), POOL_FILE), next = poolFileContent(entry.pool), sig = JSON.stringify(entry.pool);
+  let prev = null; try { prev = fs.readFileSync(file, 'utf8'); } catch {}
+  const oldVals = parseIniLike(prev);
+  const diffs = POOL_KEYS.filter(k => String(oldVals[k] ?? '') !== String(entry.pool[k]));
+  const manual = findManualPoolFiles(rt).filter(m => m.onlyManaged);
+  if (opts.periodic && prev !== null && diffs.length) {   // hysteresis: small drift is not worth a reload
+    const o = parseInt(oldVals['pm.max_children'], 10) || 0, n = entry.pool['pm.max_children'];
+    if (oldVals.request_terminate_timeout === String(entry.pool.request_terminate_timeout) && Math.abs(n - o) < Math.max(3, Math.round(o * 0.1)))
+      return { steps: [{ name, status: 'unchanged', detail: `pm.max_children ${o} (selisih kecil, dibiarkan)` }], changes };
+  }
+  if (!diffs.length && !manual.length && prev !== null) return { steps: [{ name, status: 'unchanged', detail: file }], changes };
+  if (isBlocked(name, sig)) return { steps: [{ name, status: 'blocked', detail: 'nilai ini diblokir sementara (restart berulang sebelumnya)' }], changes };
+  for (const k of diffs) changes.push({ target: name, key: k, old: oldVals[k] ?? null, new: String(entry.pool[k]) });
+  if (opts.dry) { for (const m of manual) changes.push({ target: name, key: `file ${m.file}`, old: 'manual', new: 'diambil alih panel' }); return { steps: [{ name, status: 'would-change', detail: file }], changes }; }
+
+  const adopted = [], undo = () => {
+    for (const a of adopted) { try { fs.renameSync(a.to, a.from); } catch {} }
+    try { if (prev === null) fs.rmSync(file, { force: true }); else fs.writeFileSync(file, prev); } catch {}
+  };
+  try {
+    const live = await fpmActive(rt);                 // at boot this runs BEFORE php-fpm starts → false
+    const n0 = live ? await nRestarts(rt.service) : 0;
+    fs.mkdirSync(poolDir(rt), { recursive: true });
+    fs.writeFileSync(file + '.tmp', next, { mode: 0o644 }); fs.renameSync(file + '.tmp', file);
+    try { await execFileAsync(rt.bin, ['-t'], { timeout: 15000 }); }
+    catch (e) { undo(); return { steps: [{ name, status: 'error', detail: 'php-fpm -t gagal, dikembalikan: ' + String(e.stderr || e.message).trim().split('\n').slice(-2).join(' | ') }], changes: [] }; }
+    for (const m of manual) {   // adopt: the panel file is now the single source of truth for these keys
+      const to = `${m.path}.diambil-alih-panel.${Date.now()}`;
+      fs.renameSync(m.path, to); adopted.push({ from: m.path, to });
+      changes.push({ target: name, key: `file ${m.file}`, old: 'manual', new: 'diambil alih panel (di-backup)' });
+    }
+    try { await execFileAsync(rt.bin, ['-t'], { timeout: 15000 }); }
+    catch (e) { undo(); return { steps: [{ name, status: 'error', detail: 'php-fpm -t gagal setelah ambil alih, dikembalikan: ' + String(e.stderr || e.message).trim().split('\n').slice(-2).join(' | ') }], changes: [] }; }
+    const eff = await fpmEffective(rt);
+    let detail = file, status = 'changed';
+    if (eff && String(eff['pm.max_children']) !== String(entry.pool['pm.max_children'])) { status = 'warning'; detail += ` (tertimpa konfigurasi lain: efektif pm.max_children=${eff['pm.max_children']})`; }
+    if (live) {
+      try { await execFileAsync('systemctl', ['reload', rt.service], { timeout: 20000 }); detail += ' (di-reload)'; }
+      catch (e) { undo(); return { steps: [{ name, status: 'error', detail: 'reload gagal, dikembalikan: ' + e.message }], changes: [] }; }
+    } else detail += ' (berlaku saat service start)';
+    AUTO.watch.push({ kind: 'fpm-pool', service: rt.service, target: name, sig, file, prev, adopted, n0, ts: new Date().toISOString() });
+    steps.push({ name, status, detail });
+  } catch (e) { undo(); return { steps: [{ name, status: 'error', detail: e.message }], changes: [] }; }
+  return { steps, changes };
+}
+
+async function applyPg(ctx, plan, opts) {
+  const pg = findPgCluster();
+  if (!pg) return { steps: [{ name: 'postgresql', status: 'skipped', detail: 'cluster PostgreSQL tidak ditemukan' }], changes: [] };
+  const file = path.join(pg.confD, AUTOTUNE_PG_FILE), next = pgTuneFileContent(plan.postgres);
+  let prev = null; try { prev = fs.readFileSync(file, 'utf8'); } catch {}
+  const oldVals = parseIniLike(prev);
+  const diffs = TUNE_PG_KEYS.filter(k => String(oldVals[k] ?? '') !== String(plan.postgres[k]));
+  if (!diffs.length && prev !== null) return { steps: [{ name: 'postgresql', status: 'unchanged', detail: file }], changes: [] };
+  const changes = diffs.map(k => ({ target: 'postgresql', key: k, old: oldVals[k] ?? null, new: String(plan.postgres[k]) }));
+  if (opts.dry) return { steps: [{ name: 'postgresql', status: 'would-change', detail: file }], changes };
+  try {
+    ensurePgIncludeDir(pg);
+    fs.mkdirSync(pg.confD, { recursive: true });
+    fs.writeFileSync(file + '.tmp', next, { mode: 0o644 }); fs.renameSync(file + '.tmp', file);
+    const bad = pgValidate(pg);
+    if (bad && bad !== 'skip') {
+      if (prev === null) fs.rmSync(file, { force: true }); else fs.writeFileSync(file, prev);
+      return { steps: [{ name: 'postgresql', status: 'error', detail: 'validasi gagal, dikembalikan: ' + bad }], changes: [] };
+    }
+    if (await serviceActive('postgresql')) AUTO.awaitingRestart.postgresql = new Date().toISOString();
+    return { steps: [{ name: 'postgresql', status: 'changed', detail: file + (bad === 'skip' ? ' (tidak divalidasi: biner postgres tidak ada)' : '') }], changes };
+  } catch (e) { return { steps: [{ name: 'postgresql', status: 'error', detail: e.message }], changes: [] }; }
+}
+
+async function applyPlan(ctx, plan, reason, opts = {}) {
+  if (!opts.dry) AUTO.pending = [];
+  const all = { steps: [], changes: [] };
+  const merge = r => { all.steps.push(...r.steps); all.changes.push(...r.changes); };
+  merge(await applyFrankenThreads(ctx, plan, opts));
+  for (const e of plan.fpm) { const rt = pickFpm(e.version); if (rt) merge(await applyFpmPool(rt, e, opts)); }
+  merge(await applyPg(ctx, plan, opts));
+  all.ok = !all.steps.some(s => s.status === 'error');
+  if (!opts.dry) for (const c of all.changes) logChange(c.target, c.key, c.old, c.new, reason);
+  if (!opts.dry) {
+    for (const w of AUTO.watch.filter(w => !w.armed)) {
+      w.armed = true;
+      setTimeout(() => evaluateWatch(w).catch(() => {}), GUARD_MS + 500).unref();
+    }
+    persistAuto();
+  }
+  return all;
+}
+
+// Restart-storm guard: more than 3 service restarts within the window after a change → roll back.
+async function rollbackWatch(w) {
+  const reason = 'rollback: service restart berulang setelah perubahan otomatis';
+  if (w.kind === 'fpm-pool') {
+    const rt = pickFpm(w.service.replace(/^php|-fpm$/g, ''));
+    try {
+      for (const a of w.adopted || []) { try { fs.renameSync(a.to, a.from); } catch {} }
+      if (w.prev === null) fs.rmSync(w.file, { force: true }); else fs.writeFileSync(w.file, w.prev);
+      if (rt && await fpmActive(rt)) await execFileAsync('systemctl', ['reload', rt.service], { timeout: 20000 });
+    } catch (e) { autotuneLog(`EVENT rollback ${w.target} gagal: ${e.message}`); }
+  } else if (w.kind === 'threads') {
+    try {
+      if (w.prevThreads == null) fs.writeFileSync(CADDYFILE_PATH, tuneCaddyContent(fs.readFileSync(CADDYFILE_PATH, 'utf8'), null));
+      else updateFrankenphpSettings({ num_threads: w.prevThreads });
+      AUTO.awaitingRestart.frankenphp = new Date().toISOString();
+    } catch (e) { autotuneLog(`EVENT rollback ${w.target} gagal: ${e.message}`); }
+  }
+  AUTO.blocked[w.target] = { sig: w.sig, until: Date.now() + 24 * 3600 * 1000 };
+  logChange(w.target, 'rollback', w.sig === undefined ? '-' : 'nilai otomatis', 'nilai sebelumnya', reason);
+  notify(`${w.target}: service restart lebih dari 3 kali setelah perubahan otomatis — nilai sebelumnya dikembalikan dan nilai yang sama diblokir 24 jam.`);
+}
+async function evaluateWatch(w) {
+  refreshAuto();
+  if (!AUTO.watch.some(x => x.ts === w.ts && x.service === w.service && x.kind === w.kind)) return 'gone';
+  const delta = (await nRestarts(w.service)) - (w.n0 || 0);
+  const drop = () => { AUTO.watch = AUTO.watch.filter(x => !(x.ts === w.ts && x.service === w.service && x.kind === w.kind)); };
+  if (delta > 3) { drop(); await rollbackWatch(w); persistAuto(); return 'rolled-back'; }
+  if (Date.now() - new Date(w.ts).getTime() >= GUARD_MS) { drop(); persistAuto(); }
+  return 'ok';
+}
+
+let _autotuneBusy = false;
+// reason: 'boot' | 'startup' | 'periodic' | any text (event). Returns { ok, steps, changes } or { skipped }.
+async function autotuneTick(reason, opts = {}) {
+  if (_autotuneBusy) return { skipped: 'busy' };
+  _autotuneBusy = true;
+  try {
+    refreshAuto();
+    for (const w of [...AUTO.watch]) await evaluateWatch(w);          // a rollback must come before re-planning
+    AUTO.watch = AUTO.watch.filter(w => Date.now() - new Date(w.ts).getTime() < 10 * 60 * 1000);
+    for (const [t, unit] of [['frankenphp', 'frankenphp'], ['postgresql', pgInstalled() ? `postgresql@${findPgCluster().version}-main` : 'postgresql']]) {
+      if (AUTO.awaitingRestart[t] && await serviceStartedAfter(unit, AUTO.awaitingRestart[t])) delete AUTO.awaitingRestart[t];
+    }
+    const specs = machineSpecs();
+    let why = reason;
+    if (AUTO.specs && (AUTO.specs.cores !== specs.cores || Math.abs(AUTO.specs.ramMB - specs.ramMB) > 64))
+      why = `${reason === 'boot' ? 'boot — ' : ''}core/RAM berubah (${AUTO.specs.cores} core / ${AUTO.specs.ramMB} MB → ${specs.cores} core / ${specs.ramMB} MB)`;
+    else if (reason === 'startup') why = 'panel dijalankan';
+    const periodic = reason === 'periodic';
+    const ctx = await buildContext();
+    const plan = computePlan(ctx);
+    for (const v of Object.keys(ctx.measured)) AUTO.avgRssMB[v] = ctx.avgRss[v];   // the boot run (FPM not up yet) reuses these
+    if (periodic) for (const v of Object.keys(ctx.measured)) why = `berkala: memori terukur per proses PHP-FPM ${v} = ${ctx.avgRss[v]} MB (estimasi dipakai ${Math.max(50, ctx.avgRss[v])} MB)`;
+    const res = await applyPlan(ctx, plan, why, { ...opts, boot: reason === 'boot', periodic });
+    AUTO.specs = specs; AUTO.lastChecked = new Date().toISOString();
+    if (res.changes.length) AUTO.lastApplied = AUTO.lastChecked;
+    persistAuto();
+    return res;
+  } finally { _autotuneBusy = false; }
+}
+
+// The boot unit must always exist: it applies the plan before PostgreSQL/PHP-FPM/FrankenPHP start.
+function bootUnitText() {
+  const before = ['postgresql.service'];
+  const p = findPgCluster(); if (p) before.push(`postgresql@${p.version}-main.service`);
+  for (const rt of fpmRuntimes()) before.push(`${rt.service}.service`);
+  before.push('frankenphp.service');
+  return `[Unit]
+Description=PS Panel auto-tune (PHP worker + PostgreSQL memory) sesuai core & RAM
+DefaultDependencies=no
+After=local-fs.target
+Before=${before.join(' ')}
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=${process.execPath} ${path.join(PANEL_DIR, 'server.js')} --autotune
+TimeoutSec=60
+
+[Install]
+WantedBy=multi-user.target
+`;
+}
+async function ensureBootUnit() {
+  try {
+    const want = bootUnitText();
+    let cur = null; try { cur = fs.readFileSync(AUTOTUNE_UNIT, 'utf8'); } catch {}
+    if (cur !== want) { fs.writeFileSync(AUTOTUNE_UNIT, want); await execFileAsync('systemctl', ['daemon-reload'], { timeout: 20000 }); autotuneLog('EVENT unit boot auto-tune dipasang/diperbarui'); }
+    const en = await new Promise(r => execFile('systemctl', ['is-enabled', AUTOTUNE_UNIT_NAME], (e, o) => r(!e && String(o).trim() === 'enabled')));
+    if (!en) await execFileAsync('systemctl', ['enable', AUTOTUNE_UNIT_NAME], { timeout: 20000 });
+  } catch (e) { console.warn('[autotune] boot unit:', e.message); }
+}
+
+function checkPanelPassword(req, res) {
+  const { password } = req.body || {};
+  if (typeof password !== 'string' || !bcrypt.compareSync(password, authState.hash)) {
+    res.status(403).json({ error: 'Wrong password' }); // not 401: the frontend api() logs out on 401
+    return false;
+  }
+  return true;
+}
+
+// ── frontend data ──
+let _fpInfoCache = { mtime: 0, phpVersion: null };
+async function frankenphpInfo() {
+  if (!fs.existsSync(FRANKENPHP_BIN)) return { installed: false };
+  let version = null, phpVersion = null;
+  try { version = ((await execFileAsync(FRANKENPHP_BIN, ['version'], { timeout: 8000 })).stdout.match(/v?\d+\.\d+\.\d+/) || [])[0] || null; } catch {}
+  const mt = fs.statSync(FRANKENPHP_BIN).mtimeMs;
+  if (_fpInfoCache.mtime === mt) phpVersion = _fpInfoCache.phpVersion;
+  else {
+    try {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-')), f = path.join(dir, 'v.php');
+      fs.writeFileSync(f, '<?php echo PHP_VERSION;');
+      phpVersion = (await execFileAsync(FRANKENPHP_BIN, ['php-cli', f], { timeout: 10000 })).stdout.trim() || null;
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch {}
+    _fpInfoCache = { mtime: mt, phpVersion };
+  }
+  return { installed: true, version, phpVersion };
+}
+
+function listSites() {
+  const out = [], d = readDefaultSite();
+  if (d) out.push({ label: 'situs default (:80)', runtime: d.runtime, version: d.version });
+  try {
+    for (const f of fs.readdirSync(VHOSTS_DIR).filter(f => f.endsWith('.conf'))) {
+      const r = parseRuntime(fs.readFileSync(path.join(VHOSTS_DIR, f), 'utf8'));
+      out.push({ label: f.replace(/\.conf$/, ''), runtime: r.runtime, version: r.version });
+    }
+  } catch {}
+  return out;
+}
+
+app.get('/api/phpworker', auth, async (req, res) => {
+  try {
+    const ctx = await buildContext(), plan = computePlan(ctx), specs = machineSpecs();
+    const fp = await frankenphpInfo();
+    const fpmRts = fpmRuntimes();
+    const fpm = await Promise.all(fpmRts.map(async rt => {
+      let phpVersion = null;
+      try { phpVersion = ((await execFileAsync(rt.bin, ['-v'], { timeout: 8000 })).stdout.match(/^PHP (\S+)/) || [])[1] || null; } catch {}
+      const file = path.join(poolDir(rt), POOL_FILE);
+      let txt = null; try { txt = fs.readFileSync(file, 'utf8'); } catch {}
+      const entry = plan.fpm.find(f => f.version === rt.version);
+      return { version: rt.version, phpVersion, active: await fpmActive(rt), nrestarts: await nRestarts(rt.service), inUse: ctx.use.fpm.has(rt.version),
+               status: await fpmStatus(rt), pool: parseIniLike(txt), poolFile: file, plan: entry ? entry.pool : null, basis: entry ? entry.basis : null,
+               manualFiles: findManualPoolFiles(rt).map(m => ({ file: m.file, onlyManaged: m.onlyManaged })) };
+    }));
+    res.json({
+      ok: true,
+      specs: { ...specs, cpuModel: cpuModel(), load1: os.loadavg()[0], lowLoad: lowLoad(specs.cores) },
+      sites: listSites(),
+      frankenphp: { ...fp, active: await serviceActive('frankenphp'), nrestarts: await nRestarts('frankenphp'),
+                    threads: readFrankenphpSettings().num_threads, planThreads: plan.frankenphp.num_threads,
+                    basis: plan.frankenphp.basis, warning: plan.frankenphp.warning, embeddedInUse: ctx.use.frankenphp },
+      fpm,
+      reserves: plan.reserves,
+      state: { lastApplied: AUTO.lastApplied || null, lastChecked: AUTO.lastChecked || null, pending: AUTO.pending, awaitingRestart: AUTO.awaitingRestart,
+               alerts: AUTO.alerts, blocked: Object.fromEntries(Object.entries(AUTO.blocked).filter(([, b]) => Date.now() < b.until).map(([k, b]) => [k, new Date(b.until).toISOString()])) },
+      history: readHistory(100),
+    });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
+// PostgreSQL memory settings written by auto-tune (shown on the PostgreSQL page).
 app.get('/api/autotune', auth, async (req, res) => {
-  const specs = machineSpecs();
-  const profile = computeTuneProfile(specs.cores, specs.ramMB);
-  const current = { num_threads: readFrankenphpSettings().num_threads };
+  const ctx = await buildContext(), plan = computePlan(ctx);
+  const current = {};
   const pg = findPgCluster();
   if (pg && fs.existsSync(pg.bin)) {
     const pgC = async k => {
@@ -1370,53 +1773,33 @@ app.get('/api/autotune', auth, async (req, res) => {
       current[k] = raw == null ? null : pgInternalToMB(k, raw, blockBytes);
     }));
   }
-  const boot = { installed: fs.existsSync(AUTOTUNE_UNIT), enabled: false };
-  if (boot.installed) boot.enabled = await new Promise(r => exec(`systemctl is-enabled ${AUTOTUNE_UNIT_NAME}`, (e, o) => r(!e && o.trim() === 'enabled')));
-  res.json({ ok: true, specs, profile, current, postgres: pg ? { version: pg.version } : null, boot });
+  res.json({ ok: true, specs: plan.specs, profile: plan.postgres, current, postgres: pg ? { version: pg.version } : null,
+             awaitingRestart: AUTO.awaitingRestart.postgresql || null, lastApplied: AUTO.lastApplied || null });
 });
 
-app.post('/api/autotune/apply', auth, (req, res) => {
+// Explicit, password-confirmed restart of services whose auto-tuned values need one to take effect.
+app.post('/api/phpworker/restart', auth, async (req, res) => {
   if (!checkPanelPassword(req, res)) return;
-  const specs = machineSpecs();
-  const profile = computeTuneProfile(specs.cores, specs.ramMB);
-  const result = applyTune(profile);
-  autotuneLog(`apply (${specs.cores} core / ${specs.ramMB} MB): ` + result.steps.map(s => `${s.name}=${s.status}`).join(' '));
-  if (!req.body.restart || !result.ok) return res.json({ ...result, profile, restarted: false });
-  restartTuned(errs => res.json({ ...result, profile, restarted: true, restartErrors: errs }));
-});
-
-app.post('/api/autotune/revert', auth, (req, res) => {
-  if (!checkPanelPassword(req, res)) return;
-  const result = revertTune();
-  autotuneLog('revert: ' + result.steps.map(s => `${s.name}=${s.status}`).join(' '));
-  if (!req.body.restart || !result.ok) return res.json({ ...result, restarted: false });
-  restartTuned(errs => res.json({ ...result, restarted: true, restartErrors: errs }));
-});
-
-app.post('/api/autotune/boot', auth, (req, res) => {
-  if (!checkPanelPassword(req, res)) return;
-  const enable = !!req.body.enabled;
-  const cmds = enable
-    ? () => { fs.writeFileSync(AUTOTUNE_UNIT, bootUnitText()); return 'systemctl daemon-reload && systemctl enable ' + AUTOTUNE_UNIT_NAME; }
-    : () => 'systemctl disable ' + AUTOTUNE_UNIT_NAME;
-  try {
-    exec(cmds(), (err, _o, se) => {
-      if (err) return res.status(500).json({ error: se || err.message });
-      autotuneLog('boot auto-tune ' + (enable ? 'enabled' : 'disabled'));
-      res.json({ ok: true, enabled: enable });
-    });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  const targets = Array.isArray(req.body.targets) ? req.body.targets : [];
+  const results = {};
+  for (const t of targets) {
+    const unit = t === 'frankenphp' ? 'frankenphp' : t === 'postgresql' ? 'postgresql' : null;
+    if (!unit) continue;
+    try { await execFileAsync('systemctl', ['restart', unit], { timeout: 90000 }); results[t] = null; delete AUTO.awaitingRestart[t]; }
+    catch (e) { results[t] = e.message; }
+  }
+  persistAuto();
+  autotuneLog(`EVENT restart manual (dikonfirmasi di UI): ${targets.join(',')}`);
+  res.json({ ok: true, results });
 });
 
 app.get('/api/settings', auth, (req, res) => {
   try {
     const php = readPhpIni();
-    const fp  = readFrankenphpSettings();
     res.json({
       ok: true,
       php: php.settings,
       phpIniPath: php.path,
-      frankenphp: fp,
     });
   } catch (e) { res.json({ ok: false, error: e.message }); }
 });
@@ -1431,16 +1814,14 @@ app.post('/api/settings/update', auth, async (req, res) => {
   const { password, php, frankenphp } = req.body || {};
   if (!password || !bcrypt.compareSync(password, authState.hash))
     return res.status(401).json({ error: 'Wrong password' });
+  // Worker capacity (FrankenPHP threads, PHP-FPM pool) is automatic: never accepted from the user.
+  if (frankenphp !== undefined)
+    return res.status(400).json({ error: 'Jumlah worker diatur otomatis oleh auto-tune (halaman PHP Worker) dan tidak bisa diubah manual' });
 
   try {
     let phpPath = null;
     if (php && typeof php === 'object' && Object.keys(php).length) {
       phpPath = updatePhpIni(php);
-    }
-    let fpUpdated = false;
-    if (frankenphp && frankenphp.num_threads != null) {
-      updateFrankenphpSettings(frankenphp);
-      fpUpdated = true;
     }
     const use = runtimesInUse();
     // PHP-FPM pools: mirror the ini and RELOAD (never restart: running requests finish).
@@ -1448,7 +1829,7 @@ app.post('/api/settings/update', auth, async (req, res) => {
     // FrankenPHP's own PHP needs PHPRC on the service or it never reads the php.ini we wrote,
     // and a restart to pick it up. Sites on PHP-FPM don't need FrankenPHP restarted for php.ini.
     let phprc = { changed: false }, phprcError = null;
-    const restartNeeded = use.frankenphp || fpUpdated || (!use.fpm.size);
+    const restartNeeded = use.frankenphp || (!use.fpm.size);
     if (use.frankenphp || !use.fpm.size) { try { phprc = await ensurePhprc(); } catch (e) { phprcError = e.message; } }
     let restart = { err: null, se: null };
     if (restartNeeded) restart = await new Promise(resolve => exec('systemctl restart frankenphp', (err, _, se) => resolve({ err, se })));
@@ -1464,7 +1845,6 @@ app.post('/api/settings/update', auth, async (req, res) => {
     res.json({
       ok: true,
       phpIniPath: phpPath,
-      frankenphpUpdated: fpUpdated,
       restarted: restartNeeded,
       restartOk: !restart.err,
       restartError: restart.err ? (restart.se || restart.err.message) : null,
@@ -1473,6 +1853,8 @@ app.post('/api/settings/update', auth, async (req, res) => {
       fpmIni,
       effective,
     });
+    // request_terminate_timeout follows php.ini's max_execution_time
+    if (php && php.max_execution_time !== undefined) setImmediate(() => autotuneTick('php.ini: max_execution_time berubah').catch(() => {}));
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
@@ -2370,20 +2752,25 @@ wss.on('connection', (ws, req)=>{
 });
 
 // CLI: node server.js --autotune [--dry-run [--cores=N --ram=MB]]  (boot unit entry point)
-if (process.argv.includes('--autotune')) {
-  const dry = process.argv.includes('--dry-run');
-  const argNum = n => { const a = process.argv.find(x => x.startsWith(`--${n}=`)); return a ? parseInt(a.split('=')[1], 10) : null; };
-  const sp = machineSpecs();
-  const cores = (dry && argNum('cores')) || sp.cores, ramMB = (dry && argNum('ram')) || sp.ramMB;
-  const profile = computeTuneProfile(cores, ramMB);
-  const desc = `${cores} core / ${ramMB} MB -> threads=${profile.num_threads} ` + TUNE_PG_KEYS.map(k => `${k}=${profile[k]}`).join(' ');
-  if (dry) { console.log('DRY-RUN (tidak ada yang diubah, log tidak ditulis): ' + desc); process.exit(0); }
-  autotuneLog('terdeteksi ' + desc);
-  const result = applyTune(profile);
-  result.steps.forEach(s => autotuneLog(`${s.name}: ${s.status} — ${s.detail}`));
-  process.exit(result.ok ? 0 : 1);
-}
-
+const AUTOTUNE_CLI = process.argv.includes('--autotune');
+if (AUTOTUNE_CLI) {
+  (async () => {
+    const dry = process.argv.includes('--dry-run');
+    const argNum = n => { const a = process.argv.find(x => x.startsWith(`--${n}=`)); return a ? parseInt(a.split('=')[1], 10) : null; };
+    if (dry) {
+      const ctx = await buildContext({ cores: argNum('cores'), ramMB: argNum('ram') });
+      const plan = computePlan(ctx);
+      console.log(`DRY-RUN (tidak ada yang diubah, log/state tidak ditulis): ${plan.specs.cores} core / ${plan.specs.ramMB} MB`);
+      console.log(JSON.stringify({ frankenphp: plan.frankenphp, fpm: plan.fpm, postgres: plan.postgres, reserves: plan.reserves }, null, 2));
+      const res = await applyPlan(ctx, plan, 'dry-run', { dry: true, boot: true });
+      res.changes.forEach(c => console.log(`  ${c.target} ${c.key}: ${c.old ?? '-'} -> ${c.new}`));
+      process.exit(0);
+    }
+    const res = await autotuneTick('boot');
+    (res.steps || []).forEach(x => autotuneLog(`${x.name}: ${x.status} — ${x.detail}`));
+    process.exit(res.ok === false ? 1 : 0);
+  })().catch(e => { console.error('[autotune]', e); process.exit(1); });
+} else {
 server.listen(PORT,'0.0.0.0',()=>console.log(`PS Panel → http://0.0.0.0:${PORT}`));
 
 // Run the Caddyfile self-heal once per boot. On an install that predates this
@@ -2399,4 +2786,10 @@ try {
   }
 } catch (e) {
   console.error('[Startup] ensureFrankenPHPGlobalBlock check failed:', e.message);
+}
+
+// Auto-tune: make sure the boot unit exists, run once shortly after start (this also adopts
+// existing manual PHP-FPM pool files and picks up core/RAM changes), then every 10 minutes.
+setTimeout(() => { ensureBootUnit().then(() => autotuneTick('startup')).catch(e => console.error('[autotune]', e.message)); }, 5000).unref();
+setInterval(() => { autotuneTick('periodic').catch(e => console.error('[autotune]', e.message)); }, AUTOTUNE_INTERVAL_MS).unref();
 }

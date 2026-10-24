@@ -288,7 +288,7 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       <div class="ns">Overview</div>
       <div class="ni ni-dashboard on" onclick="go('dashboard')"><span class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></span>Dashboard</div>
       <div class="ns">Applications</div>
-      <div class="ni ni-frankenphp" onclick="go('frankenphp')"><span class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>FrankenPHP</div>
+      <div class="ni ni-frankenphp" onclick="go('frankenphp')"><span class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>PHP Worker</div>
       <div class="ni ni-redis" onclick="go('redis')"><span class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>Redis</div>
       <div class="ni ni-postgres" onclick="go('postgres')"><span class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg></span>PostgreSQL</div>
       <div class="ns">Server</div>
@@ -476,11 +476,97 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
           </div>
         </div>
       </div>
+
+      <div class="card" style="margin-top:14px">
+        <div class="ct">Memori PostgreSQL (Auto-Tune) <span class="ct-badge">otomatis</span></div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.8;margin-bottom:10px">
+          Diatur otomatis sesuai RAM dan jumlah worker PHP (saat boot, core/RAM berubah, atau runtime situs berubah). Ditulis ke <span style="color:var(--accent)">conf.d/90-ps-panel-autotune.conf</span>; berlaku setelah PostgreSQL di-restart.
+        </div>
+        <div id="pg-at-body" style="font-family:var(--mono);font-size:12px"><span style="color:var(--muted)">Loading...</span></div>
+      </div>
     </div>
 
-    <!-- ── FRANKENPHP ── -->
+    <!-- ── PHP WORKER (FrankenPHP + PHP-FPM) ── -->
     <div class="page" id="page-frankenphp">
-      <div class="ph"><h1>FrankenPHP</h1><p>// web server · Caddy-based PHP runtime</p></div>
+      <div class="ph"><h1>PHP Worker</h1><p>// runtime PHP · kapasitas worker otomatis · php.ini</p></div>
+
+      <div id="pw-alerts"></div>
+
+      <div class="card" style="margin-bottom:14px">
+        <div class="ct">1 · Status <span class="ct-badge" id="pw-specs">—</span></div>
+        <div id="pw-status" style="font-family:var(--mono);font-size:12px;line-height:1.8"><span style="color:var(--muted)">Loading...</span></div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <div class="ct">2 · Kapasitas Worker <span class="ct-badge">otomatis</span></div>
+        <div id="pw-capacity" style="font-family:var(--mono);font-size:12px;line-height:1.8"><span style="color:var(--muted)">Loading...</span></div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <div class="ct">3 · Riwayat Auto-Tune <span class="ct-badge" id="pw-histcount"></span></div>
+        <div id="pw-history" style="font-family:var(--mono);font-size:11px;line-height:1.7;max-height:320px;overflow-y:auto"><span style="color:var(--muted)">Loading...</span></div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <div class="ct">4 · php.ini <span class="ct-badge" id="st-php-path">php.ini</span></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:12px;flex-wrap:wrap">
+          <button class="btn btn-ghost" id="st-cancel" onclick="cancelSettingsEdit()" style="display:none">Cancel</button>
+          <button class="btn" id="st-edit-btn" onclick="unlockSettingsEdit()">⚿ &nbsp;Unlock Edit</button>
+          <button class="btn" id="st-save-btn" onclick="saveSettings()" style="display:none">✓ &nbsp;Save Changes</button>
+        </div>
+        <div id="st-banner" style="display:none;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:var(--warn);font-family:var(--mono);font-size:11px;padding:10px 14px;border-radius:9px;margin-bottom:14px">
+          ⚿ Edit mode aktif — Save me-reload PHP-FPM (tanpa memutus request) dan, bila ada situs yang memakai PHP bawaan FrankenPHP, me-restart FrankenPHP (koneksi terputus beberapa detik). Jangan lakukan saat jam ujian/sibuk. Konfigurasi lama dibackup sebagai .bak.
+        </div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.8;margin-bottom:12px">
+          Ditulis ke file yang benar sesuai runtime: <span style="color:var(--accent)">/etc/frankenphp/php.ini</span> (PHP bawaan FrankenPHP, via PHPRC) dan <span style="color:var(--accent)">/etc/php/&lt;versi&gt;/fpm/conf.d/99-ps-panel.ini</span> (PHP-FPM). Batas <span style="color:var(--warn)">upload_max_filesize</span> harus ≤ <span style="color:var(--warn)">post_max_size</span>.
+        </div>
+        <div class="g2" style="gap:0 24px">
+          <div class="fg">
+            <label class="inp-lbl">upload_max_filesize <span style="color:var(--dim);text-transform:none;letter-spacing:0">— max upload (e.g. 10M, 100M, 1G)</span></label>
+            <input class="inp" id="st-upload_max_filesize" disabled>
+          </div>
+          <div class="fg">
+            <label class="inp-lbl">post_max_size <span style="color:var(--dim);text-transform:none;letter-spacing:0">— max POST body (≥ upload size)</span></label>
+            <input class="inp" id="st-post_max_size" disabled>
+          </div>
+          <div class="fg">
+            <label class="inp-lbl">memory_limit <span style="color:var(--dim);text-transform:none;letter-spacing:0">— memory per script (e.g. 256M, -1 = unlimited)</span></label>
+            <input class="inp" id="st-memory_limit" disabled>
+          </div>
+          <div class="fg">
+            <label class="inp-lbl">max_execution_time <span style="color:var(--dim);text-transform:none;letter-spacing:0">— seconds (0 = unlimited)</span></label>
+            <input class="inp" id="st-max_execution_time" disabled>
+          </div>
+          <div class="fg">
+            <label class="inp-lbl">max_input_time <span style="color:var(--dim);text-transform:none;letter-spacing:0">— input parse time (seconds)</span></label>
+            <input class="inp" id="st-max_input_time" disabled>
+          </div>
+          <div class="fg">
+            <label class="inp-lbl">max_input_vars <span style="color:var(--dim);text-transform:none;letter-spacing:0">— max GET/POST/COOKIE vars</span></label>
+            <input class="inp" id="st-max_input_vars" disabled>
+          </div>
+          <div class="fg">
+            <label class="inp-lbl">opcache.memory_consumption <span style="color:var(--dim);text-transform:none;letter-spacing:0">— OPcache memory (MB)</span></label>
+            <input class="inp" id="st-opcache.memory_consumption" disabled>
+          </div>
+          <div class="fg">
+            <label class="inp-lbl">opcache.max_accelerated_files <span style="color:var(--dim);text-transform:none;letter-spacing:0">— OPcache max files (e.g. 20000)</span></label>
+            <input class="inp" id="st-opcache.max_accelerated_files" disabled>
+          </div>
+        </div>
+        <div id="st-result" style="display:none;margin-top:14px"></div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <div class="ct">5 · Nilai Efektif di Server <span class="ct-badge" id="st-eff-via">—</span></div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.8;margin-bottom:10px">
+          Yang benar-benar dipakai proses web yang sedang berjalan (FrankenPHP dan/atau PHP-FPM), bukan sekadar isi file. Diperiksa otomatis setelah Save.
+          <button class="btn btn-ghost" style="margin-left:8px;padding:4px 10px" onclick="loadEffective(false)">↻ &nbsp;Cek sekarang</button>
+        </div>
+        <div id="st-eff-body" style="font-family:var(--mono);font-size:12px;line-height:1.8"></div>
+      </div>
+
+      <div class="ph" style="margin-top:24px"><h1 style="font-size:20px">Detail FrankenPHP</h1><p>// web server · Caddy-based</p></div>
 
       <div class="g4">
         <div class="mc" id="fpx-scard" style="--c:var(--accent)">
@@ -828,111 +914,8 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
 
     <!-- ── SETTINGS ── -->
     <div class="page" id="page-settings">
-      <div class="ph">
-        <div style="display:flex;align-items:center;justify-content:space-between">
-          <div>
-            <h1>Settings</h1>
-            <p>// konfigurasi PHP & FrankenPHP</p>
-          </div>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-ghost" id="st-cancel" onclick="cancelSettingsEdit()" style="display:none">Cancel</button>
-            <button class="btn" id="st-edit-btn" onclick="unlockSettingsEdit()">⚿ &nbsp;Unlock Edit</button>
-            <button class="btn" id="st-save-btn" onclick="saveSettings()" style="display:none">✓ &nbsp;Save Changes</button>
-          </div>
-        </div>
-      </div>
-
-      <div id="st-banner" style="display:none;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:var(--warn);font-family:var(--mono);font-size:11px;padding:10px 14px;border-radius:9px;margin-bottom:14px">
-        <span>⚿ Edit mode aktif — Save me-reload PHP-FPM (tanpa memutus request) dan, bila ada situs yang memakai PHP bawaan FrankenPHP, me-restart FrankenPHP (koneksi terputus beberapa detik). Jangan lakukan saat jam ujian/sibuk. Konfigurasi lama dibackup sebagai .bak.</span>
-      </div>
-
-      <div class="g2" style="max-width:1040px">
-        <!-- PHP.ini Settings -->
-        <div class="card">
-          <div class="ct">PHP Configuration <span class="ct-badge" id="st-php-path">php.ini</span></div>
-          <div class="fg">
-            <label class="inp-lbl">upload_max_filesize <span style="color:var(--dim);text-transform:none;letter-spacing:0">— max upload (e.g. 10M, 100M, 1G)</span></label>
-            <input class="inp" id="st-upload_max_filesize" disabled>
-          </div>
-          <div class="fg">
-            <label class="inp-lbl">post_max_size <span style="color:var(--dim);text-transform:none;letter-spacing:0">— max POST body (≥ upload size)</span></label>
-            <input class="inp" id="st-post_max_size" disabled>
-          </div>
-          <div class="fg">
-            <label class="inp-lbl">memory_limit <span style="color:var(--dim);text-transform:none;letter-spacing:0">— PHP memory per script (e.g. 256M, -1 = unlimited)</span></label>
-            <input class="inp" id="st-memory_limit" disabled>
-          </div>
-          <div class="fg">
-            <label class="inp-lbl">max_execution_time <span style="color:var(--dim);text-transform:none;letter-spacing:0">— seconds (0 = unlimited)</span></label>
-            <input class="inp" id="st-max_execution_time" disabled>
-          </div>
-          <div class="fg">
-            <label class="inp-lbl">max_input_time <span style="color:var(--dim);text-transform:none;letter-spacing:0">— input parse time (seconds)</span></label>
-            <input class="inp" id="st-max_input_time" disabled>
-          </div>
-          <div class="fg" style="margin-bottom:0">
-            <label class="inp-lbl">max_input_vars <span style="color:var(--dim);text-transform:none;letter-spacing:0">— max GET/POST/COOKIE vars</span></label>
-            <input class="inp" id="st-max_input_vars" disabled>
-          </div>
-        </div>
-
-        <!-- FrankenPHP Settings -->
-        <div class="card">
-          <div class="ct">FrankenPHP Configuration <span class="ct-badge">Caddyfile</span></div>
-          <div class="fg">
-            <label class="inp-lbl">num_threads <span style="color:var(--dim);text-transform:none;letter-spacing:0">— worker threads (1-256, default = CPU cores)</span></label>
-            <input class="inp" id="st-num_threads" disabled placeholder="default">
-          </div>
-          <div style="background:var(--ink3);border-radius:9px;padding:14px;margin-top:6px">
-            <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Tips</div>
-            <div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.9">
-              • Set <span style="color:var(--accent)">num_threads</span> = jumlah CPU cores untuk performa optimal<br>
-              • Kosongkan untuk pakai default (auto-detect)<br>
-              • <span style="color:var(--warn)">upload_max_filesize</span> harus ≤ <span style="color:var(--warn)">post_max_size</span><br>
-              • Restart FrankenPHP otomatis setelah save<br>
-              • Konfigurasi lama otomatis dibackup<br>
-              • PHP config disimpan di <span style="color:var(--accent)">/etc/frankenphp/php.ini</span> dan dibaca lewat <span style="color:var(--accent)">PHPRC</span> pada service frankenphp
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="card" style="max-width:1040px;margin-top:14px">
-        <div class="ct">Auto-Tune Performa <span class="ct-badge" id="at-specs">—</span></div>
-        <div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.8;margin-bottom:12px">
-          Menyesuaikan jumlah thread FrankenPHP dan memori PostgreSQL dengan jumlah core &amp; RAM server ini.
-        </div>
-        <div id="at-table" style="font-family:var(--mono);font-size:12px;margin-bottom:14px"></div>
-        <div class="g2">
-          <div>
-            <div class="fg">
-              <label class="inp-lbl">Password panel <span style="color:var(--dim);text-transform:none;letter-spacing:0">— untuk konfirmasi perubahan</span></label>
-              <input class="inp" type="password" id="at-pw" autocomplete="current-password">
-            </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn" onclick="autotuneAct('apply',false)">✓ &nbsp;Terapkan</button>
-              <button class="btn btn-ghost" onclick="autotuneAct('apply',true)">↻ &nbsp;Terapkan &amp; restart</button>
-              <button class="btn btn-ghost" onclick="autotuneAct('revert',false)">⎌ &nbsp;Reset ke default</button>
-            </div>
-            <div style="margin-top:12px;display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;color:var(--dim)">
-              <span>Otomatis saat boot: <b id="at-boot-state">—</b></span>
-              <button class="btn btn-ghost" id="at-boot-btn" onclick="autotuneBoot()">—</button>
-            </div>
-            <div id="at-msg" style="font-family:var(--mono);font-size:11px;margin-top:10px;line-height:1.7"></div>
-          </div>
-          <div style="background:var(--ink3);border-radius:9px;padding:14px">
-            <div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.9">
-              • <b>Terapkan</b> hanya menulis konfigurasi; efeknya setelah service di-restart atau server reboot<br>
-              • <b>Terapkan &amp; restart</b> me-restart PostgreSQL dan FrankenPHP, koneksi terputus beberapa detik. Jangan saat jam sibuk<br>
-              • Konfigurasi PostgreSQL divalidasi dulu dan dibatalkan otomatis bila ditolak<br>
-              • <b>Otomatis saat boot</b> berguna bila core/RAM VM sering berubah; nilai <span style="color:var(--accent)">num_threads</span> manual akan ditimpa<br>
-              • CLI: <span style="color:var(--accent)">node server.js --autotune --dry-run</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="card" style="max-width:1040px;margin-top:14px">
+      <div class="ph"><h1>Settings</h1><p>// keamanan panel</p></div>
+      <div class="card" style="max-width:1040px">
         <div class="ct">Ubah Password Panel <span class="ct-badge">Security</span></div>
         <div class="g2">
           <div>
@@ -962,17 +945,6 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
           </div>
         </div>
       </div>
-
-      <div class="card" style="max-width:1040px;margin-top:14px">
-        <div class="ct">Nilai Efektif di Server <span class="ct-badge" id="st-eff-via">—</span></div>
-        <div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.8;margin-bottom:10px">
-          Yang benar-benar dipakai proses web yang sedang berjalan (FrankenPHP dan/atau PHP-FPM), bukan sekadar isi file. Diperiksa otomatis setelah Save.
-          <button class="btn btn-ghost" style="margin-left:8px;padding:4px 10px" onclick="loadEffective(false)">↻ &nbsp;Cek sekarang</button>
-        </div>
-        <div id="st-eff-body" style="font-family:var(--mono);font-size:12px;line-height:1.8"></div>
-      </div>
-
-      <div id="st-result" style="display:none;max-width:1040px;margin-top:14px"></div>
     </div>
 
     <!-- ── UPDATE ── -->
@@ -1294,48 +1266,99 @@ async function login(){
   else document.getElementById('lerr').textContent='// '+(d.error||'invalid access key');
 }
 function logout(){localStorage.removeItem('psp_tok');location.reload();}
-// ── Auto-Tune ──
-const AT_ROWS=[['num_threads','FrankenPHP num_threads'],['shared_buffers','PostgreSQL shared_buffers'],['effective_cache_size','PostgreSQL effective_cache_size'],['work_mem','PostgreSQL work_mem'],['maintenance_work_mem','PostgreSQL maintenance_work_mem'],['max_connections','PostgreSQL max_connections']];
-async function loadAutotune(){
-  const t=document.getElementById('at-table');
-  const d=await api('GET','/api/autotune');
-  if(!d||!d.ok){t.innerHTML='<span style="color:var(--danger)">// gagal memuat data auto-tune</span>';return;}
-  document.getElementById('at-specs').textContent=`${d.specs.cores} core · ${d.specs.ramMB} MB`;
-  let h='<div style="display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:6px 14px"><div style="color:var(--muted)">SETELAN</div><div style="color:var(--muted)">SAAT INI</div><div style="color:var(--muted)">REKOMENDASI</div>';
-  for(const [k,label] of AT_ROWS){
-    const cur=d.current[k], rec=d.profile[k];
-    const same=cur!=null&&String(cur).toLowerCase()===String(rec).toLowerCase();
-    h+=`<div>${esc(label)}</div><div>${cur==null?'—':esc(cur)}</div><div style="color:${same?'var(--accent)':'var(--warn)'}">${esc(rec)}${same?' ✓':''}</div>`;
+// ── PHP Worker page (status · capacity · history; capacity is automatic, never typed in) ──
+const fmtTs=t=>{try{return new Date(t).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch{return t;}};
+const pwBar=(pct,color)=>`<div style="background:var(--ink3);height:6px;border-radius:3px;overflow:hidden;min-width:120px"><div style="height:100%;width:${Math.min(100,Math.max(0,pct)).toFixed(0)}%;background:${color||'var(--accent)'};border-radius:3px"></div></div>`;
+async function loadPhpWorker(){
+  const d=await api('GET','/api/phpworker');
+  if(!d||!d.ok){document.getElementById('pw-status').innerHTML='<span style="color:var(--danger)">// gagal memuat: '+esc((d&&d.error)||'tidak ada respons')+'</span>';return;}
+  renderPwAlerts(d);renderPwStatus(d);renderPwCapacity(d);renderPwHistory(d);
+}
+function renderPwAlerts(d){
+  let h='';
+  for(const a of (d.state.alerts||[]).slice(0,3)) h+=`<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.3);color:var(--danger);font-family:var(--mono);font-size:11px;padding:10px 14px;border-radius:9px;margin-bottom:10px">🚨 ${esc(fmtTs(a.ts))} — ${esc(a.msg)}</div>`;
+  if(d.frankenphp.embeddedInUse&&d.frankenphp.warning) h+=`<div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:var(--warn);font-family:var(--mono);font-size:11px;padding:10px 14px;border-radius:9px;margin-bottom:10px">⚠ ${esc(d.frankenphp.warning)}</div>`;
+  document.getElementById('pw-alerts').innerHTML=h;
+}
+function renderPwStatus(d){
+  const sp=d.specs, f=d.frankenphp;
+  document.getElementById('pw-specs').textContent=`${sp.cores} core · ${sp.ramMB} MB`;
+  let h=`<div style="color:var(--muted);margin-bottom:10px">CPU: <span style="color:var(--text)">${esc(sp.cpuModel||'—')}</span> · load ${sp.load1.toFixed(2)} ${sp.lowLoad?'<span style="color:var(--accent)">(rendah)</span>':'<span style="color:var(--warn)">(tinggi)</span>'}</div>`;
+  h+='<div style="color:var(--muted);margin:0 0 6px">Runtime tiap situs</div><div style="display:grid;grid-template-columns:2fr 1.2fr 1.4fr;gap:3px 14px;margin-bottom:14px"><div style="color:var(--muted)">SITUS</div><div style="color:var(--muted)">RUNTIME</div><div style="color:var(--muted)">VERSI PHP</div>';
+  for(const x of d.sites){
+    let ver='—';
+    if(x.runtime==='frankenphp') ver=f.phpVersion?'PHP '+f.phpVersion+' (bawaan biner)':'—';
+    else if(x.runtime==='fpm'){const fp=d.fpm.find(y=>y.version===x.version)||d.fpm[0];ver=fp&&fp.phpVersion?'PHP '+fp.phpVersion:(x.version?'PHP '+x.version:'—');}
+    h+=`<div>${esc(x.label)}</div><div>${x.runtime?esc(rtLabel(x.runtime,x.version)):'<span style="color:var(--muted)">bukan PHP</span>'}</div><div>${esc(ver)}</div>`;
   }
-  t.innerHTML=h+'</div>'+(d.postgres?'':'<div style="color:var(--muted);margin-top:8px">// PostgreSQL tidak terdeteksi, hanya FrankenPHP yang disetel</div>');
-  document.getElementById('at-boot-state').textContent=d.boot.enabled?'AKTIF':'nonaktif';
-  const b=document.getElementById('at-boot-btn');
-  b.textContent=d.boot.enabled?'Nonaktifkan':'Aktifkan';b.dataset.enable=d.boot.enabled?'0':'1';
+  h+='</div><div style="color:var(--muted);margin:0 0 6px">Service &amp; pemakaian worker</div><div style="display:grid;grid-template-columns:1.4fr 1fr 0.7fr 2.4fr;gap:5px 14px"><div style="color:var(--muted)">SERVICE</div><div style="color:var(--muted)">VERSI</div><div style="color:var(--muted)">NRESTARTS</div><div style="color:var(--muted)">WORKER (TERPAKAI / BATAS)</div>';
+  const nr=n=>`<span style="color:${n>0?'var(--warn)':'var(--text)'}">${n}</span>`;
+  h+=`<div>frankenphp ${f.active?'<span style="color:var(--accent)">●</span>':'<span style="color:var(--danger)">●</span>'}</div><div>${esc(f.version||'—')}${f.phpVersion?' · PHP '+esc(f.phpVersion):''}</div><div>${nr(f.nrestarts)}</div><div>thread PHP bawaan: batas <b>${f.threads??'default'}</b> <span style="color:var(--muted)">(pemakaian tidak tersedia di v1.3.2)</span></div>`;
+  for(const x of d.fpm){
+    const st=x.status, lim=parseInt(x.pool['pm.max_children'])||(x.plan&&x.plan['pm.max_children'])||0;
+    let use='<span style="color:var(--muted)">status belum aktif (menunggu reload pool)</span>';
+    if(st&&st.ok){use=`${st.active} aktif · ${st.idle} idle · ${st.total} proses / batas <b>${lim}</b> ${pwBar(lim?st.total/lim*100:0,st.total>=lim?'var(--danger)':'var(--accent)')}`+(st.maxChildrenReached>0?` <span style="color:var(--danger)">⚠ max_children tercapai ${st.maxChildrenReached}×</span>`:'')+(st.listenQueue>0?` <span style="color:var(--warn)">antrean ${st.listenQueue}</span>`:'');}
+    h+=`<div>php${esc(x.version)}-fpm ${x.active?'<span style="color:var(--accent)">●</span>':'<span style="color:var(--danger)">●</span>'}${x.inUse?'':' <span style="color:var(--muted)">(tidak dipakai)</span>'}</div><div>PHP ${esc(x.phpVersion||x.version)}</div><div>${nr(x.nrestarts)}</div><div>${use}</div>`;
+  }
+  document.getElementById('pw-status').innerHTML=h+'</div>';
 }
-function atShow(t,ok){const m=document.getElementById('at-msg');m.style.color=ok?'var(--accent)':'var(--danger)';m.innerHTML=t;}
-function atSteps(d){return (d.steps||[]).map(s=>`${esc(s.name)}: <b>${esc(s.status)}</b> — ${esc(s.detail)}`).join('<br>');}
-async function autotuneAct(kind,restart){
-  const pw=document.getElementById('at-pw').value;
-  if(!pw) return atShow('// isi password panel dulu');
-  if(restart&&!confirm('PostgreSQL dan FrankenPHP akan di-restart; koneksi terputus beberapa detik. Lanjutkan?')) return;
-  atShow('// memproses...',true);
-  const d=await api('POST','/api/autotune/'+kind,{password:pw,restart});
-  if(!d) return atShow('// gagal menghubungi server');
-  if(d.error) return atShow('// '+esc(d.error));
-  let msg=atSteps(d);
-  if(d.restarted){const e=d.restartErrors||{};msg+='<br>restart: '+((e.postgresql||e.frankenphp)?'<b>gagal</b> '+esc(e.postgresql||e.frankenphp):'<b>ok</b>');}
-  else if(d.ok) msg+='<br>// belum di-restart: efek berlaku setelah restart/reboot';
-  atShow(msg,d.ok);
-  document.getElementById('at-pw').value='';
-  loadAutotune();
+function renderPwCapacity(d){
+  const f=d.frankenphp, st=d.state, rs=d.reserves;
+  let h=`<div style="color:var(--dim);margin-bottom:12px">Dihitung dan diterapkan otomatis (saat boot, core/RAM berubah, runtime situs berubah, <b>max_execution_time</b> berubah, dan tiap 10 menit untuk PHP-FPM). Tidak ada kolom isian: nilai di bawah hanya ditampilkan.</div>`;
+  h+=`<div style="margin-bottom:6px"><b>FrankenPHP</b> <span style="color:var(--muted)">num_threads</span> = <b>${f.threads??'default'}</b>${f.threads!==f.planThreads?` <span style="color:var(--warn)">(rencana: ${f.planThreads})</span>`:''}</div><div style="color:var(--muted);margin-bottom:14px">dasar: ${esc(f.basis)}</div>`;
+  for(const x of d.fpm.filter(y=>y.inUse)){
+    const keys=['pm','pm.max_children','pm.start_servers','pm.min_spare_servers','pm.max_spare_servers','pm.max_requests','request_terminate_timeout'];
+    h+=`<div style="margin-bottom:6px"><b>PHP-FPM ${esc(x.version)}</b> <span style="color:var(--muted)">pool [www] · ${esc(x.poolFile)}</span></div><div style="display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:3px 14px;margin-bottom:8px"><div style="color:var(--muted)">SETELAN</div><div style="color:var(--muted)">BERLAKU</div><div style="color:var(--muted)">RENCANA</div>`;
+    for(const k of keys){const cur=x.pool[k],pl=x.plan?String(x.plan[k]):null;h+=`<div>${k}</div><div>${cur==null?'—':esc(cur)}</div><div style="color:${cur!=null&&String(cur)===pl?'var(--accent)':'var(--warn)'}">${pl==null?'—':esc(pl)}${cur!=null&&String(cur)===pl?' ✓':''}</div>`;}
+    h+='</div>';
+    if(x.basis){const b=x.basis;h+=`<div style="color:var(--muted);margin-bottom:6px">dasar: RAM ${b.ramMB} MB − PostgreSQL ${rs.pgMB} MB − Redis ${rs.redisMB} MB − sistem ${rs.systemMB} MB = ${b.availMB} MB tersedia ÷ ${b.avgRssMB} MB per proses${b.measured?' (terukur, minimal 50 MB)':' (estimasi awal 70 MB)'}, maksimal ${b.coreCap} (8 × core)</div>`;}
+    const manual=(x.manualFiles||[]).filter(m=>!m.onlyManaged);
+    if(manual.length) h+=`<div style="color:var(--warn);margin-bottom:6px">⚠ berkas pool manual tidak diambil alih (berisi setelan di luar yang dikelola panel): ${manual.map(m=>esc(m.file)).join(', ')}</div>`;
+    h+='<div style="margin-bottom:10px"></div>';
+  }
+  h+=`<div style="color:var(--muted)">terakhir diterapkan: <span style="color:var(--text)">${st.lastApplied?esc(fmtTs(st.lastApplied)):'belum ada perubahan'}</span> · terakhir diperiksa: ${st.lastChecked?esc(fmtTs(st.lastChecked)):'—'}</div>`;
+  for(const p of st.pending||[]) h+=`<div style="color:var(--warn);margin-top:6px">⏳ tertunda: ${esc(p.target)} ${esc(p.key)} ${esc(p.old)} → ${esc(p.new)} — ${esc(p.why)}</div>`;
+  for(const [k,until] of Object.entries(st.blocked||{})) h+=`<div style="color:var(--danger);margin-top:6px">⛔ ${esc(k)}: nilai otomatis diblokir sampai ${esc(fmtTs(until))} (service restart berulang setelah perubahan)</div>`;
+  const aw=Object.keys(st.awaitingRestart||{});
+  if(aw.length){
+    h+=`<div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:9px;padding:12px 14px;margin-top:12px"><div style="color:var(--warn);margin-bottom:8px">↻ Nilai baru sudah ditulis tetapi baru berlaku setelah restart: <b>${aw.map(esc).join(', ')}</b>. Panel tidak me-restart service yang sedang melayani situs tanpa konfirmasi Anda (koneksi terputus beberapa detik — jangan saat jam ujian).</div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input type="password" class="inp" id="pw-restart-pw" placeholder="password panel" style="max-width:220px">${aw.map(t=>`<button class="btn btn-ghost" onclick="pwRestart('${esc(t)}')">↻ &nbsp;Restart ${esc(t)}</button>`).join('')}</div><div id="pw-restart-msg" style="margin-top:8px"></div></div>`;
+  }
+  document.getElementById('pw-capacity').innerHTML=h;
 }
-async function autotuneBoot(){
-  const pw=document.getElementById('at-pw').value;
-  if(!pw) return atShow('// isi password panel dulu');
-  const enabled=document.getElementById('at-boot-btn').dataset.enable==='1';
-  const d=await api('POST','/api/autotune/boot',{password:pw,enabled});
-  if(d&&d.ok){atShow('// auto-tune saat boot '+(enabled?'diaktifkan':'dinonaktifkan'),true);document.getElementById('at-pw').value='';loadAutotune();}
-  else atShow('// '+esc((d&&d.error)||'gagal'));
+function renderPwHistory(d){
+  document.getElementById('pw-histcount').textContent=(d.history||[]).length+' entri';
+  if(!d.history||!d.history.length){document.getElementById('pw-history').innerHTML='<span style="color:var(--muted)">// belum ada perubahan otomatis</span>';return;}
+  let h='<div style="display:grid;grid-template-columns:1.1fr 1.1fr 1.5fr 1.6fr 2.2fr;gap:3px 12px"><div style="color:var(--muted)">WAKTU</div><div style="color:var(--muted)">TARGET</div><div style="color:var(--muted)">SETELAN</div><div style="color:var(--muted)">LAMA → BARU</div><div style="color:var(--muted)">ALASAN</div>';
+  for(const e of d.history){
+    if(e.type==='alert'){h+=`<div>${esc(fmtTs(e.ts))}</div><div style="grid-column:2 / 6;color:var(--danger)">🚨 ${esc(e.message)}</div>`;continue;}
+    h+=`<div>${esc(fmtTs(e.ts))}</div><div>${esc(e.target)}</div><div>${esc(e.key)}</div><div>${esc(e.old)} → <b>${esc(e.new)}</b></div><div style="color:var(--dim)">${esc(e.reason)}</div>`;
+  }
+  document.getElementById('pw-history').innerHTML=h+'</div>';
+}
+async function pwRestart(target){
+  const pw=document.getElementById('pw-restart-pw').value, msg=document.getElementById('pw-restart-msg');
+  if(!pw){msg.style.color='var(--danger)';msg.textContent='// isi password panel';return;}
+  if(!confirm(`Restart ${target}? Koneksi terputus beberapa detik. Jangan lakukan saat jam ujian/sibuk.`))return;
+  msg.style.color='var(--accent)';msg.textContent='// me-restart...';
+  const r=await api('POST','/api/phpworker/restart',{password:pw,targets:[target]});
+  if(!r||!r.ok){msg.style.color='var(--danger)';msg.textContent='// '+((r&&r.error)||'gagal');return;}
+  const e=r.results&&r.results[target];
+  if(e){msg.style.color='var(--danger)';msg.textContent='// gagal: '+e;return;}
+  loadPhpWorker();
+}
+// PostgreSQL page: memory written by auto-tune
+async function loadPgAutotune(){
+  const el=document.getElementById('pg-at-body');
+  const d=await api('GET','/api/autotune');
+  if(!d||!d.ok){el.innerHTML='<span style="color:var(--danger)">// gagal memuat</span>';return;}
+  if(!d.postgres){el.innerHTML='<span style="color:var(--muted)">// PostgreSQL tidak terdeteksi</span>';return;}
+  const rows=[['shared_buffers'],['effective_cache_size'],['work_mem'],['maintenance_work_mem'],['max_connections']];
+  let h='<div style="display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:4px 14px"><div style="color:var(--muted)">SETELAN</div><div style="color:var(--muted)">SAAT INI</div><div style="color:var(--muted)">REKOMENDASI</div>';
+  for(const [k] of rows){const cur=d.current[k],rec=d.profile[k],same=cur!=null&&String(cur).toLowerCase()===String(rec).toLowerCase();h+=`<div>${k}</div><div>${cur==null?'—':esc(cur)}</div><div style="color:${same?'var(--accent)':'var(--warn)'}">${esc(rec)}${same?' ✓':''}</div>`;}
+  h+='</div>';
+  if(d.awaitingRestart) h+=`<div style="margin-top:10px;color:var(--warn)">↻ nilai baru sudah ditulis (${esc(fmtTs(d.awaitingRestart))}) dan berlaku setelah PostgreSQL di-restart — lihat halaman PHP Worker.</div>`;
+  h+=`<div style="margin-top:10px;color:var(--muted)">terakhir diterapkan auto-tune: ${d.lastApplied?esc(fmtTs(d.lastApplied)):'belum ada'}</div>`;
+  el.innerHTML=h;
 }
 
 async function changePassword(){
@@ -1360,10 +1383,10 @@ function go(name){
   if(name==='files')     loadFiles(_fmPath);
   if(name==='mail')      loadMailVhosts();
   if(name==='redis')     loadRedis();
-  if(name==='postgres')  loadPostgres();
-  if(name==='frankenphp') loadFrankenphp();
+  if(name==='postgres')  {loadPostgres();loadPgAutotune();}
+  if(name==='frankenphp') {loadFrankenphp();loadPhpWorker();loadSettings();}
   if(name==='deploy'){loadWebhookList();loadDeployVhosts();loadDeployHistory();}
-  if(name==='settings')  {loadSettings();loadAutotune();}
+
   if(name==='update')    checkUpdate();
 }
 
@@ -2443,7 +2466,7 @@ function toggleDeployHistoryItem(i){
 }
 
 // ── Settings ──
-const ST_PHP_KEYS=['upload_max_filesize','post_max_size','memory_limit','max_execution_time','max_input_time','max_input_vars'];
+const ST_PHP_KEYS=['upload_max_filesize','post_max_size','memory_limit','max_execution_time','max_input_time','max_input_vars','opcache.memory_consumption','opcache.max_accelerated_files'];
 let stOriginal={};       // snapshot of current values for cancel/revert
 let stUnlocked=false;    // edit mode flag
 let stPassword='';       // verified password (held in memory while editing)
@@ -2462,10 +2485,6 @@ async function loadSettings(){
     stOriginal[k]=d.php[k]||'';
   }
   document.getElementById('st-php-path').textContent=d.phpIniPath||'php.ini';
-  // Populate FrankenPHP fields
-  const nt=document.getElementById('st-num_threads');
-  nt.value=d.frankenphp?.num_threads||'';
-  stOriginal['num_threads']=d.frankenphp?.num_threads||'';
   // Reset UI to view mode
   lockSettingsEdit();
   loadEffective(true);
@@ -2473,7 +2492,7 @@ async function loadSettings(){
 
 function lockSettingsEdit(){
   stUnlocked=false; stPassword='';
-  [...ST_PHP_KEYS,'num_threads'].forEach(k=>{
+  ST_PHP_KEYS.forEach(k=>{
     document.getElementById('st-'+k).disabled=true;
   });
   document.getElementById('st-edit-btn').style.display='inline-flex';
@@ -2503,7 +2522,7 @@ async function confirmPassword(){
     if(!r.ok){err.textContent='Wrong password';err.style.display='block';return;}
     stPassword=pw; stUnlocked=true;
     closePwModal();
-    [...ST_PHP_KEYS,'num_threads'].forEach(k=>{
+    ST_PHP_KEYS.forEach(k=>{
       document.getElementById('st-'+k).disabled=false;
     });
     document.getElementById('st-edit-btn').style.display='none';
@@ -2516,7 +2535,6 @@ async function confirmPassword(){
 function cancelSettingsEdit(){
   // Restore original values
   for(const k of ST_PHP_KEYS) document.getElementById('st-'+k).value=stOriginal[k]||'';
-  document.getElementById('st-num_threads').value=stOriginal['num_threads']||'';
   lockSettingsEdit();
   document.getElementById('st-result').style.display='none';
 }
@@ -2529,7 +2547,7 @@ async function loadEffective(fillBlanks){
   // Kolom yang belum ada di php.ini diisi nilai efektif, supaya yang tampil = yang berlaku.
   if(fillBlanks&&d&&d.ok) for(const k of ST_PHP_KEYS){
     const el=document.getElementById('st-'+k);
-    if(el&&!el.value&&d.values[k]!=null&&d.values[k]!==''){el.value=d.values[k];stOriginal[k]=d.values[k];}
+    if(el&&!el.value&&d.values[k]!=null&&d.values[k]!==''&&d.values[k]!==false){el.value=d.values[k];stOriginal[k]=d.values[k];}
   }
 }
 function renderEffective(d){
@@ -2566,11 +2584,8 @@ async function saveSettings(){
     const v=document.getElementById('st-'+k).value.trim();
     if(v && v!==(stOriginal[k]||'')) phpChanges[k]=v;
   }
-  const ntVal=document.getElementById('st-num_threads').value.trim();
-  const fpChanges={};
-  if(ntVal && ntVal!==String(stOriginal['num_threads']||'')) fpChanges.num_threads=parseInt(ntVal);
 
-  if(!Object.keys(phpChanges).length && !Object.keys(fpChanges).length){
+  if(!Object.keys(phpChanges).length){
     showSettingsResult('info','Tidak ada perubahan untuk disimpan.');
     return;
   }
@@ -2578,7 +2593,7 @@ async function saveSettings(){
   // Validasi format & upload_max_filesize <= post_max_size
   const SZ_RE=/^-?\d+[KMG]?$/i, IN_RE=/^-?\d+$/;
   for(const [k,v] of Object.entries(phpChanges)){
-    if(!(['max_execution_time','max_input_vars','max_input_time'].includes(k)?IN_RE:SZ_RE).test(v)){
+    if(!(['max_execution_time','max_input_vars','max_input_time','opcache.memory_consumption','opcache.max_accelerated_files'].includes(k)?IN_RE:SZ_RE).test(v)){
       showSettingsResult('error',`Format ${k} tidak valid: "${esc(v)}" (contoh: 20M, 1G, 30, -1)`);return;
     }
   }
@@ -2595,7 +2610,6 @@ async function saveSettings(){
 
   const body={password:stPassword};
   if(Object.keys(phpChanges).length) body.php=phpChanges;
-  if(Object.keys(fpChanges).length) body.frankenphp=fpChanges;
 
   try{
     const r=await fetch('/api/settings/update',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOK},body:JSON.stringify(body)});
@@ -2604,7 +2618,6 @@ async function saveSettings(){
     if(!r.ok){showSettingsResult('error',d.error||'Save failed');return;}
     let msg='Settings tersimpan. ';
     if(d.phpIniPath) msg+=`PHP: ${esc(d.phpIniPath)}. `;
-    if(d.frankenphpUpdated) msg+='FrankenPHP config updated. ';
     if(d.phprcInstalled) msg+='PHPRC ditambahkan ke service frankenphp. ';
     if(d.phprcError) msg+=`<br>⚠ Gagal memasang PHPRC: ${esc(d.phprcError)}<br>`;
     if(d.restarted===false) msg+='FrankenPHP tidak di-restart (semua situs memakai PHP-FPM). ';
@@ -2621,7 +2634,6 @@ async function saveSettings(){
     showSettingsResult(type,msg);
     // Refresh original snapshot
     Object.assign(stOriginal,phpChanges);
-    if(fpChanges.num_threads!=null) stOriginal['num_threads']=fpChanges.num_threads;
     lockSettingsEdit();
   }catch(e){
     btn.innerHTML='✓ &nbsp;Save Changes'; btn.disabled=false;
