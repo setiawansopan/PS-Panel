@@ -30,6 +30,12 @@ FRANKENPHP_FALLBACK="v1.3.2"
 #   PS_PHP_VER=8.4 bash install.sh
 # Fixed against PHP2Shell (CVE-2026-109618/109619): 8.5.12, 8.4.27, 8.3.36, 8.2.35 or newer.
 PS_PHP_VER="${PS_PHP_VER:-8.5}"
+# No interactive prompts from apt: needrestart (Ubuntu 22.04+) otherwise opens a full-screen
+# "Pending kernel upgrade" / "restart services?" dialog after a package install. Its output
+# goes to the log, so the installer just appears to hang (seen in the field after PostgreSQL).
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+export NEEDRESTART_SUSPEND=1
 # Panel login. Asked interactively at the start of the install (read from /dev/tty, so it also
 # works with "curl ... | sudo bash"); for unattended installs pass them as variables:
 #   PS_PANEL_USER=admin PS_PANEL_PASS='secret123' bash install.sh
