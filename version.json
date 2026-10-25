@@ -1,11 +1,10 @@
 {
-  "version": "2.12.3",
+  "version": "2.12.4",
   "released": "2026-10-25",
   "notes": [
-    "Perbaikan installer: apt kini berjalan tanpa dialog interaktif (DEBIAN_FRONTEND=noninteractive, needrestart ditangguhkan). Sebelumnya dialog \"Pending kernel upgrade\" dari needrestart muncul tersembunyi setelah PostgreSQL terpasang dan installer tampak macet menunggu tombol Enter",
-    "Perbaikan installer: pengecekan \"PHP requests are actually processed\" kini menunggu FrankenPHP siap (hingga ±30 detik) — sebelumnya dicek langsung setelah start sehingga instalasi gagal dengan got: ''",
-    "Perbaikan installer: versi FrankenPHP terbaru kini terbaca benar dari API GitHub (sebelumnya yang terbaca URL sehingga selalu jatuh ke v1.3.2 yang lama). Bila biner terbaru tidak bisa berjalan di CPU server, installer kembali ke v1.3.2",
-    "Perbaikan installer: peringatan palsu \"extensions not loaded: bcmath iconv\" dihapus (ekstensi sebenarnya terpasang)",
-    "Perbaikan installer (2.12.1): bila API Launchpad tidak terjangkau, PPA PHP ditambahkan langsung dengan kunci yang fingerprint-nya dicek"
+    "Peringatan RAM kurang: bila RAM server tidak cukup untuk 8 worker PHP-FPM minimum (mis. VPS 2 GB), halaman PHP Worker menampilkan kotak peringatan merah beserta RAM yang disarankan, dan panel mengirim alert (termasuk Telegram) sekali per 24 jam",
+    "Jatah RAM untuk PostgreSQL dan sistem kini mengikuti ukuran server, bukan angka tetap. Sebelumnya server 2 GB mendapat anggaran negatif (−496 MB); server 8 GB ke atas hasilnya sama seperti sebelumnya",
+    "Tampilan notifikasi Telegram dirapikan: kartu tersendiri di Dashboard dengan label jelas, tombol lihat/sembunyikan token, status aktif, dan panduan mendapatkan bot token dan chat ID",
+    "Perbaikan teks: label versi di sidebar kini menampilkan versi panel yang sebenarnya (sebelumnya tertulis v2.0), dan keterangan usang \"tidak tersedia di v1.3.2\" pada FrankenPHP v1.13 diganti"
   ]
 }

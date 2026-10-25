@@ -284,7 +284,7 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
   <aside class="sb">
     <div class="sb-top">
       <div class="logo"><span>PS</span> Panel</div>
-      <div class="logo-s">v2.0 · FrankenPHP Stack</div>
+      <div class="logo-s" id="logo-ver">FrankenPHP Stack</div>
     </div>
     <nav class="nav">
       <div class="ns">Overview</div>
@@ -322,20 +322,47 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       <div class="card" id="dash-health" style="margin-bottom:14px;display:none">
         <div class="ct">Kesehatan web server</div>
         <div id="dh-body" style="font-family:var(--mono);font-size:11px;line-height:1.9"></div>
-        <details style="margin-top:10px" id="dh-notify">
-          <summary style="cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--dim)">Notifikasi Telegram <span id="dh-tgstate"></span></summary>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;font-family:var(--mono);font-size:11px">
-            <label>Bot token<input type="password" id="tg-token" placeholder="kosong = tidak diubah" autocomplete="off"></label>
-            <label>Chat ID<input id="tg-chat" placeholder="-100123456"></label>
-            <label>Ambang restart (per 5 menit)<input id="tg-thr" type="number" min="1" max="100"></label>
-            <label>Password panel<input type="password" id="tg-pw" autocomplete="off"></label>
-          </div>
-          <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn" onclick="saveNotify()">Simpan</button><button class="btn btn-ghost" onclick="testNotify()">Kirim tes</button></div>
-          <div id="tg-msg" style="font-family:var(--mono);font-size:10px;margin-top:6px"></div>
-          <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:6px">Peringatan dikirim bila: service restart melebihi ambang dalam 5 menit, kernel mencatat segfault/invalid opcode, atau PHP-FPM mencapai pm.max_children.</div>
-        </details>
       </div>
 
+      <div class="card" id="dash-notify" style="margin-bottom:14px">
+        <div class="ct"><span>Notifikasi Telegram</span><span id="dh-tgstate" class="pill p-unk">memuat…</span></div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.7;margin-bottom:14px">Kirim peringatan ke Telegram saat service restart berulang, kernel mencatat segfault, PHP-FPM kehabisan worker, atau RAM tidak cukup.</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:0 16px">
+          <div class="fg" style="grid-column:1/-1">
+            <label class="inp-lbl" for="tg-token">Bot token</label>
+            <div style="position:relative">
+              <input class="inp" type="password" id="tg-token" placeholder="123456789:AAH…" autocomplete="off" spellcheck="false" style="padding-right:64px">
+              <button type="button" class="btn btn-ghost" id="tg-eye" onclick="tgToggle()" style="position:absolute;right:5px;top:50%;transform:translateY(-50%);padding:4px 10px;font-size:10px">Lihat</button>
+            </div>
+          </div>
+          <div class="fg">
+            <label class="inp-lbl" for="tg-chat">Chat ID</label>
+            <input class="inp" id="tg-chat" placeholder="-1001234567890" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="fg">
+            <label class="inp-lbl" for="tg-thr">Ambang restart <span style="text-transform:none;letter-spacing:0;color:var(--dim)">(kali dalam 5 menit)</span></label>
+            <input class="inp" type="number" id="tg-thr" min="1" max="100" placeholder="3">
+          </div>
+          <div class="fg">
+            <label class="inp-lbl" for="tg-pw">Password panel <span style="text-transform:none;letter-spacing:0;color:var(--dim)">(untuk menyimpan)</span></label>
+            <input class="inp" type="password" id="tg-pw" autocomplete="current-password" placeholder="••••••••">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn" onclick="saveNotify()">Simpan</button>
+          <button class="btn btn-ghost" onclick="testNotify()">Kirim pesan tes</button>
+          <span id="tg-msg" style="font-family:var(--mono);font-size:11px"></span>
+        </div>
+        <details style="margin-top:14px">
+          <summary style="cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--dim)">Cara mendapatkan bot token dan chat ID</summary>
+          <ol style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.9;margin:8px 0 0 18px">
+            <li>Di Telegram, chat <b>@BotFather</b> → <code>/newbot</code> → salin <b>token</b> yang diberikan.</li>
+            <li>Kirim pesan apa saja ke bot Anda (atau tambahkan bot ke grup).</li>
+            <li>Buka <code>https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code> di browser, cari <code>"chat":{"id":…}</code>. Itulah <b>chat ID</b> (grup biasanya diawali minus).</li>
+            <li>Isi di atas, simpan, lalu klik <b>Kirim pesan tes</b>.</li>
+          </ol>
+        </details>
+      </div>
       <div class="g4">
         <div class="mc" style="--c:var(--accent2)">
           <div class="mc-lbl">CPU</div>
@@ -1386,10 +1413,15 @@ async function loadDashHealth(){
   h+=`<div>Kernel (24 jam): <span style="color:${d.kernel.segfaults24h?'var(--danger)':'var(--accent)'}">${d.kernel.segfaults24h} segfault/invalid opcode</span></div>`;
   if(d.kernel.samples.length) h+=`<div style="color:var(--muted);font-size:10px;word-break:break-all">${d.kernel.samples.map(esc).join('<br>')}</div>`;
   document.getElementById('dh-body').innerHTML=h;
-  document.getElementById('dh-tgstate').innerHTML=d.telegram?'<span style="color:var(--accent)">· aktif</span>':'<span style="color:var(--warn)">· belum diatur</span>';
+}
+function tgToggle(){
+  const i=document.getElementById('tg-token'),b=document.getElementById('tg-eye'),show=i.type==='password';
+  i.type=show?'text':'password';b.textContent=show?'Sembunyi':'Lihat';
 }
 async function loadNotifyForm(){
   const d=await api('GET','/api/notify'); if(!d||!d.ok) return;
+  const st=document.getElementById('dh-tgstate');
+  st.className='pill '+(d.configured?'p-on':'p-unk');st.textContent=d.configured?'● aktif':'belum diatur';
   document.getElementById('tg-chat').value=d.chatId||'';document.getElementById('tg-thr').value=d.restartThreshold;
   document.getElementById('tg-token').placeholder=d.tokenSet?'tersimpan — kosong = tidak diubah':'123456:ABC...';
 }
@@ -1400,7 +1432,7 @@ async function saveNotify(){
   const t=document.getElementById('tg-token').value.trim(); if(t) body.token=t;
   const r=await api('POST','/api/notify',body);
   if(!r||!r.ok) return tgMsg('// '+((r&&r.error)||'gagal'));
-  document.getElementById('tg-token').value='';tgMsg('✓ tersimpan',true);loadNotifyForm();loadDashHealth();
+  document.getElementById('tg-token').value='';document.getElementById('tg-pw').value='';tgMsg('✓ tersimpan',true);loadNotifyForm();
 }
 async function testNotify(){
   const pw=document.getElementById('tg-pw').value; if(!pw) return tgMsg('// isi password panel');
@@ -1519,7 +1551,7 @@ function renderPwStatus(d){
   }
   h+='</div><div style="color:var(--muted);margin:0 0 6px">Service &amp; pemakaian worker</div><div style="display:grid;grid-template-columns:1.4fr 1fr 0.7fr 2.4fr;gap:5px 14px"><div style="color:var(--muted)">SERVICE</div><div style="color:var(--muted)">VERSI</div><div style="color:var(--muted)">NRESTARTS</div><div style="color:var(--muted)">WORKER (TERPAKAI / BATAS)</div>';
   const nr=n=>`<span style="color:${n>0?'var(--warn)':'var(--text)'}">${n}</span>`;
-  h+=`<div>frankenphp ${f.active?'<span style="color:var(--accent)">●</span>':'<span style="color:var(--danger)">●</span>'}</div><div>${esc(f.version||'—')}${f.phpVersion?' · PHP '+esc(f.phpVersion):''}</div><div>${nr(f.nrestarts)}</div><div>thread PHP bawaan: batas <b>${f.threads??'default'}</b> <span style="color:var(--muted)">(pemakaian tidak tersedia di v1.3.2)</span></div>`;
+  h+=`<div>frankenphp ${f.active?'<span style="color:var(--accent)">●</span>':'<span style="color:var(--danger)">●</span>'}</div><div>${esc(f.version||'—')}${f.phpVersion?' · PHP '+esc(f.phpVersion):''}</div><div>${nr(f.nrestarts)}</div><div>thread PHP bawaan: batas <b>${f.threads??'default'}</b> <span style="color:var(--muted)">(FrankenPHP tidak melaporkan jumlah thread yang terpakai)</span></div>`;
   for(const x of d.fpm){
     const st=x.status, lim=parseInt(x.pool['pm.max_children'])||(x.plan&&x.plan['pm.max_children'])||0;
     let use='<span style="color:var(--muted)">status belum aktif (menunggu reload pool)</span>';
@@ -1530,7 +1562,8 @@ function renderPwStatus(d){
 }
 function renderPwCapacity(d){
   const f=d.frankenphp, st=d.state, rs=d.reserves;
-  let h=`<div style="color:var(--dim);margin-bottom:12px">Dihitung dan diterapkan otomatis (saat boot, core/RAM berubah, runtime situs berubah, <b>max_execution_time</b> berubah, dan tiap 10 menit untuk PHP-FPM). Tidak ada kolom isian: nilai di bawah hanya ditampilkan.</div>`;
+  let h=(d.warnings||[]).map(w=>`<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.35);color:var(--danger);border-radius:9px;padding:10px 14px;margin-bottom:12px">🚨 ${esc(w.message)}</div>`).join('');
+  h+=`<div style="color:var(--dim);margin-bottom:12px">Dihitung dan diterapkan otomatis (saat boot, core/RAM berubah, runtime situs berubah, <b>max_execution_time</b> berubah, dan tiap 10 menit untuk PHP-FPM). Tidak ada kolom isian: nilai di bawah hanya ditampilkan.</div>`;
   h+=`<div style="margin-bottom:6px"><b>FrankenPHP</b> <span style="color:var(--muted)">num_threads</span> = <b>${f.threads??'default'}</b>${f.threads!==f.planThreads?` <span style="color:var(--warn)">(rencana: ${f.planThreads})</span>`:''}</div><div style="color:var(--muted);margin-bottom:14px">dasar: ${esc(f.basis)}</div>`;
   for(const x of d.fpm.filter(y=>y.inUse)){
     const keys=['pm','pm.max_children','pm.start_servers','pm.min_spare_servers','pm.max_spare_servers','pm.max_requests','request_terminate_timeout'];
@@ -1588,7 +1621,7 @@ async function loadPgAutotune(){
 }
 
 async function loadAccount(){
-  const d=await api('GET','/api/account'); if(d&&d.ok) document.getElementById('acc-user').value=d.username;
+  const d=await api('GET','/api/account'); if(d&&d.ok){document.getElementById('acc-user').value=d.username;if(d.version)document.getElementById('logo-ver').textContent='v'+d.version+' · FrankenPHP Stack';}
 }
 async function changeUsername(){
   const u=document.getElementById('acc-new').value.trim().toLowerCase(),pw=document.getElementById('acc-pw').value;
@@ -2109,7 +2142,7 @@ async function openVhostModal(){
 }
 function rtNote(){
   const v=document.getElementById('rt-select').value;
-  document.getElementById('rt-note').textContent=v==='frankenphp'?'⚠ FrankenPHP v1.3.2 diketahui crash (segfault) bila banyak koneksi HTTPS keluar paralel. PHP-FPM disarankan.':'';
+  document.getElementById('rt-note').textContent=v==='frankenphp'?'⚠ FrankenPHP versi lama (mis. v1.3.2) diketahui crash (segfault) bila banyak koneksi HTTPS keluar paralel; versi baru (v1.13+) lolos uji beban. PHP-FPM tetap disarankan.':'';
 }
 async function openRuntimeModal(target){
   await loadRuntimes(); _rtTarget=target;
@@ -2978,7 +3011,7 @@ function init(){
   },5000);
   updateBadgeCheck();
   loadDashSecurity();setInterval(loadDashSecurity,300000);
-  loadDashHealth();loadNotifyForm();setInterval(loadDashHealth,30000);
+  loadDashHealth();loadNotifyForm();loadAccount();setInterval(loadDashHealth,30000);
 }
 
 // ── UPDATE ──
