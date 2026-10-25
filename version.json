@@ -1,7 +1,8 @@
 {
-  "version": "2.12.2",
+  "version": "2.12.3",
   "released": "2026-10-25",
   "notes": [
+    "Perbaikan installer: apt kini berjalan tanpa dialog interaktif (DEBIAN_FRONTEND=noninteractive, needrestart ditangguhkan). Sebelumnya dialog \"Pending kernel upgrade\" dari needrestart muncul tersembunyi setelah PostgreSQL terpasang dan installer tampak macet menunggu tombol Enter",
     "Perbaikan installer: pengecekan \"PHP requests are actually processed\" kini menunggu FrankenPHP siap (hingga ±30 detik) — sebelumnya dicek langsung setelah start sehingga instalasi gagal dengan got: ''",
     "Perbaikan installer: versi FrankenPHP terbaru kini terbaca benar dari API GitHub (sebelumnya yang terbaca URL sehingga selalu jatuh ke v1.3.2 yang lama). Bila biner terbaru tidak bisa berjalan di CPU server, installer kembali ke v1.3.2",
     "Perbaikan installer: peringatan palsu \"extensions not loaded: bcmath iconv\" dihapus (ekstensi sebenarnya terpasang)",
