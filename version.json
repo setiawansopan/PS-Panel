@@ -1,9 +1,7 @@
 {
-  "version": "2.12.0",
+  "version": "2.12.1",
   "released": "2026-10-25",
   "notes": [
-    "Login panel kini memakai username + password. Saat instalasi, admin diminta mengisi username dan password sendiri (bisa juga lewat variabel PS_PANEL_USER dan PS_PANEL_PASS); bila dikosongkan, username admin dan password acak seperti sebelumnya. Password pilihan admin tidak disimpan dalam teks biasa, hanya hash-nya",
-    "Panel yang sudah terpasang tidak terkunci setelah update: username otomatis admin dengan password yang sama. Username bisa diganti di Settings → Username Panel (semua sesi lama dibatalkan). Lupa username: jalankan node server.js --reset-password (menampilkan username) atau node server.js --set-username namabaru",
-    "Perbaikan: password yang mengandung tanda = kini terbaca benar dari /root/.pspanel_credentials"
+    "Perbaikan installer: bila server tidak bisa menghubungi API Launchpad (add-apt-repository time out saat menambah PPA PHP), PPA Ondrej kini ditambahkan langsung: kunci diambil dari keyserver.ubuntu.com dan dicocokkan dengan fingerprint resminya, lalu sumber apt ditulis ke /etc/apt/sources.list.d. Menjalankan ulang installer setelah gagal tidak lagi menunggu time out bila PPA sudah terpasang"
   ]
 }
