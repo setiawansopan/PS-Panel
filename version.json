@@ -1,7 +1,10 @@
 {
-  "version": "2.12.1",
+  "version": "2.12.2",
   "released": "2026-10-25",
   "notes": [
-    "Perbaikan installer: bila server tidak bisa menghubungi API Launchpad (add-apt-repository time out saat menambah PPA PHP), PPA Ondrej kini ditambahkan langsung: kunci diambil dari keyserver.ubuntu.com dan dicocokkan dengan fingerprint resminya, lalu sumber apt ditulis ke /etc/apt/sources.list.d. Menjalankan ulang installer setelah gagal tidak lagi menunggu time out bila PPA sudah terpasang"
+    "Perbaikan installer: pengecekan \"PHP requests are actually processed\" kini menunggu FrankenPHP siap (hingga ±30 detik) — sebelumnya dicek langsung setelah start sehingga instalasi gagal dengan got: ''",
+    "Perbaikan installer: versi FrankenPHP terbaru kini terbaca benar dari API GitHub (sebelumnya yang terbaca URL sehingga selalu jatuh ke v1.3.2 yang lama). Bila biner terbaru tidak bisa berjalan di CPU server, installer kembali ke v1.3.2",
+    "Perbaikan installer: peringatan palsu \"extensions not loaded: bcmath iconv\" dihapus (ekstensi sebenarnya terpasang)",
+    "Perbaikan installer (2.12.1): bila API Launchpad tidak terjangkau, PPA PHP ditambahkan langsung dengan kunci yang fingerprint-nya dicek"
   ]
 }
