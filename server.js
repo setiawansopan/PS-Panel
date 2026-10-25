@@ -770,9 +770,14 @@ app.post('/api/vhost-repo/:domain', auth,(req,res)=>{
 });
 
 // ── Vhost .env Editor ──
+// The project folder is not always /var/www/<domain> (e.g. the repo cloned into .../public, docroot
+// .../public/public): follow the vhost's docroot to the folder holding artisan, like deploy does.
+function vhostProjectDir(domain){
+  return laravelRootFor(domain) || `/var/www/${domain}`;
+}
 function getVhostEnvPath(domain){
   if(!/^[a-zA-Z0-9.\-_]+$/.test(domain)) return null;
-  return `/var/www/${domain}/.env`;
+  return path.join(vhostProjectDir(domain), '.env');
 }
 
 app.get('/api/vhost-env/:domain', auth,(req,res)=>{
@@ -817,7 +822,7 @@ app.post('/api/vhost-env/:domain', auth,(req,res)=>{
 app.post('/api/vhost-env/:domain/clear-cache', auth,(req,res)=>{
   const domain = req.params.domain;
   if(!/^[a-zA-Z0-9.\-_]+$/.test(domain)) return res.status(400).json({error:'Invalid domain'});
-  const appPath = `/var/www/${domain}`;
+  const appPath = vhostProjectDir(domain);
   if(!fs.existsSync(appPath)) return res.status(400).json({error:'Vhost directory not found'});
 
   // Commands ordered safest first.
@@ -2460,6 +2465,19 @@ function laravelRootForPath(p) {
   const up = path.dirname(p);
   return path.basename(p) === 'public' && fs.existsSync(path.join(up, 'artisan')) ? up : p;
 }
+// Domains whose docroot IS the project folder (not its public/): .env, composer.json, vendor/ and the
+// source are then served as static files, so the DB password can be downloaded by anyone.
+function docrootExposesProject(root) {
+  const out = [];
+  try {
+    for (const f of fs.readdirSync(VHOSTS_DIR).filter(f => f.endsWith('.conf'))) {
+      const m = fs.readFileSync(path.join(VHOSTS_DIR, f), 'utf8').match(/root\s+\*\s+(.+?)(?:\n|$)/);
+      if (m && path.resolve(m[1].trim()) === path.resolve(root)) out.push(f.replace(/\.conf$/, ''));
+    }
+  } catch {}
+  return out;
+}
+const exposureWarning = (root, domains) => `docroot situs ${domains.join(', ')} menunjuk ke folder project (${root}), bukan ke ${root}/public — .env (password database), composer.json, dan source bisa diunduh publik. Ubah docroot ke ${root}/public`;
 function listLaravelSites() {
   const out = [];
   try {
@@ -2509,8 +2527,8 @@ async function storageReport(root) {
 }
 // One text block for Deploy History ("sebelum"/"sesudah" deploy).
 async function laravelPreflight(root) {
-  const env = checkLaravelEnv(root), st = await storageReport(root);
-  const warnings = [...env.warnings, ...(st ? st.warnings : [])];
+  const env = checkLaravelEnv(root), st = await storageReport(root), exposed = docrootExposesProject(root);
+  const warnings = [...env.warnings, ...(exposed.length ? [exposureWarning(root, exposed)] : []), ...(st ? st.warnings : [])];
   const lines = [`.env: ${env.exists ? `APP_ENV=${env.values.APP_ENV ?? '-'} APP_DEBUG=${env.values.APP_DEBUG ?? '-'}` : 'belum ada'}`,
                  `storage/: ${st && st.bytes != null ? (st.bytes / 1048576).toFixed(0) + ' MB' : '-'}`, ...warnings.map(x => '⚠ ' + x)];
   return { warnings, text: lines.join('\n') };
@@ -2634,7 +2652,7 @@ app.get('/api/laravel', auth, async (req, res) => {
   try {
     const sites = await Promise.all(listLaravelSites().map(async s => ({
       domain: s.domain, root: s.root, runtime: s.runtime, phpVersion: s.version,
-      env: checkLaravelEnv(s.root), storage: await storageReport(s.root),
+      env: (() => { const e = checkLaravelEnv(s.root), x = docrootExposesProject(s.root); return x.length ? { ...e, warnings: [exposureWarning(s.root, x), ...e.warnings] } : e; })(), storage: await storageReport(s.root),
       queue: await queueStatus(s.domain, s.root), scheduler: await schedulerStatus(s.domain, s.root),
     })));
     res.json({ ok: true, sites, storageWarnMB: STORAGE_WARN_MB });
@@ -3000,6 +3018,15 @@ async function runDeploySteps(hook) {
       } catch (e) {
         log(`\n[SETUP] Could not verify/create database "${env.DB_DATABASE}": ${e.message}\n`);
       }
+    }
+
+    // 2b. A pgsql app reaching PostgreSQL over TCP needs a password (scram-sha-256). A fresh .env from
+    //     .env.example has none, and migrate would only fail minutes later with "fe_sendauth: no password".
+    if (env.DB_CONNECTION === 'pgsql' && !env.DB_PASSWORD && /^(|127\.0\.0\.1|localhost|::1)$/.test(env.DB_HOST || '127.0.0.1')) {
+      const msg = `DB_PASSWORD kosong di ${envPath}. Isi DB_USERNAME dan DB_PASSWORD di file itu (buat user di halaman PostgreSQL; tombol ⚙ ENV pada vhost menyimpan ke file yang sama), lalu jalankan deploy lagi.`;
+      log(`\n[ERROR] ${msg}\n[FAILED]\n`);
+      steps.push({ cmd: 'cek DB_PASSWORD', ok: false, output: msg });
+      return { ok: false, output: outParts.join(''), steps };
     }
 
     // 3. Install dependencies

@@ -1,10 +1,9 @@
 {
-  "version": "2.12.4",
+  "version": "2.12.5",
   "released": "2026-10-25",
   "notes": [
-    "Peringatan RAM kurang: bila RAM server tidak cukup untuk 8 worker PHP-FPM minimum (mis. VPS 2 GB), halaman PHP Worker menampilkan kotak peringatan merah beserta RAM yang disarankan, dan panel mengirim alert (termasuk Telegram) sekali per 24 jam",
-    "Jatah RAM untuk PostgreSQL dan sistem kini mengikuti ukuran server, bukan angka tetap. Sebelumnya server 2 GB mendapat anggaran negatif (−496 MB); server 8 GB ke atas hasilnya sama seperti sebelumnya",
-    "Tampilan notifikasi Telegram dirapikan: kartu tersendiri di Dashboard dengan label jelas, tombol lihat/sembunyikan token, status aktif, dan panduan mendapatkan bot token dan chat ID",
-    "Perbaikan teks: label versi di sidebar kini menampilkan versi panel yang sebenarnya (sebelumnya tertulis v2.0), dan keterangan usang \"tidak tersedia di v1.3.2\" pada FrankenPHP v1.13 diganti"
+    "Perbaikan editor ENV: tombol ⚙ ENV dan Clear Laravel Cache kini memakai folder project Laravel yang sebenarnya (folder berisi artisan, ditelusuri dari docroot vhost), bukan selalu /var/www/<domain>. Sebelumnya .env disimpan di folder yang tidak dibaca aplikasi bila project berada di subfolder",
+    "Deploy berhenti lebih awal dengan pesan jelas bila aplikasi memakai PostgreSQL lewat TCP tetapi DB_PASSWORD kosong (mis. .env baru dari .env.example), sebelum composer install dan migrate; sebelumnya baru gagal di migrate dengan pesan fe_sendauth",
+    "Peringatan baru: bila docroot situs sama dengan folder project (bukan folder public), file .env, composer.json, dan source bisa diunduh publik; ditampilkan di Deploy dan kartu Laravel"
   ]
 }
