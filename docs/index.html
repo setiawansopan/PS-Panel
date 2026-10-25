@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PS Panel — Modern Server Management for Ubuntu 24.04</title>
-<meta name="description" content="Lightweight server management panel for Ubuntu 24.04. One-command install. FrankenPHP, PHP 8.3, PostgreSQL 16, Redis, Node.js.">
+<meta name="description" content="Lightweight server management panel for Ubuntu 24.04. One-command install. FrankenPHP, PHP 8.5 (PHP-FPM), PostgreSQL 16, Redis, Node.js.">
 <meta property="og:title" content="PS Panel — Modern Server Management">
-<meta property="og:description" content="One-command install. FrankenPHP + PHP 8.3 + PostgreSQL + Redis + Node.js stack.">
+<meta property="og:description" content="One-command install. FrankenPHP + PHP 8.5 + PostgreSQL + Redis + Node.js stack.">
 <meta property="og:type" content="website">
 
 <!--
@@ -547,7 +547,7 @@ footer {
 
   <div class="hero-badge fade-up">
     <span class="hb-dot"></span>
-    v2.3 &nbsp;·&nbsp; Ubuntu 24.04 LTS &nbsp;·&nbsp; FrankenPHP Stack
+    v2.12 &nbsp;·&nbsp; Ubuntu 24.04 LTS &nbsp;·&nbsp; FrankenPHP Stack
   </div>
 
   <h1 class="hero-title fade-up delay-1">
@@ -595,7 +595,7 @@ footer {
       <div class="feat-card fade-up delay-1" style="--c:var(--accent)">
         <span class="feat-icon">⚡</span>
         <div class="feat-title" data-i18n="feat1-title">One-command Install</div>
-        <div class="feat-desc" data-i18n="feat1-desc">A single curl command installs and configures the entire stack. FrankenPHP, PHP 8.3, PostgreSQL 16, Redis, and Node.js — ready in under 10 minutes.</div>
+        <div class="feat-desc" data-i18n="feat1-desc">A single curl command installs and configures the entire stack. FrankenPHP, PHP 8.5, PostgreSQL 16, Redis, and Node.js — ready in under 10 minutes.</div>
       </div>
       <div class="feat-card fade-up delay-2" style="--c:var(--accent2)">
         <span class="feat-icon">📊</span>
@@ -604,8 +604,8 @@ footer {
       </div>
       <div class="feat-card fade-up delay-3" style="--c:var(--accent3)">
         <span class="feat-icon">🟥</span>
-        <div class="feat-title" data-i18n="feat3-title">Redis Statistics</div>
-        <div class="feat-desc" data-i18n="feat3-desc">Cache hit rate, memory usage, ops/sec, connected clients, eviction counts, and keyspace stats — everything at a glance.</div>
+        <div class="feat-title" data-i18n="feat3-title">Redis Statistics &amp; Settings</div>
+        <div class="feat-desc" data-i18n="feat3-desc">Cache hit rate, memory, ops/sec, evictions, and keyspace stats — plus maxmemory, eviction policy, and AOF settings applied live and saved to redis.conf with a backup.</div>
       </div>
       <div class="feat-card fade-up delay-4" style="--c:var(--accent2)">
         <span class="feat-icon">🗄️</span>
@@ -614,13 +614,28 @@ footer {
       </div>
       <div class="feat-card fade-up delay-5" style="--c:var(--accent)">
         <span class="feat-icon">🐘</span>
-        <div class="feat-title" data-i18n="feat5-title">PHP-FPM Stats</div>
-        <div class="feat-desc" data-i18n="feat5-desc">Worker pool utilization, idle/active process counts, listen queue depth, and slow request tracking via the FPM status socket.</div>
+        <div class="feat-title" data-i18n="feat5-title">PHP Workers on Autopilot</div>
+        <div class="feat-desc" data-i18n="feat5-desc">PHP-FPM pool size and FrankenPHP threads are computed from your CPU cores and RAM and re-tuned automatically — no numbers to type. Live pool stats, queue depth, and a full change history.</div>
       </div>
       <div class="feat-card fade-up delay-6" style="--c:var(--warn)">
         <span class="feat-icon">▲</span>
         <div class="feat-title" data-i18n="feat6-title">Smart Git Deploy</div>
         <div class="feat-desc" data-i18n="feat6-desc">Trigger deploys from the browser — or automate with GitHub webhooks. First deploy auto-creates .env & the database, runs composer and Vite builds, fixes storage permissions, and caches everything.</div>
+      </div>
+      <div class="feat-card fade-up delay-1" style="--c:var(--danger,#f87171)">
+        <span class="feat-icon">🛡️</span>
+        <div class="feat-title" data-i18n="feat7-title">PHP Security &amp; Runtime</div>
+        <div class="feat-desc" data-i18n="feat7-desc">Checks every PHP runtime against known critical advisories (PHP2Shell), switches sites between PHP-FPM and FrankenPHP's built-in PHP with backup and rollback, and upgrades FrankenPHP only after a stress test passes.</div>
+      </div>
+      <div class="feat-card fade-up delay-2" style="--c:var(--accent3)">
+        <span class="feat-icon">⚙️</span>
+        <div class="feat-title" data-i18n="feat8-title">Laravel Queue &amp; Scheduler</div>
+        <div class="feat-desc" data-i18n="feat8-desc">Per-site queue worker (systemd) and cron scheduler created and managed for you: start, stop, restart, logs. Deploys warn about unsafe .env values and a bloated storage folder.</div>
+      </div>
+      <div class="feat-card fade-up delay-3" style="--c:var(--accent2)">
+        <span class="feat-icon">🔔</span>
+        <div class="feat-title" data-i18n="feat9-title">Health &amp; Telegram Alerts</div>
+        <div class="feat-desc" data-i18n="feat9-desc">Dashboard shows service restarts, PHP-FPM pool pressure, and kernel segfaults. Get a Telegram message when a service keeps restarting, PHP crashes, or workers run out.</div>
       </div>
     </div>
   </div>
@@ -642,7 +657,7 @@ footer {
       <div class="stack-card fade-up delay-2" style="--c:var(--accent3)">
         <span class="stack-em">🐘</span>
         <div class="stack-name">PHP</div>
-        <div class="stack-ver">8.3 + FPM</div>
+        <div class="stack-ver">8.5 + FPM</div>
         <div class="stack-desc" data-i18n="stack2-desc">Latest stable PHP with pgsql, redis, opcache, gd, mbstring, and 10+ extensions pre-installed.</div>
       </div>
       <div class="stack-card fade-up delay-3" style="--c:var(--accent2)">
@@ -804,7 +819,7 @@ footer {
         <div class="step-num">02</div>
         <div class="step-body">
           <div class="step-title" data-i18n="inst2-title">Run the one-line install command</div>
-          <div class="step-desc" data-i18n="inst2-desc">Installs and configures the complete stack automatically. Takes 5–10 minutes depending on your server's connection speed.</div>
+          <div class="step-desc" data-i18n="inst2-desc">Asks for your panel username and password, then installs and configures the complete stack automatically. Takes 5–10 minutes depending on your server's connection speed.</div>
           <div class="code-block" data-code="curl -fsSL https://raw.githubusercontent.com/setiawansopan/PS-Panel/main/install.sh | sudo bash">
             <code>curl -fsSL https://raw.githubusercontent.com/setiawansopan/PS-Panel/main/install.sh | sudo bash</code>
             <button class="code-copy" onclick="copyCode(this)">copy</button>
@@ -827,10 +842,10 @@ footer {
       <div class="step fade-up delay-4">
         <div class="step-num">04</div>
         <div class="step-body">
-          <div class="step-title" data-i18n="inst4-title">Login with the generated password</div>
-          <div class="step-desc" data-i18n="inst4-desc">Your credentials are displayed at the end of the install. You can always retrieve them from the credentials file.</div>
-          <div class="code-block" data-code="cat /root/.pspanel_credentials">
-            <code>cat /root/.pspanel_credentials</code>
+          <div class="step-title" data-i18n="inst4-title">Log in with the username and password you chose</div>
+          <div class="step-desc" data-i18n="inst4-desc">The installer asks for a panel username and password at the start (leave the password empty to get a generated one, shown at the end). Forgot them? Reset on the server:</div>
+          <div class="code-block" data-code="cd /opt/ps-panel &amp;&amp; node server.js --reset-password">
+            <code>cd /opt/ps-panel &amp;&amp; node server.js --reset-password</code>
             <button class="code-copy" onclick="copyCode(this)">copy</button>
           </div>
         </div>
@@ -838,8 +853,8 @@ footer {
     </div>
 
     <div class="note-box fade-up" data-i18n-html="inst-note">
-      <strong>📁 Credentials file:</strong> All auto-generated passwords (panel + PostgreSQL) are saved to <strong>/root/.pspanel_credentials</strong>. Keep this file secure.<br><br>
-      <strong>🔑 Change panel password:</strong> <code>PANEL_PASS=newpassword pm2 restart ps-panel</code>
+      <strong>📁 Credentials file:</strong> The PostgreSQL password (and the panel password only if it was generated) is saved to <strong>/root/.pspanel_credentials</strong>. A password you chose yourself is stored only as a hash. Keep this file secure.<br><br>
+      <strong>🔑 Change login:</strong> Settings → Change Password / Panel Username. Unattended install: <code>PS_PANEL_USER=admin PS_PANEL_PASS='secret123' bash install.sh</code>
     </div>
   </div>
 </section>
@@ -1090,7 +1105,7 @@ footer {
             <div class="doc-title">Settings</div>
             <span class="doc-badge" data-i18n="doc-set-badge">PHP & FrankenPHP Config</span>
           </div>
-          <p class="doc-desc" data-i18n="doc-set-desc">Edit PHP and FrankenPHP (Caddyfile) configuration directly from the browser. Changes require password confirmation and trigger automatic FrankenPHP restart.</p>
+          <p class="doc-desc" data-i18n="doc-set-desc">Edit PHP settings (memory, time limits, upload size) and the Caddyfile from the browser, and manage the panel login. Changes require password confirmation. Worker counts are automatic and cannot be typed in.</p>
           <div class="doc-items">
             <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-set-i1"><strong>memory_limit</strong> — Per-process PHP memory limit. Default: <code>256M</code>. Increase for heavy apps like Composer or image processing.</span></div>
             <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-set-i2"><strong>max_execution_time</strong> — PHP script execution time limit (seconds). Default: <code>60</code>. Increase for long processes like data imports.</span></div>
@@ -1098,7 +1113,7 @@ footer {
             <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-set-i4"><strong>PHP Extensions</strong> — List of active extensions. Pre-installed: pgsql, redis, opcache, gd, mbstring, curl, zip, xml, and more.</span></div>
             <div class="doc-item"><span class="doc-arrow">→</span><span data-i18n-html="doc-set-i5"><strong>Caddyfile</strong> — Main FrankenPHP configuration. Edit carefully; a syntax error can prevent the web server from starting.</span></div>
           </div>
-          <div class="doc-tip" data-i18n-html="doc-set-tip"><strong>Edit flow:</strong> Click <strong>Unlock Edit</strong> → enter panel password → edit values → click <strong>Save Changes</strong>. FrankenPHP will restart automatically and the old configuration is backed up.</div>
+          <div class="doc-tip" data-i18n-html="doc-set-tip"><strong>Edit flow:</strong> Click <strong>Unlock Edit</strong> → enter panel password → edit values → click <strong>Save Changes</strong>. Settings are applied to PHP-FPM with a graceful reload; FrankenPHP restarts only if a site still uses its built-in PHP (avoid doing this during peak or exam hours). The old configuration is backed up.</div>
         </div>
 
         <!-- UPDATE -->
@@ -1179,9 +1194,8 @@ footer {
           <div class="faq-icon">+</div>
         </div>
         <div class="faq-a"><div class="faq-a-inner" data-i18n-html="faq4-a">
-          Restart the panel with the <code>PANEL_PASS</code> environment variable:<br><br>
-          <code>PANEL_PASS=yournewpassword pm2 restart ps-panel</code><br><br>
-          The current credentials are always readable from <code>/root/.pspanel_credentials</code>.
+          Open <strong>Settings</strong> in the panel: <em>Change Panel Password</em> (old + new password) and <em>Panel Username</em>. Changing either logs out all other sessions.<br><br>
+          Forgot them? On the server run <code>cd /opt/ps-panel &amp;&amp; node server.js --reset-password</code> (prints the username and a new password) or <code>node server.js --set-username newname</code>, then <code>pm2 restart ps-panel</code>.
         </div></div>
       </div>
 
@@ -1203,7 +1217,7 @@ footer {
   <div class="footer-logo"><span>PS</span> Panel</div>
   <div class="footer-tag" data-i18n-html="footer-tag">
     Modern server management for Ubuntu 24.04<br>
-    FrankenPHP · PHP 8.3 · PostgreSQL 16 · Redis · Node.js 20
+    FrankenPHP · PHP 8.5 · PostgreSQL 16 · Redis · Node.js 20
   </div>
   <div class="footer-links">
     <a href="https://github.com/setiawansopan/PS-Panel" target="_blank" rel="noopener">GitHub</a>
@@ -1295,12 +1309,15 @@ const LANG = {
     'feat-label':'// features',
     'feat-title':'Everything you need,<br>nothing you don\'t.',
     'feat-sub':'Minimal footprint, maximum control. Manage your entire stack from one clean interface.',
-    'feat1-title':'One-command Install','feat1-desc':'A single curl command installs and configures the entire stack. FrankenPHP, PHP 8.3, PostgreSQL 16, Redis, and Node.js — ready in under 10 minutes.',
+    'feat1-title':'One-command Install','feat1-desc':'A single curl command installs and configures the entire stack. FrankenPHP, PHP 8.5, PostgreSQL 16, Redis, and Node.js — ready in under 10 minutes.',
     'feat2-title':'Real-time Monitoring','feat2-desc':'Live CPU, RAM, disk, and network I/O metrics with 5-second auto-refresh. Top processes, load average, and 30-second bandwidth history.',
-    'feat3-title':'Redis Statistics','feat3-desc':'Cache hit rate, memory usage, ops/sec, connected clients, eviction counts, and keyspace stats — everything at a glance.',
+    'feat3-title':'Redis Statistics & Settings','feat3-desc':'Cache hit rate, memory, ops/sec, evictions, and keyspace stats — plus maxmemory, eviction policy, and AOF settings applied live and saved to redis.conf with a backup.',
     'feat4-title':'PostgreSQL Management','feat4-desc':'Monitor active connections, database sizes, lock counts, and connection states. Create databases directly from the browser.',
-    'feat5-title':'PHP-FPM Stats','feat5-desc':'Worker pool utilization, idle/active process counts, listen queue depth, and slow request tracking via the FPM status socket.',
+    'feat5-title':'PHP Workers on Autopilot','feat5-desc':'PHP-FPM pool size and FrankenPHP threads are computed from your CPU cores and RAM and re-tuned automatically — no numbers to type. Live pool stats, queue depth, and a full change history.',
     'feat6-title':'Smart Git Deploy','feat6-desc':'Trigger deploys from the browser — or automate with GitHub webhooks. First deploy auto-creates .env & the database, runs composer and Vite builds, fixes storage permissions, and caches everything.',
+    'feat7-title':'PHP Security & Runtime','feat7-desc':'Checks every PHP runtime against known critical advisories (PHP2Shell), switches sites between PHP-FPM and FrankenPHP\'s built-in PHP with backup and rollback, and upgrades FrankenPHP only after a stress test passes.',
+    'feat8-title':'Laravel Queue & Scheduler','feat8-desc':'Per-site queue worker (systemd) and cron scheduler created and managed for you: start, stop, restart, logs. Deploys warn about unsafe .env values and a bloated storage folder.',
+    'feat9-title':'Health & Telegram Alerts','feat9-desc':'Dashboard shows service restarts, PHP-FPM pool pressure, and kernel segfaults. Get a Telegram message when a service keeps restarting, PHP crashes, or workers run out.',
     'stack-label':'// tech stack','stack-title':'Built on proven technology',
     'stack-sub':'Production-grade components, carefully selected and pre-configured to work together perfectly.',
     'stack1-desc':'Modern PHP server built on Caddy. Auto HTTPS via Let\'s Encrypt. No Nginx config files.',
@@ -1313,10 +1330,10 @@ const LANG = {
     'inst-label':'// quick install','inst-title':'Get started in minutes',
     'inst-sub':'Four steps from a fresh VPS to a fully running panel.',
     'inst1-title':'Prepare a Ubuntu 24.04 VPS','inst1-desc':'SSH into your server as root. Minimum 1 GB RAM, 10 GB disk. Open ports 80, 443, and 8765 in your firewall.',
-    'inst2-title':'Run the one-line install command','inst2-desc':'Installs and configures the complete stack automatically. Takes 5–10 minutes depending on your server\'s connection speed.',
+    'inst2-title':'Run the one-line install command','inst2-desc':'Asks for your panel username and password, then installs and configures the complete stack automatically. Takes 5–10 minutes depending on your server\'s connection speed.',
     'inst3-title':'Open the panel in your browser','inst3-desc':'After install completes, navigate to your server\'s IP on port 8765. The install summary will show the exact URL.',
-    'inst4-title':'Login with the generated password','inst4-desc':'Your credentials are displayed at the end of the install. You can always retrieve them from the credentials file.',
-    'inst-note':'<strong>📁 Credentials file:</strong> All auto-generated passwords (panel + PostgreSQL) are saved to <strong>/root/.pspanel_credentials</strong>. Keep this file secure.<br><br><strong>🔑 Change panel password:</strong> <code>PANEL_PASS=newpassword pm2 restart ps-panel</code>',
+    'inst4-title':'Log in with the username and password you chose','inst4-desc':'The installer asks for a panel username and password at the start (leave the password empty to get a generated one, shown at the end). Forgot them? Reset on the server:',
+    'inst-note':'<strong>📁 Credentials file:</strong> The PostgreSQL password (and the panel password only if it was generated) is saved to <strong>/root/.pspanel_credentials</strong>. A password you chose yourself is stored only as a hash. Keep this file secure.<br><br><strong>🔑 Change login:</strong> Settings → Change Password / Panel Username. Unattended install: <code>PS_PANEL_USER=admin PS_PANEL_PASS=\'secret123\' bash install.sh</code>',
     'docs-label':'// documentation','docs-title':'User Guide',
     'docs-sub':'Complete guide to using every PS Panel feature.',
     'docs-sidebar-title':'Panel Pages',
@@ -1381,13 +1398,13 @@ const LANG = {
     'doc-svc-i5':'<strong>Node.js (PS Panel)</strong> — The panel itself runs via PM2. Restarting the panel will reload the latest configuration.',
     'doc-svc-warn':'<strong>Warning:</strong> Stopping a service in production will cause downtime. Use Restart (not Stop) to apply configuration changes.',
     'doc-set-badge':'PHP & FrankenPHP Config',
-    'doc-set-desc':'Edit PHP and FrankenPHP (Caddyfile) configuration directly from the browser. Changes require password confirmation and trigger automatic FrankenPHP restart.',
+    'doc-set-desc':'Edit PHP settings (memory, time limits, upload size) and the Caddyfile from the browser, and manage the panel login. Changes require password confirmation. Worker counts are automatic and cannot be typed in.',
     'doc-set-i1':'<strong>memory_limit</strong> — Per-process PHP memory limit. Default: <code>256M</code>. Increase for heavy apps like Composer or image processing.',
     'doc-set-i2':'<strong>max_execution_time</strong> — PHP script execution time limit (seconds). Default: <code>60</code>. Increase for long processes like data imports.',
     'doc-set-i3':'<strong>upload_max_filesize & post_max_size</strong> — Maximum file upload size. Both must be increased together for large file uploads to work.',
     'doc-set-i4':'<strong>PHP Extensions</strong> — List of active extensions. Pre-installed: pgsql, redis, opcache, gd, mbstring, curl, zip, xml, and more.',
     'doc-set-i5':'<strong>Caddyfile</strong> — Main FrankenPHP configuration. Edit carefully; a syntax error can prevent the web server from starting.',
-    'doc-set-tip':'<strong>Edit flow:</strong> Click <strong>Unlock Edit</strong> → enter panel password → edit values → click <strong>Save Changes</strong>. FrankenPHP will restart automatically and the old configuration is backed up.',
+    'doc-set-tip':'<strong>Edit flow:</strong> Click <strong>Unlock Edit</strong> → enter panel password → edit values → click <strong>Save Changes</strong>. Settings are applied to PHP-FPM with a graceful reload; FrankenPHP restarts only if a site still uses its built-in PHP (avoid doing this during peak or exam hours). The old configuration is backed up.',
     'doc-upd-badge':'Self-Update',
     'doc-upd-desc':'Update PS Panel to the latest version directly from the browser without needing SSH. Old files are automatically backed up before being replaced.',
     'doc-upd-s1-title':'Check Update','doc-upd-s1-desc':'Click <strong>Check Update</strong>. The panel compares the installed version with the latest version on GitHub. A green "new" badge appears in the sidebar automatically when a new update is available on panel load.',
@@ -1399,9 +1416,9 @@ const LANG = {
     'faq1-q':'What is PS Panel?','faq1-a':'PS Panel is a lightweight, self-hosted server management panel for Ubuntu 24.04 LTS. It provides a browser-based interface to monitor system resources, manage services (FrankenPHP, PHP-FPM, PostgreSQL, Redis), configure virtual hosts with SSL, and deploy applications via git — without needing SSH for routine tasks.',
     'faq2-q':'Is PS Panel free?','faq2-a':'Yes, completely free and open-source. No subscriptions, no usage limits, no hidden costs. PS Panel is released for the open-source community. You can use it for personal projects or commercial deployments, and contribute to its development on GitHub.',
     'faq3-q':'Which operating systems are supported?','faq3-a':'PS Panel is optimized and tested for <strong style="color:var(--text)">Ubuntu 24.04 LTS</strong>. The installer may work on other Debian-based systems, but Ubuntu 24.04 is the only officially supported target. Support for additional distributions may be added in future versions.',
-    'faq4-q':'How do I change the panel password?','faq4-a':'Restart the panel with the <code>PANEL_PASS</code> environment variable:<br><br><code>PANEL_PASS=yournewpassword pm2 restart ps-panel</code><br><br>The current credentials are always readable from <code>/root/.pspanel_credentials</code>.',
+    'faq4-q':'How do I change the panel password?','faq4-a':'Open <strong>Settings</strong> in the panel: <em>Change Panel Password</em> (old + new password) and <em>Panel Username</em>. Changing either logs out all other sessions.<br><br>Forgot them? On the server run <code>cd /opt/ps-panel &amp;&amp; node server.js --reset-password</code> (prints the username and a new password) or <code>node server.js --set-username newname</code>, then <code>pm2 restart ps-panel</code>.',
     'faq5-q':'Is the panel secure?','faq5-a':'PS Panel includes: JWT authentication (8-hour expiry), bcrypt password hashing, login rate limiting (5 attempts / 15 min), WebSocket authentication, command injection prevention on deploy inputs, and domain validation on virtual host creation. For production use, we recommend restricting port 8765 to trusted IPs via your server\'s firewall.',
-    'footer-tag':'Modern server management for Ubuntu 24.04<br>FrankenPHP · PHP 8.3 · PostgreSQL 16 · Redis · Node.js 20',
+    'footer-tag':'Modern server management for Ubuntu 24.04<br>FrankenPHP · PHP 8.5 · PostgreSQL 16 · Redis · Node.js 20',
   },
   id: {
     'nav-features':'Fitur','nav-stack':'Stack','nav-preview':'Preview',
@@ -1411,12 +1428,15 @@ const LANG = {
     'feat-label':'// fitur',
     'feat-title':'Semua yang Anda butuhkan,<br>tanpa yang tidak perlu.',
     'feat-sub':'Footprint minimal, kontrol maksimal. Kelola seluruh stack dari satu antarmuka yang bersih.',
-    'feat1-title':'Instalasi Satu Perintah','feat1-desc':'Satu perintah curl menginstall dan mengkonfigurasi seluruh stack. FrankenPHP, PHP 8.3, PostgreSQL 16, Redis, dan Node.js — siap dalam 10 menit.',
+    'feat1-title':'Instalasi Satu Perintah','feat1-desc':'Satu perintah curl menginstall dan mengkonfigurasi seluruh stack. FrankenPHP, PHP 8.5, PostgreSQL 16, Redis, dan Node.js — siap dalam 10 menit.',
     'feat2-title':'Monitoring Real-time','feat2-desc':'Metrik CPU, RAM, disk, dan network I/O secara langsung dengan refresh otomatis 5 detik. Top process, load average, dan riwayat bandwidth 30 detik.',
-    'feat3-title':'Statistik Redis','feat3-desc':'Cache hit rate, penggunaan memori, ops/detik, klien terhubung, jumlah eviction, dan statistik keyspace — semua dalam satu tampilan.',
+    'feat3-title':'Statistik & Pengaturan Redis','feat3-desc':'Cache hit rate, memori, ops/detik, eviction, dan keyspace — plus pengaturan maxmemory, kebijakan eviction, dan AOF yang langsung aktif dan disimpan ke redis.conf dengan backup.',
     'feat4-title':'Manajemen PostgreSQL','feat4-desc':'Monitor koneksi aktif, ukuran database, jumlah lock, dan status koneksi. Buat database langsung dari browser.',
-    'feat5-title':'Statistik PHP-FPM','feat5-desc':'Utilisasi worker pool, jumlah proses idle/aktif, kedalaman listen queue, dan pelacakan request lambat via socket status FPM.',
+    'feat5-title':'Worker PHP Otomatis','feat5-desc':'Ukuran pool PHP-FPM dan thread FrankenPHP dihitung dari core CPU dan RAM lalu disetel ulang otomatis — tanpa input angka. Statistik pool langsung, antrean, dan riwayat perubahan lengkap.',
     'feat6-title':'Deploy Git Cerdas','feat6-desc':'Trigger deploy dari browser — atau otomatis via GitHub webhooks. Deploy pertama otomatis membuat .env & database, menjalankan composer dan build Vite, memperbaiki permission storage, dan cache semuanya.',
+    'feat7-title':'Keamanan & Runtime PHP','feat7-desc':'Memeriksa setiap runtime PHP terhadap advisory kritis (PHP2Shell), memindahkan situs antara PHP-FPM dan PHP bawaan FrankenPHP dengan backup dan rollback, dan baru meng-upgrade FrankenPHP setelah lolos uji beban.',
+    'feat8-title':'Queue & Scheduler Laravel','feat8-desc':'Queue worker (systemd) dan scheduler cron per situs dibuat dan dikelola untuk Anda: start, stop, restart, log. Deploy memperingatkan nilai .env yang tidak aman dan folder storage yang membengkak.',
+    'feat9-title':'Kesehatan & Notifikasi Telegram','feat9-desc':'Dashboard menampilkan restart service, tekanan pool PHP-FPM, dan segfault kernel. Dapat pesan Telegram saat service terus restart, PHP crash, atau worker habis.',
     'stack-label':'// tech stack','stack-title':'Dibangun di atas teknologi teruji',
     'stack-sub':'Komponen berkelas produksi, dipilih dengan cermat dan dikonfigurasi agar bekerja sempurna bersama.',
     'stack1-desc':'Server PHP modern berbasis Caddy. Auto HTTPS via Let\'s Encrypt. Tanpa file konfigurasi Nginx.',
@@ -1429,10 +1449,10 @@ const LANG = {
     'inst-label':'// instalasi cepat','inst-title':'Mulai dalam hitungan menit',
     'inst-sub':'Empat langkah dari VPS baru hingga panel berjalan penuh.',
     'inst1-title':'Siapkan VPS Ubuntu 24.04','inst1-desc':'SSH ke server sebagai root. Minimal 1 GB RAM, 10 GB disk. Buka port 80, 443, dan 8765 di firewall.',
-    'inst2-title':'Jalankan perintah instalasi satu baris','inst2-desc':'Menginstall dan mengkonfigurasi seluruh stack secara otomatis. Membutuhkan 5–10 menit tergantung kecepatan koneksi server.',
+    'inst2-title':'Jalankan perintah instalasi satu baris','inst2-desc':'Menanyakan username dan password panel Anda, lalu menginstall dan mengkonfigurasi seluruh stack secara otomatis. Membutuhkan 5–10 menit tergantung kecepatan koneksi server.',
     'inst3-title':'Buka panel di browser','inst3-desc':'Setelah instalasi selesai, akses IP server di port 8765. Ringkasan instalasi akan menampilkan URL lengkap.',
-    'inst4-title':'Login dengan password yang dibuat','inst4-desc':'Kredensial ditampilkan di akhir instalasi. Anda bisa mengambilnya kapan saja dari file kredensial.',
-    'inst-note':'<strong>📁 File kredensial:</strong> Semua password yang dibuat otomatis (panel + PostgreSQL) disimpan di <strong>/root/.pspanel_credentials</strong>. Jaga kerahasiaan file ini.<br><br><strong>🔑 Ganti password panel:</strong> <code>PANEL_PASS=passwordbaru pm2 restart ps-panel</code>',
+    'inst4-title':'Login dengan username dan password pilihan Anda','inst4-desc':'Installer menanyakan username dan password panel di awal (kosongkan password untuk dibuatkan otomatis, ditampilkan di akhir). Lupa? Reset di server:',
+    'inst-note':'<strong>📁 File kredensial:</strong> Password PostgreSQL (dan password panel hanya bila dibuat otomatis) disimpan di <strong>/root/.pspanel_credentials</strong>. Password pilihan Anda sendiri hanya disimpan sebagai hash. Jaga kerahasiaan file ini.<br><br><strong>🔑 Ganti login:</strong> Settings → Ubah Password / Username Panel. Instalasi tanpa interaksi: <code>PS_PANEL_USER=admin PS_PANEL_PASS=\'rahasia123\' bash install.sh</code>',
     'docs-label':'// dokumentasi','docs-title':'Panduan Pengguna',
     'docs-sub':'Panduan lengkap penggunaan setiap fitur PS Panel.',
     'docs-sidebar-title':'Halaman Panel',
@@ -1497,13 +1517,13 @@ const LANG = {
     'doc-svc-i5':'<strong>Node.js (PS Panel)</strong> — Panel itu sendiri berjalan via PM2. Restart panel akan memuat ulang konfigurasi terbaru.',
     'doc-svc-warn':'<strong>Perhatian:</strong> Stop layanan di server produksi akan menyebabkan downtime. Gunakan Restart (bukan Stop) untuk menerapkan perubahan konfigurasi.',
     'doc-set-badge':'Konfigurasi PHP & FrankenPHP',
-    'doc-set-desc':'Edit konfigurasi PHP dan FrankenPHP (Caddyfile) langsung dari browser. Perubahan memerlukan konfirmasi password dan restart FrankenPHP otomatis.',
+    'doc-set-desc':'Edit pengaturan PHP (memori, batas waktu, ukuran upload) dan Caddyfile dari browser, serta kelola login panel. Perubahan memerlukan konfirmasi password. Jumlah worker otomatis dan tidak bisa diketik.',
     'doc-set-i1':'<strong>memory_limit</strong> — Batas memori per proses PHP. Default: <code>256M</code>. Naikkan untuk aplikasi berat seperti Composer atau image processing.',
     'doc-set-i2':'<strong>max_execution_time</strong> — Batas waktu eksekusi script PHP (detik). Default: <code>60</code>. Naikkan untuk proses panjang seperti import data.',
     'doc-set-i3':'<strong>upload_max_filesize & post_max_size</strong> — Ukuran maksimum file upload. Keduanya harus dinaikkan bersamaan agar upload besar bisa berjalan.',
     'doc-set-i4':'<strong>Ekstensi PHP</strong> — Daftar ekstensi yang aktif. Ekstensi pre-installed: pgsql, redis, opcache, gd, mbstring, curl, zip, xml, dan lainnya.',
     'doc-set-i5':'<strong>Caddyfile</strong> — Konfigurasi utama FrankenPHP. Edit dengan hati-hati; syntax error dapat membuat web server tidak bisa start.',
-    'doc-set-tip':'<strong>Alur edit:</strong> Klik <strong>Unlock Edit</strong> → masukkan password panel → edit nilai → klik <strong>Save Changes</strong>. FrankenPHP akan restart otomatis dan konfigurasi lama dibackup.',
+    'doc-set-tip':'<strong>Alur edit:</strong> Klik <strong>Unlock Edit</strong> → masukkan password panel → edit nilai → klik <strong>Save Changes</strong>. Pengaturan diterapkan ke PHP-FPM dengan reload halus; FrankenPHP hanya restart bila masih ada situs yang memakai PHP bawaannya (hindari saat jam sibuk atau ujian). Konfigurasi lama dibackup.',
     'doc-upd-badge':'Self-Update',
     'doc-upd-desc':'Perbarui PS Panel ke versi terbaru langsung dari browser tanpa perlu SSH. File lama otomatis di-backup sebelum diperbarui.',
     'doc-upd-s1-title':'Cek Update','doc-upd-s1-desc':'Klik <strong>Cek Update</strong>. Panel akan membandingkan versi terpasang dengan versi terbaru di GitHub. Badge hijau "new" di sidebar muncul otomatis jika ada update baru saat panel dibuka.',
@@ -1515,9 +1535,9 @@ const LANG = {
     'faq1-q':'Apa itu PS Panel?','faq1-a':'PS Panel adalah panel manajemen server ringan yang self-hosted untuk Ubuntu 24.04 LTS. Menyediakan antarmuka berbasis browser untuk monitoring resource sistem, mengelola layanan (FrankenPHP, PHP-FPM, PostgreSQL, Redis), mengkonfigurasi virtual host dengan SSL, dan deploy aplikasi via git — tanpa perlu SSH untuk tugas rutin.',
     'faq2-q':'Apakah PS Panel gratis?','faq2-a':'Ya, sepenuhnya gratis dan open-source. Tanpa langganan, tanpa batas penggunaan, tanpa biaya tersembunyi. PS Panel dirilis untuk komunitas open-source. Anda bisa menggunakannya untuk proyek pribadi maupun komersial, dan berkontribusi pada pengembangannya di GitHub.',
     'faq3-q':'Sistem operasi apa yang didukung?','faq3-a':'PS Panel dioptimalkan dan diuji untuk <strong style="color:var(--text)">Ubuntu 24.04 LTS</strong>. Installer mungkin berjalan di sistem berbasis Debian lainnya, namun Ubuntu 24.04 adalah satu-satunya target yang didukung secara resmi. Dukungan untuk distribusi tambahan mungkin ditambahkan di versi mendatang.',
-    'faq4-q':'Bagaimana cara mengganti password panel?','faq4-a':'Restart panel dengan variabel environment <code>PANEL_PASS</code>:<br><br><code>PANEL_PASS=passwordbaru pm2 restart ps-panel</code><br><br>Kredensial saat ini selalu bisa dibaca dari <code>/root/.pspanel_credentials</code>.',
+    'faq4-q':'Bagaimana cara mengganti password panel?','faq4-a':'Buka <strong>Settings</strong> di panel: <em>Ubah Password Panel</em> (password lama + baru) dan <em>Username Panel</em>. Mengganti salah satunya membatalkan semua sesi login lain.<br><br>Lupa? Di server jalankan <code>cd /opt/ps-panel &amp;&amp; node server.js --reset-password</code> (menampilkan username dan password baru) atau <code>node server.js --set-username namabaru</code>, lalu <code>pm2 restart ps-panel</code>.',
     'faq5-q':'Apakah panel ini aman?','faq5-a':'PS Panel mencakup: autentikasi JWT (8 jam kadaluarsa), bcrypt password hashing, rate limiting login (5 percobaan / 15 menit), autentikasi WebSocket, pencegahan command injection pada input deploy, dan validasi domain saat pembuatan virtual host. Untuk penggunaan produksi, kami merekomendasikan membatasi akses port 8765 ke IP tepercaya via firewall server.',
-    'footer-tag':'Manajemen server modern untuk Ubuntu 24.04<br>FrankenPHP · PHP 8.3 · PostgreSQL 16 · Redis · Node.js 20',
+    'footer-tag':'Manajemen server modern untuk Ubuntu 24.04<br>FrankenPHP · PHP 8.5 · PostgreSQL 16 · Redis · Node.js 20',
   }
 };
 
