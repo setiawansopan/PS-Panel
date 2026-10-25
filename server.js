@@ -155,7 +155,7 @@ app.post('/api/login',(req,res)=>{
   else res.status(401).json({ error: 'Username atau password salah' });
 });
 
-app.get('/api/account', auth, (req, res) => res.json({ ok: true, username: authState.user }));
+app.get('/api/account', auth, (req, res) => res.json({ ok: true, username: authState.user, version: (localVersion() || {}).version || null }));
 
 // Re-check the password for the current session (used to unlock edit forms; not a login).
 app.post('/api/verify-password', auth, (req, res) => {
@@ -1357,7 +1357,7 @@ const FPM_STATUS_PATH = '/ps-panel-fpm-status'; // reachable only over FastCGI, 
 const POOL_KEYS = ['pm', 'pm.max_children', 'pm.start_servers', 'pm.min_spare_servers', 'pm.max_spare_servers', 'pm.max_requests', 'request_terminate_timeout'];
 const POOL_MANAGED = new Set([...POOL_KEYS, 'pm.status_path', 'pm.process_idle_timeout']);
 const TUNE_PG_KEYS = ['shared_buffers', 'effective_cache_size', 'work_mem', 'maintenance_work_mem', 'max_connections'];
-const FRANKENPHP_THREAD_WARNING = 'FrankenPHP v1.3.2 diketahui crash (segfault) bila banyak thread PHP bertemu koneksi HTTPS keluar paralel. PHP-FPM disarankan untuk situs yang memanggil API/Google.';
+const FRANKENPHP_THREAD_WARNING = 'FrankenPHP versi lama (mis. v1.3.2) diketahui crash (segfault) bila banyak thread PHP bertemu koneksi HTTPS keluar paralel; versi baru (v1.13+) lolos uji beban, tetapi PHP-FPM tetap disarankan untuk situs yang memanggil API/Google.';
 
 function machineSpecs() {
   const cores = (os.availableParallelism ? os.availableParallelism() : os.cpus().length) || 1;
@@ -1472,16 +1472,19 @@ function computePlan(ctx) {
   const embedded = !!ctx.use.frankenphp;
   const versions = [...ctx.use.fpm].sort(cmpPhpVerDesc);
   const sb = pgSharedBuffersMB(ramMB);
+  // The fixed reserves of a big server (768 MB PostgreSQL overhead, 1 GB system) would eat most of a
+  // 2 GB VPS (a negative budget, then the 8-worker floor on top of it), so they scale with the RAM
+  // and only reach those values from about 8 GB / 5 GB up.
   const reserves = {
-    pgMB: ctx.pgInstalled ? sb + 768 : 0,
+    pgMB: ctx.pgInstalled ? sb + clampN(floorTo(ramMB * 0.1, 64), 256, 768) : 0,
     redisMB: ctx.redisInstalled ? clampN(floorTo(ramMB * 0.125, 64), 128, 1024) : 0,
-    systemMB: 1024,
+    systemMB: clampN(floorTo(ramMB * 0.2, 128), 512, 1024),
   };
   // FrankenPHP: with embedded PHP in use never above 2 × cores; when it only forwards to PHP-FPM it needs little.
   const threads = embedded ? clampN(Math.min(cores * 2, Math.floor(ramMB * 0.4 / 64)), 2, 256) : 2;
   const frankenphp = {
     num_threads: threads,
-    basis: embedded ? `min(2 × ${cores} core, 40% RAM ÷ 64 MB) — batas aman FrankenPHP v1.3.2`
+    basis: embedded ? `min(2 × ${cores} core, 40% RAM ÷ 64 MB) — batas aman thread FrankenPHP`
                     : (versions.length ? 'semua situs PHP memakai PHP-FPM; FrankenPHP hanya web server (thread kecil)' : 'tidak ada situs yang memakai PHP bawaan FrankenPHP'),
     warning: embedded ? FRANKENPHP_THREAD_WARNING : null,
   };
@@ -1493,7 +1496,18 @@ function computePlan(ctx) {
              basis: { ramMB, availMB, avgRssMB: Math.max(50, avg), measured: !!(ctx.measured && ctx.measured[v]), coreCap: clampN(cores * 8, 8, 400), reserves } };
   });
   const workers = (embedded ? threads : 0) + fpm.reduce((a, f) => a + f.pool['pm.max_children'], 0);
-  return { specs: { cores, ramMB }, reserves, frankenphp, fpm, postgres: computePgProfile(ramMB, workers), workers };
+  // The pool never drops below 8 workers, so on a small server the RAM can be short of what those
+  // 8 need: say so (memory pressure ends in swap or the OOM killer), and how much RAM would be enough.
+  const warnings = [];
+  for (const f of fpm) {
+    const b = f.basis, need = 8 * b.avgRssMB;
+    if (b.availMB < need) {
+      const wantMB = reserves.pgMB + reserves.redisMB + reserves.systemMB + b.coreCap * b.avgRssMB;
+      warnings.push({ type: 'low-ram', version: f.version, haveMB: b.availMB, needMB: need, recommendedGB: Math.ceil(wantMB / 1024),
+        message: `RAM kurang untuk PHP-FPM ${f.version}: tersedia ${Math.max(0, b.availMB)} MB, 8 worker minimum butuh ${need} MB. Server berisiko memakai swap atau proses dimatikan OOM-killer saat ramai. Disarankan RAM ≥ ${Math.ceil(wantMB / 1024)} GB agar ${b.coreCap} worker muat; tambah RAM atau kurangi isi server.` });
+    }
+  }
+  return { specs: { cores, ramMB }, reserves, frankenphp, fpm, postgres: computePgProfile(ramMB, workers), workers, warnings };
 }
 
 // ── PostgreSQL helpers ──
@@ -1823,6 +1837,10 @@ async function autotuneTick(reason, opts = {}) {
     const periodic = reason === 'periodic';
     const ctx = await buildContext();
     const plan = computePlan(ctx);
+    const lowRam = plan.warnings.filter(w => w.type === 'low-ram'), lrSig = JSON.stringify(lowRam.map(w => [w.version, w.needMB]));
+    if (lowRam.length) {
+      if (!AUTO.lowRam || AUTO.lowRam.sig !== lrSig || Date.now() - AUTO.lowRam.ts > 24 * 3600e3) { notify(lowRam[0].message); AUTO.lowRam = { sig: lrSig, ts: Date.now() }; }
+    } else if (AUTO.lowRam) AUTO.lowRam = null;
     for (const v of Object.keys(ctx.measured)) AUTO.avgRssMB[v] = ctx.avgRss[v];   // the boot run (FPM not up yet) reuses these
     if (periodic) for (const v of Object.keys(ctx.measured)) why = `berkala: memori terukur per proses PHP-FPM ${v} = ${ctx.avgRss[v]} MB (estimasi dipakai ${Math.max(50, ctx.avgRss[v])} MB)`;
     const res = await applyPlan(ctx, plan, why, { ...opts, boot: reason === 'boot', periodic });
@@ -1930,6 +1948,7 @@ app.get('/api/phpworker', auth, async (req, res) => {
                     basis: plan.frankenphp.basis, warning: plan.frankenphp.warning, embeddedInUse: ctx.use.frankenphp },
       fpm,
       reserves: plan.reserves,
+      warnings: plan.warnings,
       state: { lastApplied: AUTO.lastApplied || null, lastChecked: AUTO.lastChecked || null, pending: AUTO.pending, awaitingRestart: AUTO.awaitingRestart,
                alerts: AUTO.alerts, blocked: Object.fromEntries(Object.entries(AUTO.blocked).filter(([, b]) => Date.now() < b.until).map(([k, b]) => [k, new Date(b.until).toISOString()])) },
       history: readHistory(100),
