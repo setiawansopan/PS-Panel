@@ -1,7 +1,7 @@
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
-const { exec, execFile, spawnSync } = require('child_process');
+const { exec, execFile, spawn, spawnSync } = require('child_process');
 const { promisify } = require('util');
 const execFileAsync = promisify(execFile);
 // reloadFrankenPHP is a function declaration further down (hoisted), safe to wrap here.
@@ -1621,6 +1621,23 @@ async function evaluateWatch(w) {
   return 'ok';
 }
 
+// If the panel itself restarted between swapping the binary and the end of the watch window, finish the job here.
+async function recoverFrankenUpgrade() {
+  const p = AUTO.fpUpgradePending;
+  if (!p || (FP_JOB && FP_JOB.state === 'running')) return;
+  if (Date.now() - new Date(p.ts).getTime() < UPGRADE_WATCH_MS) return;       // still inside the watch window of a live job
+  const d = (await nRestarts('frankenphp')) - (p.n0 || 0), active = await serviceActive('frankenphp');
+  if (d > 3 || !active) {
+    try {
+      const staged = FRANKENPHP_BIN + '.new';
+      fs.copyFileSync(p.backup, staged); fs.chmodSync(staged, 0o755); fs.renameSync(staged, FRANKENPHP_BIN);
+      await execFileAsync('systemctl', ['restart', 'frankenphp'], { timeout: 90000 });
+      notify(`Upgrade FrankenPHP (${p.tag}) tidak selesai dipantau dan service tidak stabil (NRestarts +${d}${active ? '' : ', tidak aktif'}): biner lama dipulihkan otomatis.`);
+    } catch (e) { notify(`Upgrade FrankenPHP (${p.tag}) bermasalah dan pemulihan biner lama gagal: ${e.message}`); }
+  } else autotuneLog(`EVENT upgrade-frankenphp ${p.tag}: pemantauan selesai setelah panel restart, service stabil`);
+  delete AUTO.fpUpgradePending; persistAuto();
+}
+
 let _autotuneBusy = false;
 // reason: 'boot' | 'startup' | 'periodic' | any text (event). Returns { ok, steps, changes } or { skipped }.
 async function autotuneTick(reason, opts = {}) {
@@ -1628,6 +1645,7 @@ async function autotuneTick(reason, opts = {}) {
   _autotuneBusy = true;
   try {
     refreshAuto();
+    await recoverFrankenUpgrade();
     for (const w of [...AUTO.watch]) await evaluateWatch(w);          // a rollback must come before re-planning
     AUTO.watch = AUTO.watch.filter(w => Date.now() - new Date(w.ts).getTime() < 10 * 60 * 1000);
     for (const [t, unit] of [['frankenphp', 'frankenphp'], ['postgresql', pgInstalled() ? `postgresql@${findPgCluster().version}-main` : 'postgresql']]) {
@@ -1791,6 +1809,385 @@ app.post('/api/phpworker/restart', auth, async (req, res) => {
   persistAuto();
   autotuneLog(`EVENT restart manual (dikonfirmasi di UI): ${targets.join(',')}`);
   res.json({ ok: true, results });
+});
+
+// ── PHP security (PHP2Shell) ──
+// Every runtime that serves web requests is checked against the fix. A runtime is SAFE when its
+// version is at/above the upstream fix OR (distro packages) its changelog lists the CVEs: Ubuntu
+// backports the fix without changing the upstream number (php8.3 8.3.6-0ubuntu0.24.04.13 is patched
+// although 8.3.6 < 8.3.36), so a version-only comparison would flag safe servers.
+const PHP_ADVISORY = {
+  name: 'PHP2Shell', cves: ['CVE-2026-109618', 'CVE-2026-109619'],
+  fixed: { '8.5': '8.5.12', '8.4': '8.4.27', '8.3': '8.3.36', '8.2': '8.2.35' },   // upstream releases of 2026-10-21
+};
+const DOC_DIR = process.env.PANEL_DOC_DIR || '/usr/share/doc';
+const APT_CONF_D = process.env.PANEL_APT_CONF_D || '/etc/apt/apt.conf.d';
+const APT_LISTS = process.env.PANEL_APT_LISTS || '/var/lib/apt/lists';
+const SYSTEMD_DIR = process.env.PANEL_SYSTEMD_DIR || '/etc/systemd/system';
+const UU_DROPIN = '52ps-panel-php-security';
+const phpBranch = v => (String(v || '').match(/^(\d+\.\d+)/) || [])[1] || null;
+
+function fetchText(url, ms = 15000) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const req = (u.protocol === 'http:' ? http : https).get(url, { timeout: ms, family: 4, headers: { 'User-Agent': 'PS-Panel', 'Accept': 'application/json' } }, res => {
+      if (res.statusCode !== 200) { res.resume(); return reject(new Error('HTTP ' + res.statusCode)); }
+      let d = ''; res.setEncoding('utf8'); res.on('data', c => d += c); res.on('end', () => resolve(d));
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', reject);
+  });
+}
+// Latest release of a PHP branch from php.net (cached; failures are tolerated: the built-in fix table still applies).
+const _phpnet = {};
+async function phpNetLatest(branch) {
+  const c = _phpnet[branch];
+  if (c && Date.now() < c.until) return c.v;
+  let v = null;
+  try {
+    const base = process.env.PANEL_PHPNET_URL || 'https://www.php.net/releases/index.php?json&version=';
+    const j = JSON.parse(await fetchText(base + branch));
+    if (j && typeof j.version === 'string' && /^\d+\.\d+\.\d+$/.test(j.version) && phpBranch(j.version) === branch) v = j.version;
+  } catch {}
+  _phpnet[branch] = { v, until: Date.now() + (v ? 6 * 3600e3 : 30 * 60e3) };
+  return v;
+}
+// true = changelog lists all advisory CVEs, false = changelog readable but not listed, null = no changelog
+function changelogPatched(rt) {
+  for (const pkg of [`php${rt.version}-fpm`, `php${rt.version}-common`, `php${rt.version}-cli`]) {
+    try {
+      const text = require('zlib').gunzipSync(fs.readFileSync(path.join(DOC_DIR, pkg, 'changelog.Debian.gz'))).toString('utf8');
+      return PHP_ADVISORY.cves.every(c => text.includes(c));
+    } catch {}
+  }
+  return null;
+}
+
+async function phpSecurityStatus() {
+  const sites = listSites();
+  const sitesOf = (runtime, ver) => sites.filter(s => s.runtime === runtime && (runtime === 'frankenphp' || !s.version || s.version === ver)).map(s => s.label);
+  const rows = [];
+  const mk = async ({ key, runtime, label, version, patchedByLog, siteLabels }) => {
+    const branch = phpBranch(version), floor = branch ? PHP_ADVISORY.fixed[branch] || null : null;
+    const latest = branch ? await phpNetLatest(branch) : null;
+    let state, via, message;
+    if (!version) { state = 'unknown'; via = 'unknown'; message = 'versi PHP tidak terbaca'; }
+    else if (patchedByLog) { state = 'safe'; via = 'changelog'; message = `perbaikan ${PHP_ADVISORY.name} tercantum di changelog paket (backport distro)`; }
+    else if (floor && cmpVer(version, floor) >= 0) { state = 'safe'; via = 'version'; message = `PHP ${version} ≥ ${floor}`; }
+    else if (floor) { state = 'vulnerable'; via = 'version'; message = `PHP ${version} lebih rendah dari ${floor} — rentan ${PHP_ADVISORY.name}`; }
+    else { state = 'vulnerable'; via = 'version'; message = `cabang PHP ${branch || version} tidak punya perbaikan resmi (end-of-life) — rentan ${PHP_ADVISORY.name}`; }
+    const behind = state === 'safe' && via === 'version' && !!latest && cmpVer(version, latest) < 0;
+    const inUse = siteLabels.length > 0;
+    const severity = inUse ? (state === 'vulnerable' ? 'critical' : (behind || state === 'unknown') ? 'warning' : 'ok') : (state === 'vulnerable' ? 'info' : 'ok');
+    rows.push({ key, runtime, label, version, branch, minimum: floor, latest, state, via, behind, inUse, sites: siteLabels, severity, message });
+  };
+  const fp = await frankenphpInfo();
+  if (fp.installed) await mk({ key: 'frankenphp', runtime: 'frankenphp', label: `FrankenPHP ${fp.version || ''} (PHP bawaan)`.trim(), version: fp.phpVersion, patchedByLog: false, siteLabels: sitesOf('frankenphp') });
+  for (const rt of fpmRuntimes()) {
+    let ver = null; try { ver = ((await execFileAsync(rt.bin, ['-v'], { timeout: 8000 })).stdout.match(/^PHP (\S+)/) || [])[1] || null; } catch {}
+    await mk({ key: `fpm:${rt.version}`, runtime: 'fpm', label: `PHP-FPM ${rt.version}`, version: ver, patchedByLog: changelogPatched(rt) === true, siteLabels: sitesOf('fpm', rt.version) });
+  }
+  return { ok: true, advisory: { name: PHP_ADVISORY.name, cves: PHP_ADVISORY.cves, fixed: PHP_ADVISORY.fixed }, checkedAt: new Date().toISOString(), runtimes: rows,
+           critical: rows.some(r => r.severity === 'critical'), warning: rows.some(r => r.severity === 'warning') };
+}
+
+// ── automatic PHP security updates ──
+async function unattendedStatus() {
+  let installed = false;
+  try { installed = /install ok installed/.test((await execFileAsync('dpkg-query', ['-W', '-f=${Status}', 'unattended-upgrades'], { timeout: 8000 })).stdout); } catch {}
+  let origin = null;
+  try {
+    for (const f of fs.readdirSync(APT_LISTS).filter(f => /ondrej.*(InRelease|_Release)$/.test(f))) {
+      const m = fs.readFileSync(path.join(APT_LISTS, f), 'utf8').match(/^Origin:\s*(\S+)/m);
+      if (m) { origin = m[1]; break; }
+    }
+  } catch {}
+  const timer = await new Promise(r => execFile('systemctl', ['is-enabled', 'apt-daily-upgrade.timer'], (e, o) => r(!e && /enabled/.test(String(o)))));
+  return { installed, suryOrigin: origin, configured: fs.existsSync(path.join(APT_CONF_D, UU_DROPIN)), timerEnabled: timer };
+}
+// Allow the Sury PPA in unattended-upgrades (Ubuntu's own origins do not include it, so PHP from the
+// PPA would otherwise never be updated automatically).
+async function ensureUnattendedSury() {
+  try {
+    const st = await unattendedStatus();
+    if (!st.installed || !st.suryOrigin) return st;
+    const want = `// Managed by PS Panel: automatic security updates for PHP packages from the Ondrej (Sury) PPA.\nUnattended-Upgrade::Allowed-Origins { "${st.suryOrigin}:\${distro_codename}"; };\n`;
+    const file = path.join(APT_CONF_D, UU_DROPIN);
+    let cur = null; try { cur = fs.readFileSync(file, 'utf8'); } catch {}
+    if (cur !== want) { fs.writeFileSync(file, want); autotuneLog('EVENT unattended-upgrades: origin Sury diizinkan untuk pembaruan keamanan PHP'); st.configured = true; }
+    return st;
+  } catch (e) { console.warn('[security] unattended-upgrades:', e.message); return null; }
+}
+async function aptPolicy(pkg) {
+  try {
+    const out = (await execFileAsync('apt-cache', ['policy', pkg], { timeout: 15000 })).stdout;
+    return { installed: (out.match(/Installed:\s*(\S+)/) || [])[1] || null, candidate: (out.match(/Candidate:\s*(\S+)/) || [])[1] || null };
+  } catch { return { installed: null, candidate: null }; }
+}
+async function restartQueueWorkers() {
+  const units = [];
+  try { for (const f of fs.readdirSync(SYSTEMD_DIR).filter(f => f.endsWith('.service'))) if (/queue:work/.test(fs.readFileSync(path.join(SYSTEMD_DIR, f), 'utf8'))) units.push(f); } catch {}
+  for (const u of units) { try { await execFileAsync('systemctl', ['restart', u], { timeout: 60000 }); } catch (e) { autotuneLog(`EVENT restart queue worker ${u} gagal: ${e.message}`); } }
+  return units;
+}
+async function afterPhpPackagesChanged(why) {
+  const reloaded = [];
+  for (const rt of fpmRuntimes()) if (await fpmActive(rt)) { try { await execFileAsync('systemctl', ['reload', rt.service], { timeout: 20000 }); reloaded.push(rt.service); } catch {} }
+  const queues = await restartQueueWorkers();
+  autotuneLog(`EVENT paket PHP berubah (${why}): reload ${reloaded.join(',') || '-'}; restart queue worker ${queues.join(',') || '-'}`);
+}
+
+// Runs from the periodic tick: raises the alert, notices package updates done by unattended-upgrades,
+// and updates vulnerable PHP-FPM packages itself — deferred while the server is busy, but at most 24 h.
+async function securityTick() {
+  const st = await phpSecurityStatus();
+  const crit = st.runtimes.filter(r => r.severity === 'critical');
+  const sig = JSON.stringify(crit.map(r => `${r.key}:${r.version}`));
+  refreshAuto();
+  if (crit.length) {
+    if (!AUTO.secAlert || AUTO.secAlert.sig !== sig || Date.now() - AUTO.secAlert.ts > 24 * 3600e3) {
+      notify(`${PHP_ADVISORY.name}: ${crit.map(r => `${r.label} (${r.message})`).join('; ')}`);
+      AUTO.secAlert = { sig, ts: Date.now() };
+    }
+  } else AUTO.secAlert = null;
+  // a PHP package changed (unattended-upgrades or by hand): graceful reload + queue workers pick up the new binary
+  const pkgSig = {};
+  for (const rt of fpmRuntimes()) pkgSig[rt.version] = (await aptPolicy(`php${rt.version}-fpm`)).installed;
+  if (AUTO.phpPkg && JSON.stringify(AUTO.phpPkg) !== JSON.stringify(pkgSig)) await afterPhpPackagesChanged('versi paket berubah');
+  AUTO.phpPkg = pkgSig;
+  // own update path for vulnerable, in-use PHP-FPM packages
+  const vuln = st.runtimes.filter(r => r.runtime === 'fpm' && r.inUse && r.state === 'vulnerable');
+  if (!vuln.length || process.env.PANEL_SECURITY_APT === '0') { delete AUTO.secUpdate; persistAuto(); return st; }
+  const su = AUTO.secUpdate = AUTO.secUpdate || { since: new Date().toISOString() };
+  const lows = lowLoad(machineSpecs().cores), overdue = Date.now() - new Date(su.since).getTime() >= 24 * 3600e3;
+  if (su.lastTry && Date.now() - new Date(su.lastTry).getTime() < 6 * 3600e3) { persistAuto(); return st; }
+  if (!lows && !overdue) { su.note = 'ditunda: beban server tinggi (paling lambat 24 jam sejak terdeteksi)'; persistAuto(); return st; }
+  const pkgs = [];
+  for (const r of vuln) {
+    const pol = await aptPolicy(`php${r.key.slice(4)}-fpm`);
+    if (!pol.candidate || pol.candidate === pol.installed) { su.note = `php${r.key.slice(4)}-fpm: belum ada pembaruan di repo (terpasang ${pol.installed || '?'})`; continue; }
+    try { for (const p of (await execFileAsync('dpkg-query', ['-W', '-f=${Package}\\n', `php${r.key.slice(4)}-*`], { timeout: 15000 })).stdout.split('\n').filter(Boolean)) pkgs.push(p); } catch {}
+  }
+  if (!pkgs.length) { persistAuto(); return st; }
+  su.lastTry = new Date().toISOString(); su.note = 'memperbarui paket PHP...'; persistAuto();
+  const env = { ...process.env, DEBIAN_FRONTEND: 'noninteractive' };
+  try {
+    await execFileAsync('apt-get', ['update', '-qq'], { timeout: 180000, env });
+    await execFileAsync('apt-get', ['install', '-y', '-qq', '--only-upgrade', '-o', 'Dpkg::Options::=--force-confold', ...pkgs], { timeout: 600000, env });
+    autotuneLog(`EVENT pembaruan keamanan PHP otomatis: ${[...new Set(pkgs)].join(' ')} (${lows ? 'beban rendah' : 'batas 24 jam'})`);
+    await afterPhpPackagesChanged('pembaruan keamanan otomatis');
+    su.note = 'paket diperbarui';
+    for (const rt of fpmRuntimes()) pkgSig[rt.version] = (await aptPolicy(`php${rt.version}-fpm`)).installed;   // our own update must not trigger the "changed" path again
+    AUTO.phpPkg = pkgSig;
+  } catch (e) { su.note = 'gagal memperbarui: ' + String(e.stderr || e.message).trim().split('\n').slice(-2).join(' | '); autotuneLog(`EVENT pembaruan keamanan PHP gagal: ${su.note}`); }
+  persistAuto();
+  return st;
+}
+
+// One button: move every php_server site (and the default site) to a PHP-FPM that is not vulnerable.
+async function switchAllToFpm() {
+  const st = await phpSecurityStatus();
+  const rt = pickFpm();
+  if (!rt) return { ok: false, error: 'PHP-FPM belum terpasang' };
+  const row = st.runtimes.find(r => r.key === `fpm:${rt.version}`);
+  if (!row || row.state !== 'safe') return { ok: false, error: `PHP-FPM ${rt.version} sendiri belum aman (${row ? row.message : 'status tidak diketahui'}). Perbarui paketnya dulu (apt-get update && apt-get upgrade).` };
+  const targets = [];
+  const d = readDefaultSite(); if (d && d.runtime === 'frankenphp') targets.push('default');
+  try { for (const f of fs.readdirSync(VHOSTS_DIR).filter(f => f.endsWith('.conf'))) if (parseRuntime(fs.readFileSync(path.join(VHOSTS_DIR, f), 'utf8')).runtime === 'frankenphp') targets.push(f.replace(/\.conf$/, '')); } catch {}
+  if (!targets.length) return { ok: true, results: [], note: 'tidak ada situs yang memakai PHP bawaan FrankenPHP' };
+  const results = [];
+  for (const t of targets) {
+    const r = await convertRuntime(t, 'fpm', rt.version);
+    results.push({ target: t, ok: !r.error, error: r.error || null });
+    if (r.error) break;
+  }
+  let fpmIni = null; try { fpmIni = await syncFpmIni([rt.version]); } catch {}
+  const reloaded = await new Promise(resolve => reloadFrankenPHP(err => resolve(!err)));
+  autotuneLog(`EVENT keamanan: ${results.filter(x => x.ok).length}/${targets.length} situs dialihkan ke PHP-FPM ${rt.version}`);
+  setImmediate(() => autotuneTick('runtime situs berubah (dialihkan ke PHP-FPM karena keamanan)').catch(() => {}));
+  return { ok: results.every(x => x.ok), results, reloaded, fpmIni, phpVersion: rt.version };
+}
+
+app.get('/api/security/php', auth, async (req, res) => {
+  try {
+    const st = await phpSecurityStatus();
+    refreshAuto();
+    res.json({ ...st, autoUpdate: await unattendedStatus(), secUpdate: AUTO.secUpdate || null, fpmAvailable: !!pickFpm() });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+app.post('/api/security/switch-to-fpm', auth, async (req, res) => {
+  if (!checkPanelPassword(req, res)) return;
+  try { const r = await switchAllToFpm(); res.status(r.ok ? 200 : 400).json(r); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ── Safe FrankenPHP upgrade ──
+// The new binary is downloaded to a temp dir, started on TEMPORARY ports and hit with the traffic
+// that crashed v1.3.2 (parallel HTTPS from PHP threads: cURL + OpenSSL) BEFORE the installed binary
+// is touched. An old CPU can also reject a new build (SIGILL on the first PHP request), which
+// `frankenphp version`/`validate` do not reveal. After the swap the service is watched for 60 s and
+// the old binary is restored automatically if it keeps restarting.
+const UPGRADE_WATCH_MS = parseInt(process.env.PANEL_UPGRADE_WATCH_MS, 10) || 60000;
+let FP_JOB = null;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const freePort = () => new Promise((resolve, reject) => { const s = require('net').createServer(); s.on('error', reject); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => resolve(p)); }); });
+
+function downloadTo(url, dest, redirects = 5) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const req = (u.protocol === 'http:' ? http : https).get(url, { timeout: 60000, family: 4, headers: { 'User-Agent': 'PS-Panel' } }, res => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && redirects > 0) { res.resume(); return resolve(downloadTo(new URL(res.headers.location, url).toString(), dest, redirects - 1)); }
+      if (res.statusCode !== 200) { res.resume(); return reject(new Error('HTTP ' + res.statusCode)); }
+      const file = fs.createWriteStream(dest);
+      res.pipe(file);
+      file.on('finish', () => file.close(() => resolve(parseInt(res.headers['content-length'], 10) || fs.statSync(dest).size)));
+      file.on('error', reject); res.on('error', reject);
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout'))); req.on('error', reject);
+  });
+}
+
+async function resolveFrankenphpTag() {
+  for (const repo of ['php/frankenphp', 'dunglas/frankenphp']) {
+    try { const j = JSON.parse(await fetchText(`https://api.github.com/repos/${repo}/releases/latest`)); if (j.tag_name) return { repo, tag: j.tag_name }; } catch {}
+  }
+  return null;
+}
+const frankenAssets = () => {
+  if (process.env.PANEL_FRANKENPHP_ASSETS) return process.env.PANEL_FRANKENPHP_ASSETS.split(',').map(x => x.trim()).filter(Boolean);
+  const arch = os.arch() === 'arm64' ? 'aarch64' : 'x86_64';
+  return [`frankenphp-linux-${arch}`, `frankenphp-linux-${arch}-gnu`];   // static build first, then the glibc variant
+};
+const frankenAssetUrl = (repo, tag, asset) => process.env.PANEL_FRANKENPHP_URL_BASE ? `${process.env.PANEL_FRANKENPHP_URL_BASE}/${asset}` : `https://github.com/${repo}/releases/download/${tag}/${asset}`;
+
+// Starts the candidate on temporary ports and stresses cURL + OpenSSL from several PHP threads at once.
+async function testFrankenBinary(bin, workDir, say) {
+  const out = { ok: false, detail: '', frankenVersion: null, phpVersion: null };
+  try { out.frankenVersion = ((await execFileAsync(bin, ['version'], { timeout: 15000 })).stdout.match(/v?\d+\.\d+\.\d+/) || [])[0] || null; }
+  catch (e) { out.detail = `\`version\` gagal: ${(e.signal || e.message)}`; return out; }
+  const t = fs.mkdtempSync(path.join(workDir, 'try-'));
+  const root = path.join(t, 'www'); fs.mkdirSync(root);
+  // the embedded PHP must start at all (an unsupported CPU dies here with SIGILL)
+  fs.writeFileSync(path.join(root, 'v.php'), '<?php echo PHP_VERSION;');
+  try { out.phpVersion = (await execFileAsync(bin, ['php-cli', path.join(root, 'v.php')], { timeout: 20000, env: { ...process.env, HOME: t } })).stdout.trim(); }
+  catch (e) { out.detail = `PHP bawaan tidak bisa dijalankan: ${e.signal || e.message}`; fs.rmSync(t, { recursive: true, force: true }); return out; }
+  say(`PHP bawaan ${out.phpVersion} berjalan; uji lalu lintas HTTPS paralel di port sementara...`);
+  const p1 = await freePort(), p2 = await freePort();
+  fs.writeFileSync(path.join(root, 'ping.txt'), 'pong');
+  fs.writeFileSync(path.join(root, 'probe.php'), `<?php
+$n = 12; $mh = curl_multi_init(); $hs = [];
+for ($i = 0; $i < $n; $i++) { $ch = curl_init('https://localhost:${p2}/ping.txt'); curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => 1, CURLOPT_SSL_VERIFYPEER => 0, CURLOPT_SSL_VERIFYHOST => 0, CURLOPT_TIMEOUT => 15]); curl_multi_add_handle($mh, $ch); $hs[] = $ch; }
+do { curl_multi_exec($mh, $run); curl_multi_select($mh, 0.2); } while ($run > 0);
+$ok = 0; $err = []; foreach ($hs as $h) { if (curl_errno($h) === 0 && curl_getinfo($h, CURLINFO_HTTP_CODE) === 200) $ok++; else $err[] = curl_error($h); }
+$k = function_exists('openssl_pkey_new') ? (openssl_pkey_new(['private_key_bits' => 1024]) ? 1 : 0) : -1;
+header('Content-Type: application/json'); echo json_encode(['ok' => $ok, 'n' => $n, 'err' => array_values(array_unique($err)), 'openssl' => $k]);
+`);
+  const cfg = path.join(t, 'Caddyfile');
+  fs.writeFileSync(cfg, `{\n\tadmin off\n\tlocal_certs\n\tskip_install_trust\n\tauto_https disable_redirects\n\tfrankenphp {\n\t\tnum_threads 4\n\t}\n}\n\nhttp://127.0.0.1:${p1} {\n\troot * ${root}\n\tphp_server\n}\n\nhttps://localhost:${p2} {\n\troot * ${root}\n\tfile_server\n}\n`);
+  const env = { ...process.env, HOME: t, XDG_DATA_HOME: path.join(t, 'data'), XDG_CONFIG_HOME: path.join(t, 'config') };   // never touch production's TLS storage
+  const child = spawn(bin, ['run', '--config', cfg, '--adapter', 'caddyfile'], { cwd: t, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  let exited = null, tail = '';
+  child.on('exit', (code, sig) => { exited = { code, sig }; });
+  for (const s of [child.stdout, child.stderr]) s.on('data', d => { tail = (tail + d).slice(-1500); });
+  const kill = async () => { if (!exited) { child.kill('SIGTERM'); for (let i = 0; i < 10 && !exited; i++) await sleep(300); if (!exited) child.kill('SIGKILL'); } };
+  try {
+    let up = false;
+    for (let i = 0; i < 60 && !exited; i++) { if ((await fetchText(`http://127.0.0.1:${p1}/ping.txt`, 2000).catch(() => null)) === 'pong') { up = true; break; } await sleep(500); }
+    if (!up) { out.detail = exited ? `proses mati saat start (${exited.sig || 'kode ' + exited.code})` : 'tidak mau melayani permintaan di port sementara'; return out; }
+    const results = await Promise.all(Array.from({ length: 8 }, () => fetchText(`http://127.0.0.1:${p1}/probe.php`, 40000).then(b => ({ b: JSON.parse(b) }), e => ({ e: e.message }))));
+    if (exited) { out.detail = `proses mati saat menerima lalu lintas: ${exited.sig || 'kode ' + exited.code}`; return out; }
+    const bad = results.filter(r => r.e || !r.b || r.b.ok !== r.b.n || r.b.openssl === 0);
+    if (bad.length) { const x = bad[0]; out.detail = `${bad.length}/8 permintaan gagal: ${x.e || JSON.stringify(x.b.err || x.b)}`; return out; }
+    await sleep(500);
+    if (exited) { out.detail = `proses mati setelah uji: ${exited.sig || 'kode ' + exited.code}`; return out; }
+    out.ok = true; out.detail = '8 permintaan paralel × 12 koneksi HTTPS (cURL + OpenSSL) lolos, proses tetap hidup';
+    return out;
+  } finally { await kill(); fs.rmSync(t, { recursive: true, force: true }); }
+}
+
+function jobSay(job, msg, level = 'info') { job.steps.push({ ts: new Date().toISOString(), level, msg }); autotuneLog(`EVENT upgrade-frankenphp ${msg}`); }
+async function runFrankenUpgrade(job, opts) {
+  const say = (m, l) => jobSay(job, m, l);
+  let work = null;
+  try {
+    if (!fs.existsSync(FRANKENPHP_BIN)) throw new Error('biner FrankenPHP tidak ditemukan di ' + FRANKENPHP_BIN);
+    const before = await frankenphpInfo();
+    say(`terpasang: FrankenPHP ${before.version || '?'} · PHP ${before.phpVersion || '?'} · CPU: ${cpuModel() || '?'}`);
+    let repo = 'php/frankenphp', tag = opts.tag;
+    if (!tag) { const r = await resolveFrankenphpTag(); if (!r) throw new Error('tidak bisa menentukan rilis terbaru (GitHub tidak terjangkau)'); repo = r.repo; tag = r.tag; }
+    say(`rilis target: ${tag}`);
+    work = fs.mkdtempSync(path.join(os.tmpdir(), 'psp-fpup-'));
+    let chosen = null;
+    for (const asset of frankenAssets()) {
+      const dest = path.join(work, asset);
+      say(`mengunduh ${asset}...`);
+      try { const size = await downloadTo(frankenAssetUrl(repo, tag, asset), dest); say(`terunduh ${(size / 1048576).toFixed(0)} MB`); }
+      catch (e) { say(`${asset}: unduhan gagal (${e.message}), dilewati`, 'warn'); continue; }
+      const magic = Buffer.alloc(4); const fd = fs.openSync(dest, 'r'); fs.readSync(fd, magic, 0, 4, 0); fs.closeSync(fd);
+      if (magic.toString('latin1') !== '\x7fELF' || fs.statSync(dest).size < 10 * 1048576) { say(`${asset}: bukan biner ELF yang valid, dilewati`, 'warn'); continue; }
+      fs.chmodSync(dest, 0o755);
+      const t = await testFrankenBinary(dest, work, say);
+      if (t.ok) { say(`${asset}: LOLOS uji — ${t.detail} (FrankenPHP ${t.frankenVersion}, PHP ${t.phpVersion})`, 'ok'); chosen = { asset, path: dest, ...t }; break; }
+      say(`${asset}: GAGAL uji — ${t.detail}`, 'warn');
+    }
+    if (!chosen) throw new Error(`tidak ada build yang cocok dengan server ini (CPU: ${cpuModel() || '?'}). Biner lama tidak diubah. Pastikan situs memakai PHP-FPM, bukan PHP bawaan FrankenPHP.`);
+    if (before.phpVersion && chosen.phpVersion && cmpVer(chosen.phpVersion, before.phpVersion) < 0) throw new Error(`PHP bawaan build ini (${chosen.phpVersion}) lebih rendah dari yang terpasang (${before.phpVersion}); dibatalkan`);
+    const br = phpBranch(chosen.phpVersion), floor = br ? PHP_ADVISORY.fixed[br] : null;
+    if (!floor || cmpVer(chosen.phpVersion, floor) < 0) say(`⚠ PHP bawaan ${chosen.phpVersion} masih di bawah rilis perbaikan ${PHP_ADVISORY.name}${floor ? ' (' + floor + ')' : ''}; gunakan PHP-FPM untuk situs produksi`, 'warn');
+    // install: backup → stage → atomic rename
+    const backup = `${FRANKENPHP_BIN}.bak-${Date.now()}`, staged = `${FRANKENPHP_BIN}.new`;
+    fs.copyFileSync(FRANKENPHP_BIN, backup); fs.chmodSync(backup, 0o755);
+    say(`biner lama disimpan: ${backup}`);
+    fs.copyFileSync(chosen.path, staged); fs.chmodSync(staged, 0o755);
+    try { await execFileAsync('setcap', ['cap_net_bind_service=+ep', staged], { timeout: 10000 }); } catch {}
+    fs.renameSync(staged, FRANKENPHP_BIN);
+    const n0 = await nRestarts('frankenphp');
+    // survives a panel restart in the middle of the watch window (recoverFrankenUpgrade finishes the job)
+    refreshAuto(); AUTO.fpUpgradePending = { backup, n0, ts: new Date().toISOString(), tag }; persistAuto();
+    say('me-restart FrankenPHP dan memantau selama ' + Math.round(UPGRADE_WATCH_MS / 1000) + ' dtk...');
+    await execFileAsync('systemctl', ['restart', 'frankenphp'], { timeout: 90000 });
+    const deadline = Date.now() + UPGRADE_WATCH_MS; let bad = null;
+    while (Date.now() < deadline) {
+      await sleep(Math.min(5000, Math.max(500, UPGRADE_WATCH_MS / 6)));
+      const d = (await nRestarts('frankenphp')) - n0;
+      if (d > 3) { bad = `NRestarts naik ${d}×`; break; }
+    }
+    if (!bad && !(await serviceActive('frankenphp'))) bad = 'service tidak aktif setelah restart';
+    if (bad) {
+      say(`${bad} — mengembalikan biner lama`, 'error');
+      fs.copyFileSync(backup, staged); fs.chmodSync(staged, 0o755); fs.renameSync(staged, FRANKENPHP_BIN);
+      try { await execFileAsync('systemctl', ['restart', 'frankenphp'], { timeout: 90000 }); } catch {}
+      notify(`Upgrade FrankenPHP ke ${tag} dibatalkan otomatis: ${bad}. Biner lama dipulihkan.`);
+      refreshAuto(); delete AUTO.fpUpgradePending; persistAuto();
+      throw new Error(`${bad}; biner lama dipulihkan otomatis`);
+    }
+    // keep the three newest backups
+    try { const base = path.basename(FRANKENPHP_BIN) + '.bak-'; const olds = fs.readdirSync(path.dirname(FRANKENPHP_BIN)).filter(f => f.startsWith(base)).sort(); for (const f of olds.slice(0, -3)) fs.rmSync(path.join(path.dirname(FRANKENPHP_BIN), f), { force: true }); } catch {}
+    refreshAuto(); delete AUTO.fpUpgradePending; AUTO.fpUpgrade = { ts: new Date().toISOString(), from: before.version, to: chosen.frankenVersion || tag, asset: chosen.asset, phpVersion: chosen.phpVersion }; persistAuto();
+    say(`selesai: FrankenPHP ${chosen.frankenVersion || tag} · PHP ${chosen.phpVersion} berjalan stabil`, 'ok');
+    job.state = 'done';
+  } catch (e) { say(e.message, 'error'); job.state = 'failed'; job.error = e.message; }
+  finally { if (work) fs.rmSync(work, { recursive: true, force: true }); job.finishedAt = new Date().toISOString(); }
+}
+
+app.get('/api/frankenphp/upgrade', auth, async (req, res) => {
+  const fp = await frankenphpInfo();
+  refreshAuto();
+  res.json({ ok: true, current: { ...fp, bin: FRANKENPHP_BIN }, cpuModel: cpuModel(), cores: machineSpecs().cores, job: FP_JOB, last: AUTO.fpUpgrade || null, assets: frankenAssets() });
+});
+app.post('/api/frankenphp/upgrade/check', auth, async (req, res) => {
+  const r = await resolveFrankenphpTag();
+  if (!r) return res.status(502).json({ ok: false, error: 'GitHub tidak terjangkau dari server ini' });
+  res.json({ ok: true, ...r });
+});
+app.post('/api/frankenphp/upgrade/start', auth, (req, res) => {
+  if (!checkPanelPassword(req, res)) return;
+  if (FP_JOB && FP_JOB.state === 'running') return res.status(409).json({ ok: false, error: 'upgrade sedang berjalan' });
+  const tag = req.body && req.body.tag;
+  if (tag !== undefined && tag !== '' && !/^v\d+\.\d+\.\d+$/.test(String(tag))) return res.status(400).json({ ok: false, error: 'tag harus berbentuk vX.Y.Z' });
+  FP_JOB = { id: crypto.randomBytes(6).toString('hex'), state: 'running', startedAt: new Date().toISOString(), steps: [] };
+  runFrankenUpgrade(FP_JOB, { tag: tag || null }).catch(e => { FP_JOB.state = 'failed'; FP_JOB.error = e.message; });
+  res.json({ ok: true, id: FP_JOB.id });
 });
 
 app.get('/api/settings', auth, (req, res) => {
@@ -2790,6 +3187,6 @@ try {
 
 // Auto-tune: make sure the boot unit exists, run once shortly after start (this also adopts
 // existing manual PHP-FPM pool files and picks up core/RAM changes), then every 10 minutes.
-setTimeout(() => { ensureBootUnit().then(() => autotuneTick('startup')).catch(e => console.error('[autotune]', e.message)); }, 5000).unref();
-setInterval(() => { autotuneTick('periodic').catch(e => console.error('[autotune]', e.message)); }, AUTOTUNE_INTERVAL_MS).unref();
+setTimeout(() => { ensureBootUnit().then(() => autotuneTick('startup')).then(() => ensureUnattendedSury()).then(() => securityTick()).catch(e => console.error('[autotune]', e.message)); }, 5000).unref();
+setInterval(() => { autotuneTick('periodic').then(() => securityTick()).catch(e => console.error('[autotune]', e.message)); }, AUTOTUNE_INTERVAL_MS).unref();
 }
