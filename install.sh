@@ -524,9 +524,12 @@ install_php() {
   fi
 
   # Report (not fail on) extensions Laravel-style apps normally need.
-  local ext missing=()
+  # `php -m` is captured once: piping it into `grep -q` lets grep exit early, php then dies of
+  # SIGPIPE and, under pipefail, extensions that ARE loaded were reported as missing.
+  local ext missing=() mods
+  mods=$(php -m 2>/dev/null || true)
   for ext in pdo_pgsql mbstring xml curl zip bcmath intl gd redis tokenizer fileinfo iconv; do
-    php -m 2>/dev/null | grep -qix "$ext" || missing+=("$ext")
+    grep -qix "$ext" <<< "$mods" || missing+=("$ext")
   done
   if (( ${#missing[@]} > 0 )); then
     warn "PHP ${V}: extensions not loaded: ${missing[*]} (install them with apt if your apps need them)"
@@ -589,7 +592,8 @@ install_frankenphp() {
     fi
 
     if [[ -n "$api_response" ]]; then
-      latest=$(echo "$api_response" | grep '"tag_name"' | head -1 | cut -d'"' -f4 || true)
+      # the API answers minified JSON (one line): take the tag_name value itself, not the 4th quoted field of the line
+      latest=$(echo "$api_response" | grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/' || true)
       if [[ -n "$latest" ]]; then
         working_repo="$repo"
         log_raw "Resolved via API from ${repo}: $latest"
@@ -710,6 +714,28 @@ install_frankenphp() {
     fatal "Downloaded FrankenPHP binary is not a valid ELF executable" \
       "The download may be corrupted or the wrong architecture. Check ${LOG_FILE} and retry."
   fi
+  # Newer static builds can need CPU instructions an old VPS CPU lacks ("Illegal instruction").
+  # The binary must at least start; otherwise fall back to the known older release.
+  if ! timeout 20 /usr/local/bin/frankenphp version >> "$LOG_FILE" 2>&1; then
+    if [[ "$latest" != "$FRANKENPHP_FALLBACK" ]]; then
+      log_raw "FrankenPHP ${latest} does not run on this CPU — falling back to ${FRANKENPHP_FALLBACK}"
+      rm -f /usr/local/bin/frankenphp
+      if curl -fsSL --connect-timeout 10 --max-time 120 -H "User-Agent: ps-panel-installer/2.1" \
+           "https://github.com/dunglas/frankenphp/releases/download/${FRANKENPHP_FALLBACK}/frankenphp-linux-x86_64" \
+           -o /usr/local/bin/frankenphp >> "$LOG_FILE" 2>&1 \
+         && chmod +x /usr/local/bin/frankenphp && timeout 20 /usr/local/bin/frankenphp version >> "$LOG_FILE" 2>&1; then
+        setcap 'cap_net_bind_service=+ep' /usr/local/bin/frankenphp 2>/dev/null || true
+        latest="$FRANKENPHP_FALLBACK"
+      else
+        spinner_stop fail
+        fatal "The FrankenPHP binary does not run on this server" "Check: /usr/local/bin/frankenphp version"
+      fi
+    else
+      spinner_stop fail
+      fatal "The FrankenPHP binary does not run on this server" "Check: /usr/local/bin/frankenphp version"
+    fi
+  fi
+  log_raw "FrankenPHP binary OK: $(/usr/local/bin/frankenphp version 2>/dev/null | head -1)"
   spinner_stop ok
 
   spinner_start "Creating FrankenPHP config and systemd service..."
@@ -787,8 +813,13 @@ SVC
   # was never provisioned. Prove it end-to-end with a real request instead.
   spinner_start "Verifying PHP requests are actually processed..."
   echo '<?php echo "pspanel-ok";' > /var/www/html/__pspanel_healthcheck.php
-  local php_body
-  php_body=$(curl -s -m 5 "http://127.0.0.1/__pspanel_healthcheck.php" 2>/dev/null || echo "")
+  # `systemctl start` returns before FrankenPHP has bound :80, so retry for up to ~30 s.
+  local php_body="" i
+  for i in $(seq 1 15); do
+    php_body=$(curl -s -m 5 "http://127.0.0.1/__pspanel_healthcheck.php" 2>/dev/null || echo "")
+    [[ "$php_body" == "pspanel-ok" ]] && break
+    sleep 2
+  done
   rm -f /var/www/html/__pspanel_healthcheck.php
   if [[ "$php_body" != "pspanel-ok" ]]; then
     spinner_stop fail
