@@ -30,6 +30,14 @@ FRANKENPHP_FALLBACK="v1.3.2"
 #   PS_PHP_VER=8.4 bash install.sh
 # Fixed against PHP2Shell (CVE-2026-109618/109619): 8.5.12, 8.4.27, 8.3.36, 8.2.35 or newer.
 PS_PHP_VER="${PS_PHP_VER:-8.5}"
+# Panel login. Asked interactively at the start of the install (read from /dev/tty, so it also
+# works with "curl ... | sudo bash"); for unattended installs pass them as variables:
+#   PS_PANEL_USER=admin PS_PANEL_PASS='secret123' bash install.sh
+# Without a terminal and without variables: username "admin" and a random password.
+PS_PANEL_USER="${PS_PANEL_USER:-}"
+PS_PANEL_PASS="${PS_PANEL_PASS:-}"
+AUTH_FILE="/root/.pspanel_auth"
+PANEL_CRED_MODE=""   # chosen | random | kept
 
 # ── Colors ───────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -939,16 +947,23 @@ PKGJSON
       "Check connectivity to registry.npmjs.org, then run: cd ${PANEL_DIR} && npm install"
   fi
 
-  # Generate credentials
-  local panel_pass
-  panel_pass=$(openssl rand -base64 12 | tr -d '=+/')
-  grep -q "PANEL_PASS" "$CREDS_FILE" 2>/dev/null \
-    || echo "PANEL_PASS=${panel_pass}" >> "$CREDS_FILE"
-  chmod 600 "$CREDS_FILE"
+  # Panel login: written straight into the panel's auth file (bcrypt hash) before the first
+  # start. The password goes through the environment only (not argv, not the pm2 dump).
+  touch "$CREDS_FILE"; chmod 600 "$CREDS_FILE"
+  if [[ "$PANEL_CRED_MODE" != "kept" ]]; then
+    if ! ( cd "${PANEL_DIR}" && PANEL_INIT_USER="$PS_PANEL_USER" PANEL_INIT_PASS="$PS_PANEL_PASS" \
+             node server.js --init-credentials ) >> "$LOG_FILE" 2>&1; then
+      fatal "Could not set the panel login" "See ${LOG_FILE}; you can set it later with: cd ${PANEL_DIR} && node server.js --reset-password"
+    fi
+    sed -i '/^PANEL_USER=/d;/^PANEL_PASS=/d' "$CREDS_FILE"
+    echo "PANEL_USER=${PS_PANEL_USER}" >> "$CREDS_FILE"
+    # a generated password is kept here so it can be looked up later; a chosen one is not stored
+    if [[ "$PANEL_CRED_MODE" == "random" ]]; then echo "PANEL_PASS=${PS_PANEL_PASS}" >> "$CREDS_FILE"; fi
+  fi
 
   spinner_start "Starting PS Panel via PM2..."
   pm2 delete ps-panel >> "$LOG_FILE" 2>&1 || true
-  PANEL_PASS="${panel_pass}" pm2 start server.js \
+  pm2 start server.js \
     --name ps-panel \
     --env production >> "$LOG_FILE" 2>&1
   pm2 save >> "$LOG_FILE" 2>&1
@@ -1025,9 +1040,14 @@ svc_status() {
 # ════════════════════════════════════════════════════════════
 
 print_summary() {
-  local creds panel_pass pg_pass server_ip
+  local creds panel_user panel_pass pg_pass server_ip
   creds=$(cat "$CREDS_FILE" 2>/dev/null || echo "")
-  panel_pass=$(echo "$creds" | grep "^PANEL_PASS=" | cut -d= -f2 || true)
+  panel_user="${PS_PANEL_USER:-$(echo "$creds" | grep "^PANEL_USER=" | cut -d= -f2- || true)}"
+  case "$PANEL_CRED_MODE" in
+    chosen) panel_pass="(as entered during install)" ;;
+    random) panel_pass="$PS_PANEL_PASS" ;;
+    *)      panel_user="${panel_user:-(unchanged)}"; panel_pass="(unchanged)" ;;
+  esac
   pg_pass=$(echo "$creds"   | grep "^PG_PASSWORD=" | cut -d= -f2 || true)
   server_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
 
@@ -1036,6 +1056,7 @@ print_summary() {
   echo "  ║            PS Panel — Installation Complete          ║" >&2
   echo "  ╠══════════════════════════════════════════════════════╣" >&2
   printf  "  ║  %-20s %-33s║\n" "Panel URL:" "http://${server_ip}:${PANEL_PORT}" >&2
+  printf  "  ║  %-20s %-33s║\n" "Username:" "${panel_user:-admin}" >&2
   printf  "  ║  %-20s %-33s║\n" "Password:" "${panel_pass:-[see ${CREDS_FILE}]}" >&2
   printf  "  ║  %-20s %-33s║\n" "PostgreSQL password:" "${pg_pass:-[see ${CREDS_FILE}]}" >&2
   echo "  ╠══════════════════════════════════════════════════════╣" >&2
@@ -1076,12 +1097,69 @@ print_summary() {
 }
 
 # ════════════════════════════════════════════════════════════
+#  PANEL LOGIN (username + password chosen by the admin)
+# ════════════════════════════════════════════════════════════
+
+valid_panel_user() { [[ "$1" =~ ^[a-z0-9._-]{3,32}$ ]]; }
+
+ask_panel_credentials() {
+  echo -e "\n  ${BOLD}PS Panel login${RESET}" >&2
+  echo -e "  ─────────────────────────────────────────────" >&2
+  # Re-install over an existing panel: its login (possibly changed in Settings) stays as is.
+  if [[ -s "$AUTH_FILE" ]]; then
+    PANEL_CRED_MODE="kept"
+    echo -e "  ${GREEN}✓${RESET}  Existing panel login found (${AUTH_FILE}) — keeping it unchanged" >&2
+    return
+  fi
+  local tty_ok=false
+  if [[ -z "$PS_PANEL_USER" || -z "$PS_PANEL_PASS" ]] && { : < /dev/tty; } 2>/dev/null; then tty_ok=true; fi
+
+  PS_PANEL_USER=$(echo "$PS_PANEL_USER" | tr '[:upper:]' '[:lower:]')
+  if [[ -n "$PS_PANEL_USER" ]] && ! valid_panel_user "$PS_PANEL_USER"; then
+    fatal "PS_PANEL_USER '${PS_PANEL_USER}' is not valid" "Use 3-32 characters: lowercase letters, digits, '.', '-' or '_'"
+  fi
+  if [[ -z "$PS_PANEL_USER" && "$tty_ok" == true ]]; then
+    local u
+    while true; do
+      read -r -p "  Panel username [admin]: " u < /dev/tty || u=""
+      u=$(echo "${u:-admin}" | tr '[:upper:]' '[:lower:]')
+      valid_panel_user "$u" && break
+      echo -e "  ${RED}✗${RESET}  3-32 characters: lowercase letters, digits, '.', '-' or '_'" >&2
+    done
+    PS_PANEL_USER="$u"
+  fi
+  PS_PANEL_USER="${PS_PANEL_USER:-admin}"
+
+  if [[ -n "$PS_PANEL_PASS" ]]; then
+    [[ ${#PS_PANEL_PASS} -ge 8 ]] || fatal "PS_PANEL_PASS is too short" "Use at least 8 characters"
+    PANEL_CRED_MODE="chosen"
+  elif [[ "$tty_ok" == true ]]; then
+    local p1 p2
+    while true; do
+      read -r -s -p "  Panel password (min 8 chars, empty = generate one): " p1 < /dev/tty || p1=""; echo >&2
+      if [[ -z "$p1" ]]; then break; fi
+      if [[ ${#p1} -lt 8 ]]; then echo -e "  ${RED}✗${RESET}  At least 8 characters" >&2; continue; fi
+      read -r -s -p "  Repeat password: " p2 < /dev/tty || p2=""; echo >&2
+      if [[ "$p1" == "$p2" ]]; then break; fi
+      echo -e "  ${RED}✗${RESET}  Passwords do not match, try again" >&2
+    done
+    if [[ -n "$p1" ]]; then PS_PANEL_PASS="$p1"; PANEL_CRED_MODE="chosen"; fi
+  fi
+  if [[ -z "$PS_PANEL_PASS" ]]; then
+    PS_PANEL_PASS=$(openssl rand -base64 12 | tr -d '=+/')
+    PANEL_CRED_MODE="random"
+  fi
+  echo -e "  ${GREEN}✓${RESET}  Panel username: ${BOLD}${PS_PANEL_USER}${RESET}  password: $([[ $PANEL_CRED_MODE == chosen ]] && echo 'as entered' || echo 'generated, shown at the end')" >&2
+}
+
+# ════════════════════════════════════════════════════════════
 #  MAIN
 # ════════════════════════════════════════════════════════════
 
 main() {
   print_banner
   preflight_checks
+  ask_panel_credentials
   update_system
   install_php
   install_frankenphp

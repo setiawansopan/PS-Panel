@@ -38,14 +38,15 @@ The server serves static files from `./public/`. The HTML file is not served dir
 
 JWT-based. Login POSTs to `/api/login` → receives a token → stored in `localStorage` as `psp_tok` → passed as `Authorization: Bearer <token>` on all subsequent API calls. Token expiry is 8 hours.
 
-The password hash and JWT secret are persisted in `/root/.pspanel_auth` (mode 600, override with `PANEL_AUTH_FILE`). Once that file exists it is the source of truth; `PANEL_PASS` is only the initial password. Changing the password (Settings page → *Ubah Password*) bumps a token version so old tokens stop working. Forgotten password: `node server.js --reset-password [newpass]` on the server, then `pm2 restart ps-panel`.
+The password hash and JWT secret are persisted in `/root/.pspanel_auth` (mode 600, override with `PANEL_AUTH_FILE`). The file also holds the admin `user` (lowercase, `^[a-z0-9._-]{3,32}$`; installs from before usernames get `admin`). Login needs username + password (`Username atau password salah` either way; bcrypt always runs). Once that file exists it is the source of truth; `PANEL_PASS` is only the initial password. `install.sh` asks the admin for the username/password at the start (read from `/dev/tty`, or `PS_PANEL_USER`/`PS_PANEL_PASS`; no terminal and no variables → `admin` + random password) and writes them with `node server.js --init-credentials` (password passed via `PANEL_INIT_PASS` env, never argv); a re-install keeps an existing auth file. Settings → *Username Panel* changes the name (`POST /api/username`, needs the password, revokes tokens); forms that re-check the password use `POST /api/verify-password`, not `/api/login`. CLI: `--set-username <name>`; `--reset-password` also prints the username. Changing the password (Settings page → *Ubah Password*) bumps a token version so old tokens stop working. Forgotten password: `node server.js --reset-password [newpass]` on the server, then `pm2 restart ps-panel`.
 
 ### Backend API surface (`server.js`)
 
 | Route | What it does |
 |---|---|
-| `POST /api/login` | bcrypt password check → JWT |
+| `POST /api/login` | username + bcrypt password check → JWT |
 | `POST /api/password` | change admin password (old + new); revokes all existing tokens |
+| `GET /api/account`, `POST /api/username`, `POST /api/verify-password` | current username, change username (password + new name; revokes tokens), re-check the password for the current session |
 | `GET /api/security/php`, `POST /api/security/switch-to-fpm`, `GET/POST /api/frankenphp/upgrade*` | PHP2Shell status, one-click switch to PHP-FPM, safe FrankenPHP upgrade job |
 | `GET /api/phpworker`, `POST /api/phpworker/restart`, `GET /api/autotune` | PHP Worker page data (status, automatic capacity, history), confirmed restart of services awaiting a restart, PostgreSQL memory card |
 | `GET /api/settings`, `GET /api/settings/effective`, `POST /api/settings/update` | php.ini values (never worker counts); `effective` probes the running web processes |

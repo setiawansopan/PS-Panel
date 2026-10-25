@@ -269,8 +269,10 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       <div class="tag">Server Management Interface</div>
     </div>
     <div class="lc">
-      <div class="li-lbl">Access Key</div>
-      <input type="password" class="li" id="pw" placeholder="••••••••••••" onkeydown="if(event.key==='Enter')login()">
+      <div class="li-lbl">Username</div>
+      <input type="text" class="li" id="lu" placeholder="admin" autocomplete="username" autocapitalize="none" spellcheck="false" onkeydown="if(event.key==='Enter')document.getElementById('pw').focus()">
+      <div class="li-lbl">Password</div>
+      <input type="password" class="li" id="pw" placeholder="••••••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()">
       <button class="lb" onclick="login()">Enter Panel →</button>
       <div class="le" id="lerr"></div>
     </div>
@@ -974,6 +976,37 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
     <!-- ── SETTINGS ── -->
     <div class="page" id="page-settings">
       <div class="ph"><h1>Settings</h1><p>// keamanan panel</p></div>
+      <div class="card" style="max-width:1040px;margin-bottom:14px">
+        <div class="ct">Username Panel <span class="ct-badge">Security</span></div>
+        <div class="g2">
+          <div>
+            <div class="fg">
+              <label class="inp-lbl">Username sekarang</label>
+              <input class="inp" id="acc-user" disabled>
+            </div>
+            <div class="fg">
+              <label class="inp-lbl">Username baru <span style="color:var(--dim);text-transform:none;letter-spacing:0">— 3-32 karakter: huruf kecil, angka, . - _</span></label>
+              <input class="inp" id="acc-new" autocomplete="off" autocapitalize="none" spellcheck="false">
+            </div>
+            <div class="fg">
+              <label class="inp-lbl">Password panel</label>
+              <input class="inp" type="password" id="acc-pw" autocomplete="current-password">
+            </div>
+            <button class="btn" onclick="changeUsername()">✓ &nbsp;Simpan Username</button>
+            <div id="acc-msg" style="font-family:var(--mono);font-size:11px;margin-top:10px"></div>
+          </div>
+          <div style="background:var(--ink3);border-radius:9px;padding:14px">
+            <div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.9">
+              • Setelah diganti, semua sesi login lama dibatalkan<br>
+              • Lupa username? Di server jalankan:<br>
+              <span style="color:var(--accent)">cd /opt/ps-panel &amp;&amp; node server.js --reset-password</span><br>
+              (menampilkan username dan password baru), atau ganti langsung:<br>
+              <span style="color:var(--accent)">node server.js --set-username namabaru</span><br>
+              lalu <span style="color:var(--accent)">pm2 restart ps-panel</span>
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="card" style="max-width:1040px">
         <div class="ct">Ubah Password Panel <span class="ct-badge">Security</span></div>
         <div class="g2">
@@ -1298,6 +1331,7 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
 
 <script>
 const API=''; let TOK=localStorage.getItem('psp_tok');
+try{const u=localStorage.getItem('psp_user');if(u){document.getElementById('lu').value=u;}}catch{}
 const SVC_META={
   frankenphp:{name:'FrankenPHP',em:'⚡',key:'Web server'},
   postgresql:{name:'PostgreSQL',em:'🗄️',key:'Database'},
@@ -1318,9 +1352,10 @@ async function api(method,path,body){
   }
 }
 async function login(){
-  const pw=document.getElementById('pw').value;
-  const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
+  const pw=document.getElementById('pw').value, user=document.getElementById('lu').value.trim();
+  const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,password:pw})});
   const d=await r.json();
+  if(d.token){try{localStorage.setItem('psp_user',user);}catch{}}
   if(d.token){TOK=d.token;localStorage.setItem('psp_tok',TOK);document.getElementById('login-screen').style.display='none';document.getElementById('app').style.display='block';init();}
   else document.getElementById('lerr').textContent='// '+(d.error||'invalid access key');
 }
@@ -1552,6 +1587,19 @@ async function loadPgAutotune(){
   el.innerHTML=h;
 }
 
+async function loadAccount(){
+  const d=await api('GET','/api/account'); if(d&&d.ok) document.getElementById('acc-user').value=d.username;
+}
+async function changeUsername(){
+  const u=document.getElementById('acc-new').value.trim().toLowerCase(),pw=document.getElementById('acc-pw').value;
+  const msg=document.getElementById('acc-msg');
+  const show=(t,ok)=>{msg.style.color=ok?'var(--accent)':'var(--danger,#f87171)';msg.textContent=t;};
+  if(!/^[a-z0-9._-]{3,32}$/.test(u)) return show('// username 3-32 karakter: huruf kecil, angka, titik, minus, garis bawah');
+  if(!pw) return show('// isi password panel');
+  const d=await api('POST','/api/username',{newUsername:u,password:pw});
+  if(d&&d.ok){try{localStorage.setItem('psp_user',d.username);}catch{}show('// username diganti. mengalihkan ke login...',true);setTimeout(logout,1500);}
+  else show('// '+((d&&d.error)||'gagal mengganti username'));
+}
 async function changePassword(){
   const o=document.getElementById('pw-old').value,n=document.getElementById('pw-new').value,n2=document.getElementById('pw-new2').value;
   const msg=document.getElementById('pw-msg');
@@ -1579,6 +1627,7 @@ function go(name){
   if(name==='deploy'){loadWebhookList();loadDeployVhosts();loadDeployHistory();}
 
   if(name==='update')    checkUpdate();
+  if(name==='settings')  loadAccount();
 }
 
 // ── Helpers ──
@@ -2788,8 +2837,8 @@ async function confirmPassword(){
   if(!pw){err.textContent='Password required';err.style.display='block';return;}
   // Verify by attempting login (lightweight check)
   try{
-    const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
-    if(!r.ok){err.textContent='Wrong password';err.style.display='block';return;}
+    const r=await api('POST','/api/verify-password',{password:pw});
+    if(!r||!r.ok){err.textContent=(r&&r.error)||'Wrong password';err.style.display='block';return;}
     stPassword=pw; stUnlocked=true;
     closePwModal();
     ST_PHP_KEYS.forEach(k=>{
