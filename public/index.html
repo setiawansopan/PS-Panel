@@ -317,6 +317,22 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       <div class="ph"><h1>Dashboard</h1><p>// real-time server overview</p></div>
 
       <div id="dash-sec"></div>
+      <div class="card" id="dash-health" style="margin-bottom:14px;display:none">
+        <div class="ct">Kesehatan web server</div>
+        <div id="dh-body" style="font-family:var(--mono);font-size:11px;line-height:1.9"></div>
+        <details style="margin-top:10px" id="dh-notify">
+          <summary style="cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--dim)">Notifikasi Telegram <span id="dh-tgstate"></span></summary>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;font-family:var(--mono);font-size:11px">
+            <label>Bot token<input type="password" id="tg-token" placeholder="kosong = tidak diubah" autocomplete="off"></label>
+            <label>Chat ID<input id="tg-chat" placeholder="-100123456"></label>
+            <label>Ambang restart (per 5 menit)<input id="tg-thr" type="number" min="1" max="100"></label>
+            <label>Password panel<input type="password" id="tg-pw" autocomplete="off"></label>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn" onclick="saveNotify()">Simpan</button><button class="btn btn-ghost" onclick="testNotify()">Kirim tes</button></div>
+          <div id="tg-msg" style="font-family:var(--mono);font-size:10px;margin-top:6px"></div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:6px">Peringatan dikirim bila: service restart melebihi ambang dalam 5 menit, kernel mencatat segfault/invalid opcode, atau PHP-FPM mencapai pm.max_children.</div>
+        </details>
+      </div>
 
       <div class="g4">
         <div class="mc" style="--c:var(--accent2)">
@@ -423,6 +439,28 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
               <div class="stat"><div class="stat-lbl">Hits</div><div class="stat-val accent" id="r-hits">—</div></div>
               <div class="stat"><div class="stat-lbl">Misses</div><div class="stat-val danger" id="r-misses">—</div></div>
             </div>
+          </div>
+        </div>
+        <div class="g2">
+          <div class="card">
+            <div class="ct">Keyspace</div>
+            <div id="r-keyspace" style="font-family:var(--mono);font-size:11px;color:var(--muted)">—</div>
+          </div>
+          <div class="card">
+            <div class="ct">Konfigurasi (permanen)</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-family:var(--mono);font-size:11px">
+              <label>maxmemory<input id="rc-mem" oninput="_rcDirty=true" placeholder="1gb / 512mb / 0"></label>
+              <label>maxmemory-policy<select id="rc-pol" onchange="_rcDirty=true"><option>noeviction</option><option>allkeys-lru</option><option>volatile-lru</option><option>allkeys-lfu</option><option>volatile-lfu</option><option>allkeys-random</option><option>volatile-random</option><option>volatile-ttl</option></select></label>
+              <label>appendonly<select id="rc-aof" onchange="_rcDirty=true"><option>yes</option><option>no</option></select></label>
+              <label>appendfsync<select id="rc-fs" onchange="_rcDirty=true"><option>always</option><option>everysec</option><option>no</option></select></label>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
+              <input type="password" id="rc-pw" placeholder="password panel" style="max-width:190px;font-size:11px">
+              <button class="btn" onclick="saveRedisConfig()">Terapkan</button>
+              <button class="btn btn-ghost" onclick="fillRedisRecommended()">Isi rekomendasi</button>
+            </div>
+            <div id="rc-msg" style="font-family:var(--mono);font-size:10px;margin-top:8px"></div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:6px">Diterapkan langsung (tanpa restart) lalu ditulis ke redis.conf; berkas dibackup lebih dulu. Rekomendasi: 1gb · volatile-lru · AOF yes · everysec.</div>
           </div>
         </div>
       </div>
@@ -662,6 +700,15 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       <div class="card tbl-w">
         <table><thead><tr><th>Domain</th><th>Document Root</th><th>PHP</th><th>SSL</th><th>Created</th><th>Size</th><th>Action</th></tr></thead>
         <tbody id="vhost-tb"><tr><td colspan="7" style="color:var(--muted)">Loading...</td></tr></tbody></table>
+      </div>
+      <div class="card" id="laravel-card" style="margin-top:14px;display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+          <div style="font-family:var(--mono);font-size:12px;font-weight:700">Laravel · queue worker &amp; scheduler</div>
+          <input type="password" id="lar-pw" placeholder="password panel (untuk aktifkan/nonaktifkan)" style="max-width:290px;font-size:11px">
+        </div>
+        <div id="lar-msg" style="font-family:var(--mono);font-size:10px;margin-bottom:8px"></div>
+        <div id="lar-list"></div>
+        <pre id="lar-log" style="display:none;white-space:pre-wrap;font-family:var(--mono);font-size:10px;color:var(--muted);background:var(--ink);border-radius:6px;padding:8px;margin-top:8px;max-height:220px;overflow:auto"></pre>
       </div>
     </div>
 
@@ -1290,6 +1337,43 @@ async function loadDashSecurity(){
   else if(warn.length) h+=`<div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);color:var(--warn);font-family:var(--mono);font-size:12px;padding:10px 16px;border-radius:10px;margin-bottom:14px">⚠ PHP tertinggal dari rilis terbaru: ${warn.map(r=>`${esc(r.label)} ${esc(r.version||'')}${r.latest?' (terbaru '+esc(r.latest)+')':''}`).join('; ')}. <a href="#" onclick="go('frankenphp');return false" style="color:var(--warn);text-decoration:underline">Lihat detail</a></div>`;
   el.innerHTML=h;
 }
+
+// ── Dashboard: kesehatan web server + notifikasi Telegram ──
+async function loadDashHealth(){
+  const card=document.getElementById('dash-health'); if(!card) return;
+  const d=await api('GET','/api/health');
+  if(!d||!d.ok){card.style.display='none';return;}
+  card.style.display='block';
+  const ok=(b,t)=>`<span style="color:${b?'var(--accent)':'var(--danger)'}">${t}</span>`;
+  const rs=n=>n>0?`<span style="color:var(--warn)">${n}× restart</span>`:'<span style="color:var(--muted)">0 restart</span>';
+  let h=`<div>FrankenPHP ${esc(d.frankenphp.version||'?')}${d.frankenphp.php?' (PHP tertanam '+esc(d.frankenphp.php)+')':''} · ${ok(d.frankenphp.active,d.frankenphp.active?'aktif':'MATI')} · ${rs(d.frankenphp.nrestarts)}</div>`;
+  h+=d.fpm.length?d.fpm.map(f=>`<div>PHP-FPM ${esc(f.version)} · ${ok(f.active,f.active?'aktif':'MATI')} · ${rs(f.nrestarts)}${f.pool&&f.pool.ok?` · worker ${f.pool.active}/${f.pool.total} aktif · antrean ${f.pool.listenQueue} · <span style="${f.pool.maxChildrenReached?'color:var(--warn)':'color:var(--muted)'}">max_children tercapai ${f.pool.maxChildrenReached}×</span>`:''}</div>`).join(''):'<div style="color:var(--muted)">PHP-FPM tidak terpasang</div>';
+  h+=`<div>Kernel (24 jam): <span style="color:${d.kernel.segfaults24h?'var(--danger)':'var(--accent)'}">${d.kernel.segfaults24h} segfault/invalid opcode</span></div>`;
+  if(d.kernel.samples.length) h+=`<div style="color:var(--muted);font-size:10px;word-break:break-all">${d.kernel.samples.map(esc).join('<br>')}</div>`;
+  document.getElementById('dh-body').innerHTML=h;
+  document.getElementById('dh-tgstate').innerHTML=d.telegram?'<span style="color:var(--accent)">· aktif</span>':'<span style="color:var(--warn)">· belum diatur</span>';
+}
+async function loadNotifyForm(){
+  const d=await api('GET','/api/notify'); if(!d||!d.ok) return;
+  document.getElementById('tg-chat').value=d.chatId||'';document.getElementById('tg-thr').value=d.restartThreshold;
+  document.getElementById('tg-token').placeholder=d.tokenSet?'tersimpan — kosong = tidak diubah':'123456:ABC...';
+}
+const tgMsg=(t,ok)=>{const m=document.getElementById('tg-msg');m.style.color=ok?'var(--accent)':'var(--danger)';m.textContent=t;};
+async function saveNotify(){
+  const pw=document.getElementById('tg-pw').value; if(!pw) return tgMsg('// isi password panel');
+  const body={password:pw,chatId:document.getElementById('tg-chat').value.trim(),restartThreshold:parseInt(document.getElementById('tg-thr').value,10)};
+  const t=document.getElementById('tg-token').value.trim(); if(t) body.token=t;
+  const r=await api('POST','/api/notify',body);
+  if(!r||!r.ok) return tgMsg('// '+((r&&r.error)||'gagal'));
+  document.getElementById('tg-token').value='';tgMsg('✓ tersimpan',true);loadNotifyForm();loadDashHealth();
+}
+async function testNotify(){
+  const pw=document.getElementById('tg-pw').value; if(!pw) return tgMsg('// isi password panel');
+  tgMsg('// mengirim...',true);
+  const r=await api('POST','/api/notify/test',{password:pw});
+  if(!r) return tgMsg('// gagal menghubungi server');
+  tgMsg(r.ok?'✓ pesan tes terkirim':'// '+(r.error||'gagal'),r.ok);
+}
 async function loadSecurity(){
   const el=document.getElementById('pw-security');
   const d=await api('GET','/api/security/php');
@@ -1600,6 +1684,34 @@ async function loadRedis(){
   document.getElementById('r-hitbar').style.width=hitPct+'%';
   document.getElementById('r-hits').textContent=fmtNum(d.hits);
   document.getElementById('r-misses').textContent=fmtNum(d.misses);
+  document.getElementById('r-keyspace').innerHTML=(d.keyspace&&d.keyspace.length)?d.keyspace.map(k=>`${esc(k.db)}: <b style="color:var(--text)">${fmtNum(k.keys)}</b> key · ${fmtNum(k.expires)} ber-TTL${k.avgTtlMs?' · avg TTL '+Math.round(k.avgTtlMs/1000)+'s':''}`).join('<br>'):'kosong';
+  _rcRec=d.recommended;
+  if(d.config&&!_rcDirty){
+    const mb=parseInt(d.config.maxmemory,10)||0;
+    document.getElementById('rc-mem').value=mb===0?'0':(mb%1073741824===0?mb/1073741824+'gb':mb%1048576===0?mb/1048576+'mb':String(mb));
+    document.getElementById('rc-pol').value=d.config.policy;document.getElementById('rc-aof').value=d.config.appendonly;document.getElementById('rc-fs').value=d.config.appendfsync;
+  }
+}
+
+let _rcDirty=false,_rcRec=null;
+function fillRedisRecommended(){
+  if(!_rcRec) return;
+  document.getElementById('rc-mem').value=_rcRec.maxmemory;document.getElementById('rc-pol').value=_rcRec.policy;
+  document.getElementById('rc-aof').value=_rcRec.appendonly;document.getElementById('rc-fs').value=_rcRec.appendfsync;_rcDirty=true;
+}
+async function saveRedisConfig(){
+  const m=document.getElementById('rc-msg'),pw=document.getElementById('rc-pw').value;
+  const show=(t,ok)=>{m.style.color=ok?'var(--accent)':'var(--danger)';m.textContent=t;};
+  if(!pw) return show('// isi password panel');
+  const body={password:pw,maxmemory:document.getElementById('rc-mem').value.trim(),policy:document.getElementById('rc-pol').value,appendonly:document.getElementById('rc-aof').value,appendfsync:document.getElementById('rc-fs').value};
+  if(body.policy.startsWith('noeviction')&&body.maxmemory!=='0'&&!confirm('Dengan noeviction, Redis menolak penulisan saat memori penuh (aplikasi bisa error). Lanjutkan?')) return;
+  show('// menerapkan...',true);
+  const r=await api('POST','/api/redis/config',body);
+  if(!r) return show('// gagal menghubungi server');
+  if(!r.ok) return show('// '+(r.error||'gagal'));
+  _rcDirty=false;
+  show(r.rewritten?'✓ diterapkan & disimpan ke redis.conf (backup: '+r.backup+')':'⚠ aktif, tetapi '+r.rewriteError,r.rewritten);
+  loadRedis();
 }
 
 // ── PostgreSQL ──
@@ -1992,6 +2104,57 @@ async function loadVhosts(){
       </td>
     </tr>`).join('')
     :'<tr><td colspan="7" style="color:var(--muted)">No virtual hosts configured</td></tr>';
+  loadLaravel();
+}
+
+// ── Laravel: queue worker & scheduler ──
+const larMsg=(t,ok)=>{const m=document.getElementById('lar-msg');m.style.color=ok?'var(--accent)':'var(--danger)';m.textContent=t||'';};
+async function loadLaravel(){
+  const card=document.getElementById('laravel-card'); if(!card) return;
+  const d=await api('GET','/api/laravel');
+  if(!d||!d.ok||!d.sites.length){card.style.display='none';return;}
+  card.style.display='block';
+  const pill=(on,t)=>`<span class="pill ${on?'p-on':'p-unk'}" style="font-size:9px">${t}</span>`;
+  const mb=b=>b==null?'—':(b>=1073741824?(b/1073741824).toFixed(2)+' GB':(b/1048576).toFixed(0)+' MB');
+  document.getElementById('lar-list').innerHTML=d.sites.map(x=>{
+    const q=x.queue,sc=x.scheduler,dn=esc(x.domain),w=[...(x.env.warnings||[]),...((x.storage&&x.storage.warnings)||[])];
+    const qs=!q.installed?pill(false,'belum aktif'):pill(q.active,q.active?'berjalan':'berhenti')+(q.nrestarts?` <span style="color:var(--warn)">restart ${q.nrestarts}×</span>`:'');
+    const ss=sc.managed?pill(true,'dikelola panel'):sc.manual?pill(true,'cron manual'):pill(false,sc.optOut?'dinonaktifkan':'belum ada');
+    return `<div style="background:var(--ink3);border-radius:9px;padding:12px 14px;margin-bottom:8px;font-family:var(--mono);font-size:11px">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><b>${dn}</b><span style="color:var(--muted)">${esc(x.root)}</span><span style="color:var(--dim);margin-left:auto">storage ${mb(x.storage&&x.storage.bytes)}</span></div>
+      ${w.map(t=>`<div style="color:var(--warn);margin-top:5px">⚠ ${esc(t)}</div>`).join('')}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:9px">
+        <span>Queue: ${qs} <span style="color:var(--muted)">(${esc(q.connection)})</span></span>
+        ${!q.installed?`<button class="btn btn-ghost" style="padding:3px 9px;font-size:10px" onclick="larQueue('${dn}','enable',${q.adoptable&&q.adoptable.length?1:0})">Aktifkan</button>`
+          :`<button class="btn btn-ghost" style="padding:3px 9px;font-size:10px" onclick="larQueue('${dn}','${q.active?'stop':'start'}')">${q.active?'Stop':'Start'}</button>
+            <button class="btn btn-ghost" style="padding:3px 9px;font-size:10px" onclick="larQueue('${dn}','restart')">Restart</button>
+            <button class="btn btn-ghost" style="padding:3px 9px;font-size:10px" onclick="larLogs('${dn}')">Log</button>
+            <button class="btn btn-ghost" style="padding:3px 9px;font-size:10px" onclick="larQueue('${dn}','disable')">Nonaktifkan</button>`}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:7px">
+        <span>Scheduler: ${ss}</span>
+        ${sc.managed?`<button class="btn btn-ghost" style="padding:3px 9px;font-size:10px" onclick="larSched('${dn}','disable')">Nonaktifkan</button>`
+          :`<button class="btn btn-ghost" style="padding:3px 9px;font-size:10px" onclick="larSched('${dn}','enable',${sc.manual?1:0})">${sc.manual?'Ambil alih':'Aktifkan'}</button>`}
+      </div>
+    </div>`;}).join('');
+}
+async function larCall(path,adoptable,label){
+  const pw=document.getElementById('lar-pw').value;
+  const needPw=/\/(enable|disable)$/.test(path);
+  if(needPw&&!pw) return larMsg('// isi password panel dulu');
+  if(adoptable&&!confirm('Sudah ada konfigurasi manual untuk proyek ini. Panel akan menonaktifkan/mengganti namanya (file disimpan sebagai cadangan) dan mengelolanya sendiri agar tidak berjalan dua kali. Lanjutkan?')) return;
+  larMsg('// memproses '+label+'...',true);
+  const r=await api('POST',path,{password:pw,adopt:!!adoptable});
+  if(!r) return larMsg('// gagal menghubungi server');
+  if(r.ok===false||r.error) return larMsg('// '+(r.error||'gagal'));
+  larMsg('✓ '+label+' selesai',true); loadLaravel();
+}
+const larQueue=(d,a,adopt)=>larCall(`/api/laravel/${d}/queue/${a}`,adopt,'queue '+a+' '+d);
+const larSched=(d,a,adopt)=>larCall(`/api/laravel/${d}/scheduler/${a}`,adopt,'scheduler '+a+' '+d);
+async function larLogs(d){
+  const el=document.getElementById('lar-log'); el.style.display='block'; el.textContent='memuat log...';
+  const r=await api('GET',`/api/laravel/${d}/queue/logs`);
+  el.textContent=(r&&r.logs)||'(belum ada log)';
 }
 function updateVhostPreview(){
   const domain=document.getElementById('v-domain').value.trim();
@@ -2547,7 +2710,7 @@ async function loadDeployHistory(){
   el.innerHTML=history.map((h,i)=>{
     const dur=h.startedAt&&h.finishedAt?Math.round((new Date(h.finishedAt)-new Date(h.startedAt))/1000)+'s':'--';
     const statusColor=h.ok?'var(--accent)':'var(--danger)';
-    const statusLabel=h.ok?'✓ success':'✗ failed';
+    const statusLabel=(h.ok?'✓ success':'✗ failed')+(h.warnings?` · ⚠ ${h.warnings}`:'');
     const when=h.startedAt?new Date(h.startedAt).toLocaleString('id-ID'):'--';
     return `<div style="background:var(--ink3);border-radius:9px;margin-bottom:8px;overflow:hidden">
       <div style="padding:10px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;font-family:var(--mono);font-size:11px" onclick="toggleDeployHistoryItem(${i})">
@@ -2560,7 +2723,7 @@ async function loadDeployHistory(){
       </div>
       <div id="dh-item-${i}" style="display:none;padding:0 14px 14px">
         ${(h.steps||[]).map(s=>`<div style="font-family:var(--mono);font-size:10px;margin-bottom:6px">
-          <div style="color:${s.ok?'var(--accent)':'var(--danger)'}">${s.ok?'✓':'✗'} ${s.cmd}</div>
+          <div style="color:${!s.ok?'var(--danger)':s.warn?'var(--warn)':'var(--accent)'}">${!s.ok?'✗':s.warn?'⚠':'✓'} ${s.cmd}</div>
           ${s.output?`<pre style="white-space:pre-wrap;color:var(--muted);background:var(--ink);border-radius:6px;padding:8px;margin-top:4px;max-height:160px;overflow:auto">${s.output.replace(/</g,'&lt;')}</pre>`:''}
         </div>`).join('')||'<div style="color:var(--muted);font-family:var(--mono);font-size:10px">No step detail recorded.</div>'}
       </div>
@@ -2766,6 +2929,7 @@ function init(){
   },5000);
   updateBadgeCheck();
   loadDashSecurity();setInterval(loadDashSecurity,300000);
+  loadDashHealth();loadNotifyForm();setInterval(loadDashHealth,30000);
 }
 
 // ── UPDATE ──

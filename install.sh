@@ -386,7 +386,7 @@ update_system() {
   apt_install \
     curl wget gnupg2 ca-certificates lsb-release \
     apt-transport-https software-properties-common \
-    unzip git build-essential net-tools iproute2 openssl
+    unzip git build-essential net-tools iproute2 openssl cron
   spinner_stop ok
 
   log "System dependencies installed"
@@ -668,6 +668,8 @@ install_frankenphp() {
 
   spinner_start "Creating FrankenPHP config and systemd service..."
   mkdir -p /etc/frankenphp/sites /var/www/html
+  mkdir -p /var/lib/caddy/config
+  chown -R www-data:www-data /var/lib/caddy
   # Caddy/FrankenPHP stores TLS state here; must be writable by www-data
   mkdir -p /var/www/.local/share/caddy/locks
   chown -R www-data:www-data /var/www/.local
@@ -704,6 +706,8 @@ Type=simple
 User=www-data
 WorkingDirectory=/var/www
 Environment=PHPRC=/etc/frankenphp
+# Caddy autosaves its config here; HOME=/var/www is not writable by www-data (XDG_DATA_HOME is left alone: TLS certs live there)
+Environment=XDG_CONFIG_HOME=/var/lib/caddy/config
 ExecStart=/usr/local/bin/frankenphp run --config /etc/frankenphp/Caddyfile
 ExecReload=/usr/local/bin/frankenphp reload --config /etc/frankenphp/Caddyfile
 Restart=always
@@ -912,6 +916,11 @@ install_panel() {
   }
 }
 PKGJSON
+  # pm2 shows this version: keep it equal to the panel's real version (version.json)
+  panel_version=$(grep -m1 '"version"' "${PANEL_DIR}/version.json" 2>/dev/null | sed -E 's/.*"version"[^"]*"([^"]+)".*/\1/' || true)
+  if [[ -n "${panel_version:-}" ]]; then
+    sed -i "s/\"version\": \"[0-9.]*\"/\"version\": \"${panel_version}\"/" "${PANEL_DIR}/package.json"
+  fi
   spinner_stop ok
 
   spinner_start "Installing npm packages... (this may take a while)"

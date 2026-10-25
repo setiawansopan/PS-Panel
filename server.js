@@ -214,6 +214,7 @@ app.get('/api/redis', auth, async(req,res)=>{
     const redis = new Redis({ host:'127.0.0.1', port:6379, connectTimeout:3000, lazyConnect:true });
     await redis.connect();
     const info = await redis.info();
+    let cfg = null; try { cfg = await redisConfigGet(redis); } catch {}
     await redis.quit();
     const parse = (key) => { const m=info.match(new RegExp(key+':(.+)')); return m?m[1].trim():null; };
     res.json({
@@ -239,8 +240,71 @@ app.get('/api/redis', auth, async(req,res)=>{
       opsPerSec:     parse('instantaneous_ops_per_sec'),
       role:          parse('role'),
       mode:          parse('redis_mode'),
+      keyspace:      redisKeyspace(info),
+      config:        cfg,
+      recommended:   REDIS_RECOMMENDED,
+      configFile:    parse('config_file') || '',
     });
   } catch(e){ res.json({ok:false, error:e.message}); }
+});
+
+// ── Redis config (CONFIG SET + CONFIG REWRITE) ──
+const REDIS_RECOMMENDED = { maxmemory: '1gb', policy: 'volatile-lru', appendonly: 'yes', appendfsync: 'everysec' };
+const REDIS_POLICIES = ['noeviction', 'allkeys-lru', 'volatile-lru', 'allkeys-lfu', 'volatile-lfu', 'allkeys-random', 'volatile-random', 'volatile-ttl'];
+const REDIS_FSYNC = ['always', 'everysec', 'no'];
+const redisClient = () => new Redis({ host: '127.0.0.1', port: 6379, connectTimeout: 3000, lazyConnect: true, maxRetriesPerRequest: 1 });
+function redisKeyspace(info) {
+  const out = [];
+  for (const m of info.matchAll(/^(db\d+):keys=(\d+),expires=(\d+)(?:,avg_ttl=(\d+))?/gm)) out.push({ db: m[1], keys: +m[2], expires: +m[3], avgTtlMs: m[4] ? +m[4] : 0 });
+  return out;
+}
+async function redisConfigGet(r) {
+  const get = async k => { const a = await r.config('GET', k); return a && a[1] != null ? String(a[1]) : ''; };
+  return { maxmemory: await get('maxmemory'), policy: await get('maxmemory-policy'), appendonly: await get('appendonly'), appendfsync: await get('appendfsync') };
+}
+// "512mb" / "1gb" / "0" → bytes (null when invalid)
+function parseRedisMem(v) {
+  const m = String(v).trim().toLowerCase().match(/^(\d+)(kb|mb|gb)?$/);
+  if (!m) return null;
+  return parseInt(m[1], 10) * ({ kb: 1024, mb: 1048576, gb: 1073741824 }[m[2]] || 1);
+}
+app.post('/api/redis/config', auth, async (req, res) => {
+  if (!checkPanelPassword(req, res)) return;
+  const b = req.body || {}, want = {};
+  if (b.maxmemory != null) {
+    const bytes = parseRedisMem(b.maxmemory);
+    if (bytes == null) return res.status(400).json({ ok: false, error: 'maxmemory tidak valid (contoh: 1gb, 512mb, atau 0 = tanpa batas)' });
+    if (bytes !== 0 && bytes < 16 * 1048576) return res.status(400).json({ ok: false, error: 'maxmemory minimal 16mb' });
+    if (bytes > os.totalmem()) return res.status(400).json({ ok: false, error: `maxmemory melebihi RAM server (${Math.round(os.totalmem() / 1048576)} MB)` });
+    want.maxmemory = String(bytes);
+  }
+  if (b.policy != null) { if (!REDIS_POLICIES.includes(b.policy)) return res.status(400).json({ ok: false, error: 'maxmemory-policy tidak dikenal' }); want['maxmemory-policy'] = b.policy; }
+  if (b.appendonly != null) { if (!['yes', 'no'].includes(b.appendonly)) return res.status(400).json({ ok: false, error: 'appendonly harus yes atau no' }); want.appendonly = b.appendonly; }
+  if (b.appendfsync != null) { if (!REDIS_FSYNC.includes(b.appendfsync)) return res.status(400).json({ ok: false, error: 'appendfsync harus always, everysec, atau no' }); want.appendfsync = b.appendfsync; }
+  if (!Object.keys(want).length) return res.status(400).json({ ok: false, error: 'tidak ada perubahan' });
+  const r = redisClient();
+  try {
+    await r.connect();
+    const info = await r.info('server');
+    const cfgFile = (info.match(/config_file:(.*)/) || [])[1]?.trim() || '';
+    const before = { maxmemory: (await r.config('GET', 'maxmemory'))[1], 'maxmemory-policy': (await r.config('GET', 'maxmemory-policy'))[1], appendonly: (await r.config('GET', 'appendonly'))[1], appendfsync: (await r.config('GET', 'appendfsync'))[1] };
+    const done = [];
+    try { for (const [k, v] of Object.entries(want)) { await r.config('SET', k, v); done.push(k); } }
+    catch (e) {   // roll back whatever was already applied
+      for (const k of done) { try { await r.config('SET', k, before[k]); } catch {} }
+      return res.json({ ok: false, error: 'CONFIG SET gagal, dikembalikan: ' + e.message });
+    }
+    let backup = null, rewritten = false, rewriteError = null;
+    if (!cfgFile) rewriteError = 'Redis berjalan tanpa berkas konfigurasi; perubahan aktif tetapi hilang saat Redis restart';
+    else {
+      try { backup = `${cfgFile}.bak.${Date.now()}`; fs.copyFileSync(cfgFile, backup); } catch { backup = null; }
+      try { await r.config('REWRITE'); rewritten = true; }
+      catch (e) { rewriteError = 'CONFIG REWRITE gagal (' + e.message + '); perubahan aktif tetapi belum permanen'; if (backup) { try { fs.copyFileSync(backup, cfgFile); } catch {} } }
+    }
+    autotuneLog(`EVENT redis config: ${JSON.stringify(want)} rewrite=${rewritten}`);
+    res.json({ ok: true, rewritten, rewriteError, backup, config: await redisConfigGet(r) });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  finally { try { r.disconnect(); } catch {} }
 });
 
 // ── PostgreSQL stats ──
@@ -337,6 +401,14 @@ const CADDYFILE_PATH = process.env.PANEL_CADDYFILE || '/etc/frankenphp/Caddyfile
 // (before this was added to install.sh) shipped without this block by default,
 // and it only ever got added as an accidental side effect of changing the
 // num_threads setting. Check for it on every reload and repair it if missing.
+// `frankenphp fmt --overwrite` after the panel writes the main Caddyfile: removes the
+// "Caddyfile input is not formatted" warning (best effort; whitespace-only change).
+function fmtCaddyfile() {
+  try {
+    if (!fs.existsSync(FRANKENPHP_BIN) || !fs.existsSync(CADDYFILE_PATH)) return false;
+    return spawnSync(FRANKENPHP_BIN, ['fmt', '--overwrite', CADDYFILE_PATH], { timeout: 15000 }).status === 0;
+  } catch { return false; }
+}
 function ensureFrankenPHPGlobalBlock() {
   if (!fs.existsSync(CADDYFILE_PATH)) return false;
   const content = fs.readFileSync(CADDYFILE_PATH, 'utf8');
@@ -346,6 +418,7 @@ function ensureFrankenPHPGlobalBlock() {
     const t = parseInt((content.match(/num_threads\s+(\d+)/) || [])[1], 10);
     fs.copyFileSync(CADDYFILE_PATH, CADDYFILE_PATH + '.bak.' + Date.now());
     fs.writeFileSync(CADDYFILE_PATH, tuneCaddyContent(content, Number.isInteger(t) ? t : null));
+    fmtCaddyfile();
     return true;
   }
   const stripped = content.split('\n').filter(l => !l.trim().startsWith('#')).join('\n').trim();
@@ -355,6 +428,7 @@ function ensureFrankenPHPGlobalBlock() {
   }
   fs.copyFileSync(CADDYFILE_PATH, CADDYFILE_PATH + '.bak.' + Date.now());
   fs.writeFileSync(CADDYFILE_PATH, '{\n\tfrankenphp\n}\n\n' + content);
+  fmtCaddyfile();
   return true; // a fix was applied — caller should reload FrankenPHP
 }
 
@@ -491,6 +565,7 @@ async function convertRuntime(target, runtime, version) {
   fs.writeFileSync(file, next);
   const bad = await validateCaddy();
   if (bad) { fs.writeFileSync(file, orig); return { file, error: 'validasi Caddyfile gagal, dikembalikan: ' + bad }; }
+  if (file === CADDYFILE_PATH) fmtCaddyfile();
   return { file, backup, error: null };
 }
 
@@ -584,6 +659,7 @@ app.post('/api/vhosts', auth, async (req,res)=>{
   reloadFrankenPHP((err)=>{
     res.json({ok:true, runtime:rtName, phpVersion:rt?rt.version:null, reloaded:!err, reloadError: err ? String(err.message||err) : null});
     if(rtName) setImmediate(()=>autotuneTick('runtime situs berubah (vhost baru '+domain+')').catch(()=>{}));
+    if(laravel) setImmediate(()=>schedulerEnable(domain, projectRoot, false).catch(()=>{}));
   });
 });
 
@@ -676,7 +752,7 @@ app.post('/api/vhost-env/:domain', auth,(req,res)=>{
     fs.writeFileSync(envPath, content);
     // Set proper permissions (readable by web user)
     try{fs.chmodSync(envPath, 0o644);}catch{}
-    res.json({ok:true});
+    restartQueueForDomain(req.params.domain).then(restarted=>res.json({ok:true, queueRestarted:restarted})).catch(()=>res.json({ok:true}));
   }catch(e){
     res.status(500).json({error:'Cannot save .env: '+e.message});
   }
@@ -977,6 +1053,38 @@ function updatePhpIni(updates) {
   return PHP_INI_FILE;
 }
 
+// Caddy autosaves its config under XDG_CONFIG_HOME; as www-data with HOME=/var/www it logs
+// "unable to create folder for config autosave ... mkdir /var/www/.config: permission denied" on
+// every start. Point only XDG_CONFIG_HOME at a directory www-data owns. XDG_DATA_HOME is left
+// alone on purpose: TLS certificates live in /var/www/.local/share/caddy and moving that
+// directory would make Caddy request new certificates.
+const CADDY_CONFIG_DIR = process.env.PANEL_CADDY_CONFIG_DIR || '/var/lib/caddy/config';
+async function ensureCaddyConfigDir() {
+  try {
+    fs.mkdirSync(CADDY_CONFIG_DIR, { recursive: true });
+    for (const d of [path.dirname(CADDY_CONFIG_DIR), CADDY_CONFIG_DIR]) { try { await execFileAsync('chown', ['www-data:www-data', d], { timeout: 8000 }); } catch {} }
+    const file = path.join(PHPRC_DROPIN_DIR, '20-ps-panel-caddy.conf');
+    const want = `[Service]\nEnvironment=XDG_CONFIG_HOME=${CADDY_CONFIG_DIR}\n`;
+    let cur = null; try { cur = fs.readFileSync(file, 'utf8'); } catch {}
+    if (cur !== want) {
+      fs.mkdirSync(PHPRC_DROPIN_DIR, { recursive: true });
+      fs.writeFileSync(file, want);
+      await execFileAsync('systemctl', ['daemon-reload'], { timeout: 20000 });   // takes effect at the next FrankenPHP restart
+      autotuneLog('EVENT drop-in XDG_CONFIG_HOME untuk frankenphp dipasang (berlaku setelah restart berikutnya)');
+    }
+  } catch (e) { console.warn('[startup] XDG_CONFIG_HOME drop-in:', e.message); }
+}
+
+// pm2 shows package.json's version; keep it equal to version.json (the panel's real version).
+function syncPackageVersion() {
+  try {
+    const v = localVersion().version, p = path.join(PANEL_DIR, 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(p, 'utf8'));
+    if (v && pkg.version !== v) { pkg.version = v; fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n'); return true; }
+  } catch {}
+  return false;
+}
+
 // Make sure the frankenphp service runs with PHPRC=/etc/frankenphp (systemd drop-in, so the
 // installer's unit file is left alone). Idempotent; returns { changed }.
 async function ensurePhprc() {
@@ -1164,6 +1272,7 @@ function updateFrankenphpSettings(updates) {
 
   fs.copyFileSync(CADDYFILE_PATH, CADDYFILE_PATH + '.bak.' + Date.now());
   fs.writeFileSync(CADDYFILE_PATH, tuneCaddyContent(fs.readFileSync(CADDYFILE_PATH, 'utf8'), threads));
+  fmtCaddyfile();
 }
 
 // ── Auto-tune: worker capacity (FrankenPHP threads, PHP-FPM pools) + PostgreSQL memory ──
@@ -2257,6 +2366,354 @@ app.post('/api/settings/update', auth, async (req, res) => {
   }
 });
 
+// ── Laravel operations: .env checks, storage, queue workers, scheduler ──
+const CRON_DIR = process.env.PANEL_CRON_DIR || '/etc/cron.d';
+const STORAGE_WARN_MB = parseInt(process.env.PANEL_STORAGE_WARN_MB, 10) || 1024;
+const QUEUE_PREFIX = 'ps-queue-';
+
+// Project root (the directory with `artisan`) behind a virtual host: its docroot, or the parent of public/.
+function laravelRootFor(domain) {
+  const cands = [];
+  try {
+    const m = fs.readFileSync(path.join(VHOSTS_DIR, `${domain}.conf`), 'utf8').match(/root\s+\*\s+(.+?)(?:\n|$)/);
+    if (m) { const d = m[1].trim(); cands.push(path.basename(d) === 'public' ? path.dirname(d) : d, d); }
+  } catch {}
+  cands.push(`/var/www/${domain}`);
+  return cands.find(r => fs.existsSync(path.join(r, 'artisan'))) || null;
+}
+function laravelRootForPath(p) {
+  if (fs.existsSync(path.join(p, 'artisan'))) return p;
+  const up = path.dirname(p);
+  return path.basename(p) === 'public' && fs.existsSync(path.join(up, 'artisan')) ? up : p;
+}
+function listLaravelSites() {
+  const out = [];
+  try {
+    for (const f of fs.readdirSync(VHOSTS_DIR).filter(f => f.endsWith('.conf'))) {
+      const domain = f.replace(/\.conf$/, ''), root = laravelRootFor(domain);
+      if (root) out.push({ domain, root, ...parseRuntime(fs.readFileSync(path.join(VHOSTS_DIR, f), 'utf8')) });
+    }
+  } catch {}
+  return out;
+}
+function usesInertia(root) {
+  try { if (/inertiajs\/inertia-laravel/.test(fs.readFileSync(path.join(root, 'composer.json'), 'utf8'))) return true; } catch {}
+  return fs.existsSync(path.join(root, 'storage', 'inertia-devtools'));
+}
+
+// Production hygiene. Returns warnings only (a deploy is never failed by them).
+function checkLaravelEnv(root) {
+  const envPath = path.join(root, '.env');
+  if (!fs.existsSync(envPath)) return { exists: false, values: {}, warnings: ['.env belum ada'] };
+  const env = parseEnvFile(envPath), w = [];
+  const appEnv = (env.APP_ENV || '').toLowerCase(), debug = /^(true|1)$/i.test(env.APP_DEBUG || '');
+  if (env.APP_ENV !== undefined && appEnv !== 'production') w.push(`APP_ENV=${env.APP_ENV} — seharusnya production`);
+  if (debug) w.push('APP_DEBUG=true — nonaktifkan di produksi (log berat dan detail error terbuka)');
+  if (usesInertia(root)) {
+    const v = env.INERTIA_DEVTOOLS_ENABLED;
+    if ((v !== undefined && !/^(false|0)$/i.test(v)) || (v === undefined && (debug || (env.APP_ENV !== undefined && appEnv !== 'production'))))
+      w.push(`INERTIA_DEVTOOLS_ENABLED=${v === undefined ? '(tidak diatur)' : v} — setel false: DevTools menulis file per request ke storage/ dan mengunci satu file _meta.json sehingga semua proses PHP antre`);
+  }
+  return { exists: true, values: { APP_ENV: env.APP_ENV, APP_DEBUG: env.APP_DEBUG, INERTIA_DEVTOOLS_ENABLED: env.INERTIA_DEVTOOLS_ENABLED, QUEUE_CONNECTION: env.QUEUE_CONNECTION }, warnings: w };
+}
+// Size of storage/ (+ biggest sub-folders) and the Inertia DevTools leftovers.
+async function storageReport(root) {
+  const dir = path.join(root, 'storage');
+  if (!fs.existsSync(dir)) return null;
+  const sizes = {};
+  try {
+    const out = (await execFileAsync('du', ['-k', '--max-depth=1', dir], { timeout: 30000 })).stdout;
+    for (const l of out.split('\n').filter(Boolean)) { const [kb, p] = l.split('\t'); sizes[p] = parseInt(kb, 10) * 1024; }
+  } catch {}
+  const bytes = sizes[dir] ?? null;
+  let devFiles = 0; try { devFiles = fs.readdirSync(path.join(dir, 'inertia-devtools')).length; } catch {}
+  const top = Object.entries(sizes).filter(([p]) => p !== dir).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([p, b]) => ({ name: path.basename(p), bytes: b }));
+  const w = [];
+  if (bytes != null && bytes > STORAGE_WARN_MB * 1048576) w.push(`storage/ ${bytes >= 1073741824 ? (bytes / 1073741824).toFixed(2) + ' GB' : (bytes / 1048576).toFixed(0) + ' MB'} melebihi ambang ${STORAGE_WARN_MB >= 1024 ? (STORAGE_WARN_MB / 1024) + ' GB' : STORAGE_WARN_MB + ' MB'}${top[0] ? ` (terbesar: ${top[0].name} ${(top[0].bytes / 1048576).toFixed(0)} MB)` : ''}`);
+  if (devFiles > 0) w.push(`storage/inertia-devtools berisi ${devFiles} entri — hapus dan setel INERTIA_DEVTOOLS_ENABLED=false`);
+  return { bytes, top, devtoolsFiles: devFiles, warnings: w };
+}
+// One text block for Deploy History ("sebelum"/"sesudah" deploy).
+async function laravelPreflight(root) {
+  const env = checkLaravelEnv(root), st = await storageReport(root);
+  const warnings = [...env.warnings, ...(st ? st.warnings : [])];
+  const lines = [`.env: ${env.exists ? `APP_ENV=${env.values.APP_ENV ?? '-'} APP_DEBUG=${env.values.APP_DEBUG ?? '-'}` : 'belum ada'}`,
+                 `storage/: ${st && st.bytes != null ? (st.bytes / 1048576).toFixed(0) + ' MB' : '-'}`, ...warnings.map(x => '⚠ ' + x)];
+  return { warnings, text: lines.join('\n') };
+}
+
+// ── queue workers (systemd) ──
+const queueUnit = domain => `${QUEUE_PREFIX}${domain}.service`;
+async function phpBin() {
+  if (process.env.PANEL_PHP_BIN) return process.env.PANEL_PHP_BIN;
+  try { return (await execFileAsync('which', ['php'], { timeout: 5000 })).stdout.trim() || '/usr/bin/php'; } catch { return '/usr/bin/php'; }
+}
+async function queueUnitText(domain, root) {
+  return `[Unit]
+Description=PS Panel Laravel queue worker (${domain})
+After=network.target postgresql.service redis-server.service
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=${root}
+# No connection argument: the worker follows QUEUE_CONNECTION in the site's .env
+ExecStart=${await phpBin()} artisan queue:work --sleep=3 --tries=3 --max-time=3600
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+`;
+}
+// Other systemd units (hand-made, e.g. ayoujian-queue.service) that already run queue:work for this project.
+function unmanagedQueueUnits(root) {
+  const out = [];
+  try {
+    for (const f of fs.readdirSync(SYSTEMD_DIR).filter(f => f.endsWith('.service') && !f.startsWith(QUEUE_PREFIX))) {
+      const t = fs.readFileSync(path.join(SYSTEMD_DIR, f), 'utf8');
+      if (/queue:work/.test(t) && t.includes(root)) out.push(f);
+    }
+  } catch {}
+  return out;
+}
+async function queueStatus(domain, root) {
+  const unit = queueUnit(domain), file = path.join(SYSTEMD_DIR, unit), installed = fs.existsSync(file);
+  const env = checkLaravelEnv(root);
+  const st = { unit, installed, active: false, enabled: false, nrestarts: 0, adoptable: unmanagedQueueUnits(root), connection: env.values.QUEUE_CONNECTION || '(default .env)' };
+  if (installed) {
+    st.active = await serviceActive(unit);
+    st.enabled = await new Promise(r => execFile('systemctl', ['is-enabled', unit], (e, o) => r(!e && /enabled/.test(String(o)))));
+    st.nrestarts = await nRestarts(unit);
+  }
+  return st;
+}
+async function queueEnable(domain, root, adopt) {
+  const others = unmanagedQueueUnits(root);
+  if (others.length && !adopt) return { ok: false, needsAdopt: others, error: `sudah ada worker manual untuk proyek ini (${others.join(', ')}); konfirmasi ambil alih agar tidak ada dua worker` };
+  const adopted = [];
+  for (const f of others) {   // stop the hand-made unit and keep its file (renamed so systemd no longer loads it)
+    try { await execFileAsync('systemctl', ['disable', '--now', f], { timeout: 60000 }); } catch {}
+    const p = path.join(SYSTEMD_DIR, f), to = `${p}.diambil-alih-panel.${Date.now()}`;
+    fs.renameSync(p, to); adopted.push({ unit: f, backup: to });
+  }
+  fs.writeFileSync(path.join(SYSTEMD_DIR, queueUnit(domain)), await queueUnitText(domain, root));
+  await execFileAsync('systemctl', ['daemon-reload'], { timeout: 20000 });
+  await execFileAsync('systemctl', ['enable', '--now', queueUnit(domain)], { timeout: 60000 });
+  autotuneLog(`EVENT queue worker ${domain}: dibuat/diaktifkan${adopted.length ? '; mengambil alih ' + adopted.map(a => a.unit).join(',') : ''}`);
+  return { ok: true, adopted };
+}
+async function queueDisable(domain) {
+  const unit = queueUnit(domain), file = path.join(SYSTEMD_DIR, unit);
+  try { await execFileAsync('systemctl', ['disable', '--now', unit], { timeout: 60000 }); } catch {}
+  try { fs.rmSync(file, { force: true }); await execFileAsync('systemctl', ['daemon-reload'], { timeout: 20000 }); } catch {}
+  autotuneLog(`EVENT queue worker ${domain}: dinonaktifkan dan unit dihapus`);
+  return { ok: true };
+}
+// After .env changes the worker must restart (it keeps the old config in memory).
+async function restartQueueForDomain(domain) {
+  const unit = queueUnit(domain);
+  if (!fs.existsSync(path.join(SYSTEMD_DIR, unit)) || !(await serviceActive(unit))) return false;
+  try { await execFileAsync('systemctl', ['restart', unit], { timeout: 60000 }); autotuneLog(`EVENT queue worker ${domain}: di-restart karena .env berubah`); return true; } catch { return false; }
+}
+
+// ── scheduler (cron.d) ──
+const cronName = domain => 'ps-scheduler-' + domain.replace(/[^A-Za-z0-9_-]/g, '-');   // cron ignores file names with dots
+function schedulerManual(root) {
+  try {
+    for (const f of fs.readdirSync(CRON_DIR).filter(f => !f.startsWith('ps-scheduler-')))
+      { const t = fs.readFileSync(path.join(CRON_DIR, f), 'utf8'); if (/schedule:run/.test(t) && t.includes(root)) return f; }
+  } catch {}
+  return null;
+}
+async function schedulerStatus(domain, root) {
+  refreshAuto();
+  return { managed: fs.existsSync(path.join(CRON_DIR, cronName(domain))), manual: schedulerManual(root), optOut: !!(AUTO.laravelOptOut && AUTO.laravelOptOut[domain] && AUTO.laravelOptOut[domain].scheduler) };
+}
+async function schedulerEnable(domain, root, adopt) {
+  const manual = schedulerManual(root);
+  if (manual && !adopt) return { ok: false, needsAdopt: [manual], error: `sudah ada cron scheduler manual (${manual}); konfirmasi ambil alih agar tidak berjalan dua kali` };
+  const adopted = [];
+  if (manual) { const p = path.join(CRON_DIR, manual), to = `${p}.diambil-alih-panel.${Date.now()}`; fs.renameSync(p, to); adopted.push({ file: manual, backup: to }); }
+  fs.mkdirSync(CRON_DIR, { recursive: true });
+  fs.writeFileSync(path.join(CRON_DIR, cronName(domain)),
+    `# Managed by PS Panel: Laravel scheduler for ${domain}\nSHELL=/bin/sh\nPATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\n* * * * * www-data cd ${root} && [ -f artisan ] && ${await phpBin()} artisan schedule:run >> /dev/null 2>&1\n`, { mode: 0o644 });
+  refreshAuto(); if (AUTO.laravelOptOut && AUTO.laravelOptOut[domain]) { delete AUTO.laravelOptOut[domain].scheduler; persistAuto(); }
+  autotuneLog(`EVENT scheduler ${domain}: cron dibuat${adopted.length ? '; mengambil alih ' + adopted[0].file : ''}`);
+  return { ok: true, adopted };
+}
+async function schedulerDisable(domain) {
+  try { fs.rmSync(path.join(CRON_DIR, cronName(domain)), { force: true }); } catch {}
+  refreshAuto(); AUTO.laravelOptOut = AUTO.laravelOptOut || {}; AUTO.laravelOptOut[domain] = { ...(AUTO.laravelOptOut[domain] || {}), scheduler: true }; persistAuto();
+  autotuneLog(`EVENT scheduler ${domain}: dinonaktifkan (tidak dibuat otomatis lagi)`);
+  return { ok: true };
+}
+// Every Laravel vhost gets a scheduler unless one already exists or the admin turned it off.
+async function ensureSchedulers() {
+  for (const s of listLaravelSites()) {
+    const st = await schedulerStatus(s.domain, s.root);
+    if (!st.managed && !st.manual && !st.optOut) { try { await schedulerEnable(s.domain, s.root, false); } catch (e) { console.warn('[laravel] scheduler', s.domain, e.message); } }
+  }
+}
+
+app.get('/api/laravel', auth, async (req, res) => {
+  try {
+    const sites = await Promise.all(listLaravelSites().map(async s => ({
+      domain: s.domain, root: s.root, runtime: s.runtime, phpVersion: s.version,
+      env: checkLaravelEnv(s.root), storage: await storageReport(s.root),
+      queue: await queueStatus(s.domain, s.root), scheduler: await schedulerStatus(s.domain, s.root),
+    })));
+    res.json({ ok: true, sites, storageWarnMB: STORAGE_WARN_MB });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+app.post('/api/laravel/:domain/queue/:action', auth, async (req, res) => {
+  const { domain, action } = req.params;
+  const root = /^[a-zA-Z0-9.\-]+$/.test(domain) ? laravelRootFor(domain) : null;
+  if (!root) return res.status(404).json({ ok: false, error: 'situs Laravel tidak ditemukan' });
+  const unit = queueUnit(domain);
+  try {
+    if (action === 'enable' || action === 'disable') {
+      if (!checkPanelPassword(req, res)) return;
+      return res.json(action === 'enable' ? await queueEnable(domain, root, !!req.body.adopt) : await queueDisable(domain));
+    }
+    if (!['start', 'stop', 'restart'].includes(action)) return res.status(400).json({ ok: false, error: 'aksi tidak dikenal' });
+    if (!fs.existsSync(path.join(SYSTEMD_DIR, unit))) return res.status(400).json({ ok: false, error: 'worker belum diaktifkan' });
+    await execFileAsync('systemctl', [action, unit], { timeout: 60000 });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ ok: false, error: String(e.stderr || e.message).trim() }); }
+});
+app.get('/api/laravel/:domain/queue/logs', auth, async (req, res) => {
+  if (!/^[a-zA-Z0-9.\-]+$/.test(req.params.domain)) return res.status(400).json({ ok: false, error: 'domain tidak valid' });
+  try { res.json({ ok: true, logs: (await execFileAsync('journalctl', ['-u', queueUnit(req.params.domain), '-n', '120', '--no-pager', '-o', 'short-iso'], { timeout: 15000 })).stdout }); }
+  catch (e) { res.json({ ok: true, logs: '' }); }
+});
+app.post('/api/laravel/:domain/scheduler/:action', auth, async (req, res) => {
+  if (!checkPanelPassword(req, res)) return;
+  const { domain, action } = req.params;
+  const root = /^[a-zA-Z0-9.\-]+$/.test(domain) ? laravelRootFor(domain) : null;
+  if (!root) return res.status(404).json({ ok: false, error: 'situs Laravel tidak ditemukan' });
+  try { res.json(action === 'enable' ? await schedulerEnable(domain, root, !!req.body.adopt) : action === 'disable' ? await schedulerDisable(domain) : { ok: false, error: 'aksi tidak dikenal' }); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ── Health checks + Telegram notifications (runs inside the panel process, no extra service) ──
+const NOTIFY_FILE = process.env.PANEL_NOTIFY_FILE || '/root/.pspanel_notify';
+const TELEGRAM_API = process.env.PANEL_TELEGRAM_API || 'https://api.telegram.org';
+const HEALTH_INTERVAL_MS = parseInt(process.env.PANEL_HEALTH_INTERVAL_MS, 10) || 60 * 1000;
+const HEALTH_WINDOW_MS = parseInt(process.env.PANEL_HEALTH_WINDOW_MS, 10) || 5 * 60 * 1000;
+const ALERT_COOLDOWN_MS = parseInt(process.env.PANEL_ALERT_COOLDOWN_MS, 10) || 30 * 60 * 1000;
+function readNotifyCfg() {
+  try { const j = JSON.parse(fs.readFileSync(NOTIFY_FILE, 'utf8')); return { token: String(j.token || ''), chatId: String(j.chatId || ''), restartThreshold: Math.max(1, parseInt(j.restartThreshold, 10) || 3) }; }
+  catch { return { token: '', chatId: '', restartThreshold: 3 }; }
+}
+function writeNotifyCfg(c) {
+  const tmp = NOTIFY_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(c), { mode: 0o600 }); fs.renameSync(tmp, NOTIFY_FILE);
+}
+// Never throws; resolves { ok, error }. The token is only ever used in the request path, never logged.
+function sendTelegram(text) {
+  return new Promise(resolve => {
+    const c = readNotifyCfg();
+    if (!c.token || !c.chatId) return resolve({ ok: false, error: 'Telegram belum dikonfigurasi' });
+    let u; try { u = new URL(`${TELEGRAM_API}/bot${c.token}/sendMessage`); } catch { return resolve({ ok: false, error: 'URL API tidak valid' }); }
+    const body = JSON.stringify({ chat_id: c.chatId, text: `[${os.hostname()}] ${text}`.slice(0, 3900), disable_web_page_preview: true });
+    const lib = u.protocol === 'http:' ? http : https;
+    const rq = lib.request(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }, timeout: 10000 }, r => {
+      let d = ''; r.on('data', x => d += x); r.on('end', () => {
+        let j = {}; try { j = JSON.parse(d); } catch {}
+        resolve(r.statusCode === 200 && j.ok !== false ? { ok: true } : { ok: false, error: `Telegram menolak (${r.statusCode}): ${j.description || 'tanpa keterangan'}` });
+      });
+    });
+    rq.on('timeout', () => rq.destroy(new Error('timeout')));
+    rq.on('error', e => resolve({ ok: false, error: String(e.message).replace(c.token, '***') }));
+    rq.end(body);
+  });
+}
+app.get('/api/notify', auth, (req, res) => {
+  const c = readNotifyCfg();
+  res.json({ ok: true, configured: !!(c.token && c.chatId), tokenSet: !!c.token, chatId: c.chatId, restartThreshold: c.restartThreshold, windowMin: Math.round(HEALTH_WINDOW_MS / 60000) });
+});
+app.post('/api/notify', auth, (req, res) => {
+  if (!checkPanelPassword(req, res)) return;
+  const b = req.body || {}, cur = readNotifyCfg();
+  const token = b.token ? String(b.token).trim() : cur.token, chatId = b.chatId != null ? String(b.chatId).trim() : cur.chatId;
+  if (token && !/^\d+:[A-Za-z0-9_-]{20,}$/.test(token)) return res.status(400).json({ ok: false, error: 'format bot token tidak valid (contoh 123456:ABC...)' });
+  if (chatId && !/^-?\d+$|^@[A-Za-z0-9_]{5,}$/.test(chatId)) return res.status(400).json({ ok: false, error: 'chat id harus angka (atau @namachannel)' });
+  const thr = b.restartThreshold != null ? parseInt(b.restartThreshold, 10) : cur.restartThreshold;
+  if (!(thr >= 1 && thr <= 100)) return res.status(400).json({ ok: false, error: 'ambang restart harus 1–100' });
+  try { writeNotifyCfg({ token, chatId, restartThreshold: thr }); } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  res.json({ ok: true, configured: !!(token && chatId) });
+});
+app.post('/api/notify/test', auth, async (req, res) => {
+  if (!checkPanelPassword(req, res)) return;
+  res.json(await sendTelegram('Tes notifikasi PS Panel: pengiriman berhasil.'));
+});
+
+const HEALTH = { restarts: {}, seen: new Set(), baselined: false, lastAlert: {}, kernel: { at: 0, count24h: 0, samples: [] }, fpmMax: {}, running: false };
+function healthAlert(key, msg) {
+  if (Date.now() - (HEALTH.lastAlert[key] || 0) < ALERT_COOLDOWN_MS) return;
+  HEALTH.lastAlert[key] = Date.now();
+  notify(msg);
+}
+async function readLogLines(args, fileEnv) {
+  if (fileEnv && process.env[fileEnv]) { try { return fs.readFileSync(process.env[fileEnv], 'utf8').split('\n'); } catch { return []; } }
+  try { return (await execFileAsync('journalctl', args, { timeout: 15000, maxBuffer: 16 * 1024 * 1024 })).stdout.split('\n'); } catch { return []; }
+}
+async function kernelLines() {
+  let lines = await readLogLines(['-k', '--since', '24 hours ago', '--no-pager', '-o', 'short-iso'], 'PANEL_KERNEL_LOG_FILE');
+  if (!lines.length && !process.env.PANEL_KERNEL_LOG_FILE) { try { lines = (await execFileAsync('dmesg', ['-T'], { timeout: 8000, maxBuffer: 16 * 1024 * 1024 })).stdout.split('\n'); } catch {} }
+  return lines.filter(l => /segfault|invalid opcode/i.test(l));
+}
+async function healthTick() {
+  if (HEALTH.running) return; HEALTH.running = true;
+  try {
+    const cfg = readNotifyCfg(), now = Date.now();
+    // 1. service restarts within the window
+    const units = ['frankenphp', ...fpmRuntimes().map(r => r.service)];
+    for (const u of units) {
+      const n = await nRestarts(u), h = (HEALTH.restarts[u] = (HEALTH.restarts[u] || []).filter(x => now - x.ts <= HEALTH_WINDOW_MS));
+      if (h.length && n < h[h.length - 1].n) h.length = 0;   // counter reset (manual restart): start over
+      h.push({ ts: now, n });
+      const delta = n - h[0].n;
+      if (delta >= cfg.restartThreshold) healthAlert('restart:' + u, `${u} restart otomatis ${delta}× dalam ${Math.round(HEALTH_WINDOW_MS / 60000)} menit terakhir (ambang ${cfg.restartThreshold}) — cek: journalctl -u ${u} -n 50`);
+    }
+    // 2. kernel log: segfault / invalid opcode
+    const kl = await kernelLines();
+    const fresh = kl.filter(l => !HEALTH.seen.has(l));
+    HEALTH.kernel = { at: now, count24h: kl.length, samples: kl.slice(-3) };
+    // 3. PHP-FPM: pool exhausted
+    const maxLines = [];
+    for (const rt of fpmRuntimes()) {
+      const ls = (await readLogLines([ '-u', rt.service, '--since', '24 hours ago', '--no-pager', '-o', 'short-iso' ], 'PANEL_FPM_LOG_FILE')).filter(l => /server reached pm\.max_children/i.test(l));
+      for (const l of ls) maxLines.push({ rt, l });
+    }
+    const freshMax = maxLines.filter(x => !HEALTH.seen.has(x.l));
+    if (HEALTH.baselined) {
+      if (fresh.length) healthAlert('kernel', `kernel mencatat ${fresh.length} kejadian segfault/invalid opcode baru: ${fresh.slice(-2).map(l => l.replace(/^\S+\s+\S+\s+/, '').slice(0, 160)).join(' | ')}`);
+      if (freshMax.length) healthAlert('maxchildren', `PHP-FPM ${[...new Set(freshMax.map(x => x.rt.version))].join(', ')} mencatat "server reached pm.max_children" (${freshMax.length}×) — antrean request menumpuk; periksa halaman PHP Worker`);
+    }
+    for (const l of [...kl, ...maxLines.map(x => x.l)]) HEALTH.seen.add(l);
+    if (HEALTH.seen.size > 5000) HEALTH.seen = new Set([...HEALTH.seen].slice(-2500));
+    HEALTH.baselined = true;
+  } catch (e) { console.warn('[health]', e.message); }
+  finally { HEALTH.running = false; }
+}
+app.get('/api/health', auth, async (req, res) => {
+  try {
+    if (Date.now() - HEALTH.kernel.at > 2 * HEALTH_INTERVAL_MS) {   // tick not run yet (or stalled): do a read-only scan
+      const kl = await kernelLines(); HEALTH.kernel = { at: Date.now(), count24h: kl.length, samples: kl.slice(-3) };
+    }
+    let fv = { version: null, php: null };
+    try { const o = (await execFileAsync(FRANKENPHP_BIN, ['version'], { timeout: 8000 })).stdout; fv = { version: (o.match(/v?\d+\.\d+\.\d+/) || [])[0] || null, php: (o.match(/PHP (\d+\.\d+\.\d+)/) || [])[1] || null }; } catch {}
+    const fpm = await Promise.all(fpmRuntimes().map(async rt => ({ version: rt.version, service: rt.service, active: await serviceActive(rt.service), nrestarts: await nRestarts(rt.service), pool: await fpmStatus(rt) })));
+    refreshAuto();
+    const c = readNotifyCfg();
+    res.json({ ok: true, frankenphp: { ...fv, active: await serviceActive('frankenphp'), nrestarts: await nRestarts('frankenphp') }, fpm,
+      kernel: { segfaults24h: HEALTH.kernel.count24h, samples: HEALTH.kernel.samples }, alerts: (AUTO.alerts || []).slice(0, 5),
+      telegram: !!(c.token && c.chatId), restartThreshold: c.restartThreshold });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
 // ── Webhooks (Auto Deploy) ──
 const WEBHOOKS_FILE = path.join(__dirname, 'webhooks.json');
 function loadWebhooks() {
@@ -2335,6 +2792,20 @@ function recordDeploy(entry) {
   } catch (e) { console.error('[Deploy] Failed to record deploy history:', e.message); }
 }
 
+// Which PHP runtime serves the site whose docroot is this deploy path (or its public/)?
+function vhostRuntimeForPath(p) {
+  const norm = x => path.resolve(String(x).trim());
+  const want = new Set([norm(p), norm(path.join(p, 'public'))]);
+  if (path.basename(norm(p)) === 'public') want.add(norm(path.dirname(p)));
+  try {
+    for (const f of fs.readdirSync(VHOSTS_DIR).filter(f => f.endsWith('.conf'))) {
+      const c = fs.readFileSync(path.join(VHOSTS_DIR, f), 'utf8'), m = c.match(/root\s+\*\s+(.+?)(?:\n|$)/);
+      if (m && want.has(norm(m[1]))) return { domain: f.replace(/\.conf$/, ''), ...parseRuntime(c) };
+    }
+  } catch {}
+  return null;
+}
+
 // Full first-deploy pipeline for a Laravel app: git pull → ensure .env exists →
 // ensure its database exists → composer install → frontend build (if any) →
 // fix storage ownership → migrate → storage:link → cache. Each step's output is
@@ -2380,6 +2851,16 @@ async function runDeploySteps(hook) {
       steps.push({ cmd: label, ok: false, output: errOutput || e.message || 'failed' });
       return false;
     }
+  }
+
+  // .env / storage hygiene BEFORE the deploy. Warnings only: they are shown in the output and in
+  // Deploy History but never fail a deploy.
+  if (hook.laravel) {
+    try {
+      const pf = await laravelPreflight(laravelRootForPath(appPath));
+      log(`\n[CEK sebelum deploy]\n${pf.text}\n`);
+      steps.push({ cmd: 'cek .env & storage (sebelum deploy)', ok: true, warn: pf.warnings.length > 0, output: pf.text });
+    } catch (e) { log(`\n[WARN] cek .env/storage gagal: ${e.message}\n`); }
   }
 
   // Uncommitted changes on the server (a manual hotfix, or package-lock.json
@@ -2506,21 +2987,43 @@ async function runDeploySteps(hook) {
     //    can't overwrite.
     await run('chown', ['-R', 'www-data:www-data', 'storage', 'bootstrap/cache']);
 
-    // 9. Reload FrankenPHP. Blade views recompile on their own when their source
-    //    changes, but FrankenPHP's OPcache does NOT invalidate PHP source files
-    //    (Controllers, Models, etc.) the same way — a deploy that only touches
-    //    PHP code can report every step green while the live site keeps serving
-    //    the pre-deploy code until the process restarts. Soft-fail: don't mark
-    //    the whole deploy as failed just because the reload itself hiccuped.
-    log('\n$ reload FrankenPHP (apply PHP source changes)\n');
-    try {
-      await reloadFrankenPHPAsync();
-      log('FrankenPHP reloaded.\n');
-      steps.push({ cmd: 'reload FrankenPHP', ok: true, output: 'reloaded' });
-    } catch (e) {
-      log(`[WARN] Failed to reload FrankenPHP — PHP source changes may not take effect until a manual restart: ${e.message}\n`);
-      steps.push({ cmd: 'reload FrankenPHP', ok: false, output: e.message });
+    // 9. Reload the PHP runtime that serves this app. Blade views recompile on their own, but OPcache
+    //    does NOT invalidate PHP source files (Controllers, Models, ...) the same way — a deploy that
+    //    only touches PHP code can report every step green while the site keeps serving the old code.
+    //    PHP-FPM sites: graceful `systemctl reload php<ver>-fpm`; FrankenPHP's own PHP: reload FrankenPHP;
+    //    a site the panel does not know about gets both. Soft-fail: a hiccup never fails the deploy.
+    const rtInfo = vhostRuntimeForPath(appPath);
+    if (!rtInfo || rtInfo.runtime === 'fpm') {
+      const fr = pickFpm(rtInfo && rtInfo.version || null);
+      if (fr && await fpmActive(fr)) {
+        log(`\n$ reload PHP-FPM ${fr.version} (apply PHP source changes)\n`);
+        try { await execFileAsync('systemctl', ['reload', fr.service], { timeout: 30000 }); log('PHP-FPM reloaded.\n'); steps.push({ cmd: `reload PHP-FPM ${fr.version}`, ok: true, output: 'reloaded' }); }
+        catch (e) { log(`[WARN] Failed to reload PHP-FPM ${fr.version}: ${e.message}\n`); steps.push({ cmd: `reload PHP-FPM ${fr.version}`, ok: false, output: e.message }); }
+      } else if (rtInfo) {
+        log('\n[WARN] Situs memakai PHP-FPM tetapi service-nya tidak aktif; kode baru belum berlaku.\n');
+        steps.push({ cmd: 'reload PHP-FPM', ok: false, output: 'php-fpm tidak aktif' });
+      }
     }
+    if (!rtInfo || rtInfo.runtime === 'frankenphp') {
+      log('\n$ reload FrankenPHP (apply PHP source changes)\n');
+      try {
+        await reloadFrankenPHPAsync();
+        log('FrankenPHP reloaded.\n');
+        steps.push({ cmd: 'reload FrankenPHP', ok: true, output: 'reloaded' });
+      } catch (e) {
+        log(`[WARN] Failed to reload FrankenPHP — PHP source changes may not take effect until a manual restart: ${e.message}\n`);
+        steps.push({ cmd: 'reload FrankenPHP', ok: false, output: e.message });
+      }
+    }
+
+    // 10. .env / storage hygiene AFTER the deploy (the app is now fully in place), and make sure the
+    //     scheduler exists for this app.
+    try {
+      const pf = await laravelPreflight(laravelRootForPath(appPath));
+      log(`\n[CEK sesudah deploy]\n${pf.text}\n`);
+      steps.push({ cmd: 'cek .env & storage (sesudah deploy)', ok: true, warn: pf.warnings.length > 0, output: pf.text });
+    } catch (e) { log(`\n[WARN] cek .env/storage gagal: ${e.message}\n`); }
+    ensureSchedulers().catch(() => {});
   }
 
   return { ok: true, output: outParts.join(''), steps };
@@ -2535,6 +3038,7 @@ async function deployAndRecord(hook, trigger) {
   recordDeploy({
     trigger, path: hook.path, branch: hook.branch || 'main', laravel: !!hook.laravel,
     startedAt, finishedAt, ok: result.ok, steps: result.steps || [],
+    warnings: (result.steps || []).filter(x => x.warn).length,
   });
   return result;
 }
@@ -3101,6 +3605,7 @@ app.post('/api/update/apply', auth, async (req,res)=>{
       out += `  ✓ ${rel}\n`;
     }
     fs.rmSync(tmpDir,{recursive:true,force:true});
+    if(syncPackageVersion()) out += '  ✓ package.json (versi) diselaraskan dengan version.json\n';
 
     // 3. Ensure dependencies are installed (nodemailer, etc.).
     out += '\n── npm install ──\n';
@@ -3185,8 +3690,13 @@ try {
   console.error('[Startup] ensureFrankenPHPGlobalBlock check failed:', e.message);
 }
 
+// Small self-heals: package.json's version (shown by pm2) and the Caddy config dir drop-in.
+try { if (syncPackageVersion()) console.log('[Startup] package.json version diselaraskan dengan version.json'); } catch {}
+setTimeout(() => { ensureCaddyConfigDir().catch(() => {}); }, 3000).unref();
+
 // Auto-tune: make sure the boot unit exists, run once shortly after start (this also adopts
 // existing manual PHP-FPM pool files and picks up core/RAM changes), then every 10 minutes.
-setTimeout(() => { ensureBootUnit().then(() => autotuneTick('startup')).then(() => ensureUnattendedSury()).then(() => securityTick()).catch(e => console.error('[autotune]', e.message)); }, 5000).unref();
+setTimeout(() => { ensureBootUnit().then(() => autotuneTick('startup')).then(() => ensureUnattendedSury()).then(() => ensureSchedulers()).then(() => securityTick()).catch(e => console.error('[autotune]', e.message)); }, 5000).unref();
+setTimeout(() => { healthTick(); setInterval(healthTick, HEALTH_INTERVAL_MS).unref(); }, 15000).unref();
 setInterval(() => { autotuneTick('periodic').then(() => securityTick()).catch(e => console.error('[autotune]', e.message)); }, AUTOTUNE_INTERVAL_MS).unref();
 }
