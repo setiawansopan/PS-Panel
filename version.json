@@ -1,12 +1,9 @@
 {
-  "version": "2.11.0",
+  "version": "2.12.0",
   "released": "2026-10-25",
   "notes": [
-    "Deploy Laravel lebih aman: sebelum dan sesudah deploy panel memeriksa .env (APP_ENV bukan production, APP_DEBUG=true, INERTIA_DEVTOOLS_ENABLED tidak false bila Inertia dipakai) dan ukuran storage/ (peringatan di atas 1 GB atau bila storage/inertia-devtools berisi). Semuanya berupa peringatan (⚠ kuning di Deploy History), bukan kegagalan. Setelah deploy yang di-reload adalah PHP-FPM milik situs tersebut (bukan FrankenPHP) bila situs memakai PHP-FPM",
-    "Queue worker & scheduler Laravel per situs (halaman Virtual Hosts): panel membuat unit systemd ps-queue-<domain> (ikut QUEUE_CONNECTION di .env, restart otomatis saat .env disimpan dan setelah paket PHP berubah) dengan tombol aktifkan/start/stop/restart/log, serta cron scheduler di /etc/cron.d yang dibuat otomatis untuk situs Laravel. Unit/cron buatan tangan yang sudah ada tidak dilewati begitu saja: panel meminta konfirmasi lalu mengambil alih (berkas lama diganti nama .diambil-alih-panel.<waktu>) agar tidak berjalan dua kali",
-    "Redis: halaman Redis menampilkan keyspace dan bisa mengatur maxmemory, maxmemory-policy, appendonly, dan appendfsync (CONFIG SET lalu CONFIG REWRITE, redis.conf dibackup lebih dulu, dikembalikan bila gagal). Tombol \"Isi rekomendasi\": 1gb, volatile-lru, AOF yes, everysec. Butuh password panel",
-    "Kesehatan web server di Dashboard: versi FrankenPHP, status PHP-FPM, jumlah restart otomatis, status pool (worker aktif, antrean, max_children tercapai), dan jumlah segfault/invalid opcode di kernel log 24 jam terakhir",
-    "Notifikasi Telegram (bot token + chat ID, disimpan di /root/.pspanel_notify mode 600): peringatan bila service restart melebihi ambang dalam 5 menit, kernel mencatat segfault/invalid opcode, PHP-FPM mencatat server reached pm.max_children, atau ada alert keamanan/auto-tune. Dicek tiap menit di dalam proses panel (tanpa layanan baru), ada tombol kirim tes",
-    "Perbaikan kecil: Caddyfile dirapikan dengan `frankenphp fmt --overwrite` setiap panel menulisnya; drop-in systemd menyetel XDG_CONFIG_HOME=/var/lib/caddy/config (milik www-data; XDG_DATA_HOME tidak diubah); versi di package.json disinkronkan dengan version.json (muncul benar di pm2); installer memasang paket cron"
+    "Login panel kini memakai username + password. Saat instalasi, admin diminta mengisi username dan password sendiri (bisa juga lewat variabel PS_PANEL_USER dan PS_PANEL_PASS); bila dikosongkan, username admin dan password acak seperti sebelumnya. Password pilihan admin tidak disimpan dalam teks biasa, hanya hash-nya",
+    "Panel yang sudah terpasang tidak terkunci setelah update: username otomatis admin dengan password yang sama. Username bisa diganti di Settings → Username Panel (semua sesi lama dibatalkan). Lupa username: jalankan node server.js --reset-password (menampilkan username) atau node server.js --set-username namabaru",
+    "Perbaikan: password yang mengandung tanda = kini terbaca benar dari /root/.pspanel_credentials"
   ]
 }

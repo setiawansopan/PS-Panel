@@ -41,13 +41,15 @@ function getCreds() {
   const c = {};
   if (fs.existsSync(CREDS_FILE))
     fs.readFileSync(CREDS_FILE,'utf8').split('\n').forEach(l => {
-      const [k,v] = l.split('='); if(k&&v) c[k.trim()]=v.trim();
+      const i = l.indexOf('='); if (i <= 0) return;   // split on the FIRST '=' only: a password may contain '='
+      const k = l.slice(0, i).trim(), v = l.slice(i + 1).replace(/\r$/, ''); if (k && v) c[k] = v;
     });
   return c;
 }
 
 // ── Auth ──
-// Persistent auth state lives in AUTH_FILE (mode 600): { hash, secret, tv }.
+// Persistent auth state lives in AUTH_FILE (mode 600): { user, hash, secret, tv }.
+//  - user   admin username (lowercase). Installs from before usernames existed get 'admin'.
 //  - hash   bcrypt hash of the admin password. Once the file exists it is the source of
 //           truth; PANEL_PASS (creds file / env) is only the initial password and is ignored
 //           afterwards, so a password changed from the panel survives restarts.
@@ -61,8 +63,15 @@ function saveAuthState(st) {
   fs.writeFileSync(tmp, JSON.stringify(st), { mode: 0o600 });
   fs.renameSync(tmp, AUTH_FILE);
 }
+const USER_RE = /^[a-z0-9._-]{3,32}$/;
+const normUser = u => String(u || '').trim().toLowerCase();
 const authState = loadAuthState();
 let dirty = false;
+if (!USER_RE.test(authState.user || '')) {
+  const u = normUser(getCreds().PANEL_USER || process.env.PANEL_USER);
+  authState.user = USER_RE.test(u) ? u : 'admin';
+  dirty = true;
+}
 if (!authState.hash) {
   authState.hash = bcrypt.hashSync(getCreds().PANEL_PASS || process.env.PANEL_PASS || 'admin123', 10);
   dirty = true;
@@ -85,6 +94,25 @@ function setPassword(newPass) {
   saveAuthState(authState);
 }
 
+// CLI: node server.js --init-credentials   (used by install.sh; reads PANEL_INIT_USER / PANEL_INIT_PASS
+// from the environment so the password never appears in the process list)
+if (process.argv.includes('--init-credentials')) {
+  const u = normUser(process.env.PANEL_INIT_USER || 'admin'), pw = process.env.PANEL_INIT_PASS || '';
+  if (!USER_RE.test(u)) { console.error('Username harus 3-32 karakter: huruf kecil, angka, titik, minus, garis bawah.'); process.exit(1); }
+  if (pw.length < MIN_PASS_LEN) { console.error(`Password minimal ${MIN_PASS_LEN} karakter.`); process.exit(1); }
+  authState.user = u; setPassword(pw);
+  console.log(`Kredensial panel disetel (username: ${u}).`);
+  process.exit(0);
+}
+// CLI: node server.js --set-username <name>
+if (process.argv.includes('--set-username')) {
+  const u = normUser(process.argv[process.argv.indexOf('--set-username') + 1]);
+  if (!USER_RE.test(u)) { console.error('Username harus 3-32 karakter: huruf kecil, angka, titik, minus, garis bawah.'); process.exit(1); }
+  authState.user = u; authState.tv += 1; saveAuthState(authState);
+  console.log(`Username panel diganti menjadi: ${u}`);
+  console.log('Semua sesi login lama dibatalkan. Jika panel sedang berjalan: pm2 restart ps-panel');
+  process.exit(0);
+}
 // CLI: node server.js --reset-password [newpassword]
 if (process.argv.includes('--reset-password')) {
   const i = process.argv.indexOf('--reset-password');
@@ -93,7 +121,7 @@ if (process.argv.includes('--reset-password')) {
     : crypto.randomBytes(9).toString('base64url');
   if (pw.length < MIN_PASS_LEN) { console.error(`Password minimal ${MIN_PASS_LEN} karakter.`); process.exit(1); }
   setPassword(pw);
-  console.log(`Password panel direset. Password baru: ${pw}`);
+  console.log(`Password panel direset. Username: ${authState.user}  Password baru: ${pw}`);
   console.log('Semua sesi login lama dibatalkan. Jika panel sedang berjalan: pm2 restart ps-panel');
   process.exit(0);
 }
@@ -120,9 +148,36 @@ function checkRateLimit(ip) {
 app.post('/api/login',(req,res)=>{
   const ip = req.ip || req.socket.remoteAddress;
   if (checkRateLimit(ip)) return res.status(429).json({error:'Too many attempts. Try again in 15 minutes.'});
-  if(typeof req.body.password === 'string' && bcrypt.compareSync(req.body.password, authState.hash))
-    res.json({token: signToken()});
-  else res.status(401).json({error:'Wrong password'});
+  const { username, password } = req.body || {};
+  // bcrypt always runs so a wrong username takes as long as a wrong password
+  const passOk = typeof password === 'string' && bcrypt.compareSync(password, authState.hash);
+  if (passOk && normUser(username) === authState.user) { loginAttempts.delete(ip); res.json({ token: signToken(), username: authState.user }); }
+  else res.status(401).json({ error: 'Username atau password salah' });
+});
+
+app.get('/api/account', auth, (req, res) => res.json({ ok: true, username: authState.user }));
+
+// Re-check the password for the current session (used to unlock edit forms; not a login).
+app.post('/api/verify-password', auth, (req, res) => {
+  const ip = req.ip || req.socket.remoteAddress;
+  if (checkRateLimit('pw:' + ip)) return res.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' });
+  const { password } = req.body || {};
+  if (typeof password === 'string' && bcrypt.compareSync(password, authState.hash)) { loginAttempts.delete('pw:' + ip); return res.json({ ok: true }); }
+  res.status(403).json({ error: 'Wrong password' });
+});
+
+app.post('/api/username', auth, (req, res) => {
+  const ip = req.ip || req.socket.remoteAddress;
+  if (checkRateLimit('pw:' + ip)) return res.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' });
+  const { password, newUsername } = req.body || {};
+  if (typeof password !== 'string' || !bcrypt.compareSync(password, authState.hash)) return res.status(403).json({ error: 'Password salah' });
+  const u = normUser(newUsername);
+  if (!USER_RE.test(u)) return res.status(400).json({ error: 'Username harus 3-32 karakter: huruf kecil, angka, titik, minus, garis bawah' });
+  if (u === authState.user) return res.status(400).json({ error: 'Username baru sama dengan yang sekarang' });
+  try { authState.user = u; authState.tv += 1; saveAuthState(authState); }   // old sessions must log in with the new name
+  catch (e) { return res.status(500).json({ error: 'Gagal menyimpan: ' + e.message }); }
+  loginAttempts.delete('pw:' + ip);
+  res.json({ ok: true, username: u });
 });
 
 app.post('/api/password', auth, (req, res) => {
