@@ -425,6 +425,45 @@ php_security_check() {
   fi
 }
 
+# Ondrej Sury's PHP PPA. `add-apt-repository` needs the Launchpad API (api.launchpad.net), which
+# times out on some VPS networks (seen in the field: 3 × "Connection timed out", install aborted).
+# The package archive itself lives on another host (ppa.launchpadcontent.net), so when the API is
+# unreachable the source is written by hand with the PPA's signing key, fetched from the Ubuntu
+# keyserver and checked against its known fingerprint.
+ONDREJ_PPA_FPR="14AA40EC0831756756D7F66C4F4EA0AAE5267A6C"
+add_ondrej_ppa() {
+  if grep -rqs "ondrej/php" /etc/apt/sources.list /etc/apt/sources.list.d/; then
+    log_raw "Ondrej PHP PPA already configured"; return 0
+  fi
+  if timeout 90 add-apt-repository -y ppa:ondrej/php >> "$LOG_FILE" 2>&1; then return 0; fi
+  log_raw "add-apt-repository failed (Launchpad API unreachable?) — adding the PPA manually"
+  local codename keyring="/etc/apt/keyrings/ondrej-php.gpg" tmp fpr
+  codename=$(. /etc/os-release && echo "${VERSION_CODENAME:-}")
+  [[ -n "$codename" ]] || codename=$(lsb_release -cs 2>/dev/null || true)
+  tmp=$(mktemp)
+  if ! curl -fsSL --retry 3 -m 60 -o "$tmp" \
+      "https://keyserver.ubuntu.com/pks/lookup?op=get&options=mr&search=0x${ONDREJ_PPA_FPR}"; then
+    rm -f "$tmp"
+    fatal "Could not add the PHP PPA: Launchpad API and keyserver.ubuntu.com are both unreachable" \
+      "Check outbound HTTPS (and IPv6) on this server, then re-run the installer"
+  fi
+  fpr=$(gpg --show-keys --with-colons "$tmp" 2>/dev/null | awk -F: '/^fpr:/{print $10; exit}')
+  if [[ "$fpr" != "$ONDREJ_PPA_FPR" ]]; then
+    rm -f "$tmp"
+    fatal "Downloaded PHP PPA key has an unexpected fingerprint (${fpr:-none})" "Re-run the installer later"
+  fi
+  install -d -m 0755 /etc/apt/keyrings
+  gpg --dearmor < "$tmp" > "$keyring"; chmod 644 "$keyring"; rm -f "$tmp"
+  cat > "/etc/apt/sources.list.d/ondrej-ubuntu-php-${codename}.sources" <<SRC
+Types: deb
+URIs: https://ppa.launchpadcontent.net/ondrej/php/ubuntu/
+Suites: ${codename}
+Components: main
+Signed-By: ${keyring}
+SRC
+  log_raw "Ondrej PHP PPA added manually for ${codename}"
+}
+
 install_php() {
   local V="$PS_PHP_VER"
   section "PHP ${V}" "~2-3 min"
@@ -436,8 +475,7 @@ install_php() {
 
   if ! dpkg -s "php${V}-fpm" &>/dev/null; then
     spinner_start "Adding Ondrej PHP PPA..."
-    retry_run "add-apt-repository php" \
-      add-apt-repository -y ppa:ondrej/php
+    add_ondrej_ppa
     retry_run "apt-get update" apt-get update -qq
     spinner_stop ok
 
