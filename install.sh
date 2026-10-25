@@ -471,6 +471,12 @@ install_php() {
     fatal "php${V}-fpm is not running" "Check: journalctl -u php${V}-fpm --no-pager | tail -30"
   fi
 
+  # Automatic security updates: the panel allows the Sury PPA origin for PHP packages in
+  # unattended-upgrades (Ubuntu's own origins do not include it); it needs the package itself.
+  if ! dpkg -s unattended-upgrades &>/dev/null; then
+    apt_install unattended-upgrades || warn "Could not install unattended-upgrades; install it to get automatic PHP security updates"
+  fi
+
   # Report (not fail on) extensions Laravel-style apps normally need.
   local ext missing=()
   for ext in pdo_pgsql mbstring xml curl zip bcmath intl gd redis tokenizer fileinfo iconv; do
