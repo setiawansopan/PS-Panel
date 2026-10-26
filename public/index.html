@@ -163,6 +163,15 @@ tr:hover td{background:rgba(255,255,255,.015)}
 /* ── INPUT ── */
 .inp{width:100%;background:var(--ink3);border:1px solid var(--line2);border-radius:9px;padding:10px 13px;color:var(--text);font-family:var(--mono);font-size:12px;outline:none;transition:border-color .2s,box-shadow .2s}
 .inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(110,231,183,.08)}
+.inp::placeholder{color:var(--muted);opacity:.8}
+.inp:hover:not(:focus):not(:disabled){border-color:var(--muted)}
+.inp:disabled{opacity:.55;cursor:not-allowed}
+select.inp{appearance:none;-webkit-appearance:none;cursor:pointer;padding-right:34px;background-color:var(--ink3);background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 18px) 52%,calc(100% - 13px) 52%;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+select.inp option{background:var(--ink2);color:var(--text)}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(190px,100%),1fr));gap:0 16px}
+.fhint{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:5px;line-height:1.5}
+.frow{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.frow .fg{margin-bottom:0;flex:1 1 200px;max-width:280px}
 .inp-lbl{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;display:block}
 .fg{margin-bottom:13px}
 
@@ -476,15 +485,15 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
             <div id="r-keyspace" style="font-family:var(--mono);font-size:11px;color:var(--muted)">—</div>
           </div>
           <div class="card">
-            <div class="ct">Konfigurasi (permanen)</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-family:var(--mono);font-size:11px">
-              <label>maxmemory<input id="rc-mem" oninput="_rcDirty=true" placeholder="1gb / 512mb / 0"></label>
-              <label>maxmemory-policy<select id="rc-pol" onchange="_rcDirty=true"><option>noeviction</option><option>allkeys-lru</option><option>volatile-lru</option><option>allkeys-lfu</option><option>volatile-lfu</option><option>allkeys-random</option><option>volatile-random</option><option>volatile-ttl</option></select></label>
-              <label>appendonly<select id="rc-aof" onchange="_rcDirty=true"><option>yes</option><option>no</option></select></label>
-              <label>appendfsync<select id="rc-fs" onchange="_rcDirty=true"><option>always</option><option>everysec</option><option>no</option></select></label>
+            <div class="ct"><span>Konfigurasi</span><span class="ct-badge">permanen · tanpa restart</span></div>
+            <div class="fgrid">
+              <div class="fg"><label class="inp-lbl" for="rc-mem">maxmemory</label><input class="inp" id="rc-mem" oninput="_rcDirty=true" placeholder="1gb / 512mb / 0" autocomplete="off"><div class="fhint">batas memori; 0 = tanpa batas</div></div>
+              <div class="fg"><label class="inp-lbl" for="rc-pol">maxmemory-policy</label><select class="inp" id="rc-pol" onchange="_rcDirty=true"><option>noeviction</option><option>allkeys-lru</option><option>volatile-lru</option><option>allkeys-lfu</option><option>volatile-lfu</option><option>allkeys-random</option><option>volatile-random</option><option>volatile-ttl</option></select><div class="fhint">yang dihapus saat memori penuh</div></div>
+              <div class="fg"><label class="inp-lbl" for="rc-aof">appendonly</label><select class="inp" id="rc-aof" onchange="_rcDirty=true"><option>yes</option><option>no</option></select><div class="fhint">simpan data ke disk (AOF)</div></div>
+              <div class="fg"><label class="inp-lbl" for="rc-fs">appendfsync</label><select class="inp" id="rc-fs" onchange="_rcDirty=true"><option>always</option><option>everysec</option><option>no</option></select><div class="fhint">seberapa sering AOF ditulis</div></div>
             </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
-              <input type="password" id="rc-pw" placeholder="password panel" style="max-width:190px;font-size:11px">
+            <div class="frow" style="margin-top:4px">
+              <div class="fg"><label class="inp-lbl" for="rc-pw">Password panel</label><input class="inp" type="password" id="rc-pw" placeholder="••••••••" autocomplete="current-password"></div>
               <button class="btn" onclick="saveRedisConfig()">Terapkan</button>
               <button class="btn btn-ghost" onclick="fillRedisRecommended()">Isi rekomendasi</button>
             </div>
@@ -731,9 +740,9 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         <tbody id="vhost-tb"><tr><td colspan="7" style="color:var(--muted)">Loading...</td></tr></tbody></table>
       </div>
       <div class="card" id="laravel-card" style="margin-top:14px;display:none">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-          <div style="font-family:var(--mono);font-size:12px;font-weight:700">Laravel · queue worker &amp; scheduler</div>
-          <input type="password" id="lar-pw" placeholder="password panel (untuk aktifkan/nonaktifkan)" style="max-width:290px;font-size:11px">
+        <div class="ct"><span>Laravel · queue worker &amp; scheduler</span></div>
+        <div class="frow" style="margin-bottom:12px">
+          <div class="fg"><label class="inp-lbl" for="lar-pw">Password panel</label><input class="inp" type="password" id="lar-pw" placeholder="••••••••" autocomplete="current-password"><div class="fhint">diperlukan untuk Aktifkan / Nonaktifkan</div></div>
         </div>
         <div id="lar-msg" style="font-family:var(--mono);font-size:10px;margin-bottom:8px"></div>
         <div id="lar-list"></div>

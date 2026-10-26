@@ -1,9 +1,8 @@
 {
-  "version": "2.12.5",
+  "version": "2.12.6",
   "released": "2026-10-25",
   "notes": [
-    "Perbaikan editor ENV: tombol ⚙ ENV dan Clear Laravel Cache kini memakai folder project Laravel yang sebenarnya (folder berisi artisan, ditelusuri dari docroot vhost), bukan selalu /var/www/<domain>. Sebelumnya .env disimpan di folder yang tidak dibaca aplikasi bila project berada di subfolder",
-    "Deploy berhenti lebih awal dengan pesan jelas bila aplikasi memakai PostgreSQL lewat TCP tetapi DB_PASSWORD kosong (mis. .env baru dari .env.example), sebelum composer install dan migrate; sebelumnya baru gagal di migrate dengan pesan fe_sendauth",
-    "Peringatan baru: bila docroot situs sama dengan folder project (bukan folder public), file .env, composer.json, dan source bisa diunduh publik; ditampilkan di Deploy dan kartu Laravel"
+    "Tampilan isian dirapikan: kolom konfigurasi Redis dan kolom password di kartu Laravel kini memakai gaya yang sama dengan form lain (label, hint, sudut membulat, fokus berwarna), tersusun dua kolom, dan tampil benar di tema terang maupun gelap",
+    "Semua dropdown (select) mendapat panah dan gaya seragam, termasuk di modal Add Virtual Host, Deploy, dan Mail"
   ]
 }
