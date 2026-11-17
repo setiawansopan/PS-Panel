@@ -718,6 +718,76 @@ app.post('/api/vhosts', auth, async (req,res)=>{
   });
 });
 
+// ── Document root of a vhost ──
+// Changing it is the fix for "the site 404s / serves the project folder (.env downloadable)" when the repo
+// was cloned into the docroot's parent: the new docroot is validated (inside DOCROOT_BASE, a real directory,
+// index.php present for PHP sites), written with a backup, checked with `frankenphp validate` and rolled back
+// on failure — like convertRuntime.
+const DOCROOT_BASE = process.env.PANEL_DOCROOT_BASE || '/var/www';
+const DOMAIN_RE = /^[a-zA-Z0-9][a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,}$/;
+const dirHasIndex = d => { try { return fs.statSync(d).isDirectory() && fs.existsSync(path.join(d, 'index.php')); } catch { return false; } };
+function siteDocroot(domain) {
+  try { const m = fs.readFileSync(path.join(VHOSTS_DIR, `${domain}.conf`), 'utf8').match(/root\s+\*\s+(\S+)/); return m ? m[1] : null; } catch { return null; }
+}
+function docrootCandidates(domain, current) {
+  const lr = laravelRootFor(domain), seen = new Set(), out = [];
+  const add = (d, note) => {
+    if (!d || seen.has(d)) return; seen.add(d);
+    let ok = false; try { ok = fs.statSync(d).isDirectory(); } catch {}
+    if (ok) out.push({ path: d, hasIndex: dirHasIndex(d), note: note || null });
+  };
+  add(current, 'sekarang');
+  if (lr) add(path.join(lr, 'public'), 'folder public Laravel');
+  add(path.join(current, 'public')); add(path.join(current, 'public', 'public'));
+  if (path.basename(current) === 'public') add(path.dirname(current));
+  const recommended = (out.find(c => c.hasIndex && c.path !== current && lr && c.path === path.join(lr, 'public')) || out.find(c => c.hasIndex && c.path !== current) || {}).path || null;
+  return { candidates: out, recommended, laravelRoot: lr };
+}
+// Returns { error } or { file, backup, unchanged, docroot }. Does not reload.
+async function changeDocroot(domain, wanted, force) {
+  if (!DOMAIN_RE.test(domain)) return { error: 'domain tidak valid' };
+  const file = path.join(VHOSTS_DIR, `${domain}.conf`);
+  if (!fs.existsSync(file)) return { error: 'virtual host tidak ditemukan' };
+  if (typeof wanted !== 'string' || !/^\/[\w.\-\/@+]+$/.test(wanted)) return { error: 'docroot harus path absolut berisi huruf, angka dan . _ - / @ +' };
+  const dir = path.resolve(wanted);
+  let real;
+  try { real = fs.realpathSync(dir); } catch { return { error: `folder tidak ditemukan: ${dir}` }; }
+  let baseReal; try { baseReal = fs.realpathSync(DOCROOT_BASE); } catch { baseReal = DOCROOT_BASE; }
+  if (!(dir === DOCROOT_BASE || dir.startsWith(DOCROOT_BASE + '/')) || !(real === baseReal || real.startsWith(baseReal + '/')))
+    return { error: `docroot harus berada di dalam ${DOCROOT_BASE}` };
+  if (!fs.statSync(real).isDirectory()) return { error: 'bukan sebuah folder' };
+  let orig; try { orig = fs.readFileSync(file, 'utf8'); } catch (e) { return { error: e.message }; }
+  const m = orig.match(SITE_BLOCK_RE);
+  if (!m || !/^[ \t]*root\s+\*\s+\S+/m.test(m[2])) return { error: 'blok situs tidak punya baris "root * <folder>" / format tidak dikenali' };
+  if (parseRuntime(m[2]).runtime && !dirHasIndex(real) && !force)
+    return { error: `index.php tidak ditemukan di ${dir}. Situs PHP akan menjawab 404. Pilih folder yang berisi index.php (biasanya folder "public" milik aplikasi).`, noIndex: true };
+  const body = m[2].replace(/^([ \t]*root\s+\*\s+)\S+/m, `$1${dir}`);
+  const next = orig.slice(0, m.index) + m[1] + body + m[3] + orig.slice(m.index + m[0].length);
+  if (next === orig) return { file, unchanged: true, docroot: dir };
+  const backup = file + '.bak.' + Date.now();      // *.conf.bak.* is not matched by `import sites/*.conf`
+  fs.copyFileSync(file, backup);
+  fs.writeFileSync(file, next);
+  const bad = await validateCaddy();
+  if (bad) { fs.writeFileSync(file, orig); return { error: 'validasi Caddyfile gagal, dikembalikan: ' + bad }; }
+  return { file, backup, docroot: dir };
+}
+app.get('/api/vhosts/:domain/docroot', auth, (req, res) => {
+  const d = req.params.domain;
+  if (!DOMAIN_RE.test(d)) return res.status(400).json({ ok: false, error: 'domain tidak valid' });
+  const current = siteDocroot(d);
+  if (!current) return res.status(404).json({ ok: false, error: 'virtual host tidak ditemukan' });
+  res.json({ ok: true, domain: d, current, base: DOCROOT_BASE, exposed: !!(laravelRootFor(d) && path.resolve(current) === path.resolve(laravelRootFor(d))), ...docrootCandidates(d, current) });
+});
+app.post('/api/vhosts/:domain/docroot', auth, async (req, res) => {
+  if (!checkPanelPassword(req, res)) return;
+  const { docroot, force } = req.body || {};
+  const r = await changeDocroot(req.params.domain, docroot, !!force);
+  if (r.error) return res.status(400).json({ ok: false, error: r.error, noIndex: !!r.noIndex });
+  if (r.unchanged) return res.json({ ok: true, unchanged: true, docroot: r.docroot });
+  autotuneLog(`EVENT docroot ${req.params.domain}: ${r.docroot} (backup ${path.basename(r.backup)})`);
+  reloadFrankenPHP(err => res.json({ ok: true, docroot: r.docroot, backup: r.backup, reloaded: !err, reloadError: err ? String(err.message || err) : null }));
+});
+
 // Move a site (or the http://:80 default site) between FrankenPHP's PHP and PHP-FPM.
 app.post('/api/runtime/convert', auth, async (req,res)=>{
   const {password,target,runtime,phpVersion}=req.body||{};
