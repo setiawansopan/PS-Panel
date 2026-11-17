@@ -2185,8 +2185,12 @@ async function aptPolicy(pkg) {
 async function restartQueueWorkers() {
   const units = [];
   try { for (const f of fs.readdirSync(SYSTEMD_DIR).filter(f => f.endsWith('.service'))) if (/queue:work/.test(fs.readFileSync(path.join(SYSTEMD_DIR, f), 'utf8'))) units.push(f); } catch {}
-  for (const u of units) { try { await execFileAsync('systemctl', ['restart', u], { timeout: 60000 }); } catch (e) { autotuneLog(`EVENT restart queue worker ${u} gagal: ${e.message}`); } }
-  return units;
+  const running = [];
+  for (const u of units) {
+    if (!(await serviceActive(u))) continue;   // a worker the admin stopped (or that is crash-looping) is not started by this
+    try { await execFileAsync('systemctl', ['restart', u], { timeout: 60000 }); running.push(u); } catch (e) { autotuneLog(`EVENT restart queue worker ${u} gagal: ${e.message}`); }
+  }
+  return running;
 }
 async function afterPhpPackagesChanged(why) {
   const reloaded = [];
@@ -2241,6 +2245,138 @@ async function securityTick() {
   persistAuto();
   return st;
 }
+
+// ── PHP Manager: install / remove PHP-FPM versions and choose the CLI default (like cPanel's MultiPHP) ──
+// Packages come from the Ondrej (Sury) PPA, like install.sh. Everything runs as ONE background job with a
+// live log; nothing here restarts a service that serves sites: a new version only adds a PHP-FPM service,
+// removal is refused while a site uses it, and switching the CLI default only restarts running queue workers.
+const PHPMGR_VERSIONS = ['8.5', '8.4', '8.3', '8.2', '8.1', '8.0', '7.4'];
+const PHPMGR_EXT = ['pgsql', 'mysql', 'sqlite3', 'redis', 'curl', 'mbstring', 'xml', 'zip', 'bcmath', 'intl', 'gd', 'opcache', 'tokenizer', 'fileinfo', 'iconv', 'soap'];
+const PHP_BINDIR = process.env.PANEL_PHP_BINDIR || '/usr/bin';
+const PHP_CLI_LINK = process.env.PANEL_PHP_LINK || path.join(PHP_BINDIR, 'php');
+const phpCliBin = v => path.join(PHP_BINDIR, `php${v}`);
+function defaultCliVersion() {
+  try { return (path.basename(fs.realpathSync(PHP_CLI_LINK)).match(/^php(\d+\.\d+)$/) || [])[1] || null; } catch { return null; }
+}
+function suryConfigured() {
+  try { if (fs.readdirSync(APT_LISTS).some(f => /ondrej/i.test(f))) return true; } catch {}
+  try {
+    for (const dir of ['/etc/apt/sources.list.d']) for (const f of fs.readdirSync(dir)) if (/ondrej/i.test(f)) return true;
+  } catch {}
+  return false;
+}
+let PHPMGR_JOB = null;   // { id, op, version, status: running|done|failed, startedAt, finishedAt, log: [], error }
+function jobLog(job, line) {
+  for (const l of String(line).split(/\r?\n/)) {
+    const t = l.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').trimEnd();
+    if (!t || /^\(Reading database/.test(t)) continue;
+    job.log.push(t); if (job.log.length > 400) job.log.shift();
+  }
+}
+// Runs a command, streams its output into the job log; rejects when the exit code is not 0.
+function jobRun(job, cmd, args, ms = 20 * 60e3) {
+  return new Promise((resolve, reject) => {
+    jobLog(job, `$ ${cmd} ${args.join(' ')}`);
+    const env = { ...process.env, DEBIAN_FRONTEND: 'noninteractive', NEEDRESTART_MODE: 'a', NEEDRESTART_SUSPEND: '1', LC_ALL: 'C' };
+    const c = spawn(cmd, args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const timer = setTimeout(() => { try { c.kill('SIGKILL'); } catch {} }, ms);
+    let buf = '';
+    const feed = d => { buf += d; const i = buf.lastIndexOf('\n'); if (i >= 0) { jobLog(job, buf.slice(0, i)); buf = buf.slice(i + 1); } };
+    c.stdout.on('data', feed); c.stderr.on('data', feed);
+    c.on('error', e => { clearTimeout(timer); reject(e); });
+    c.on('close', code => { clearTimeout(timer); if (buf) jobLog(job, buf); code === 0 ? resolve() : reject(new Error(`${cmd} keluar dengan kode ${code}`)); });
+  });
+}
+const aptOk = (cmd, args) => new Promise(r => execFile(cmd, args, { timeout: 20000 }, e => r(!e)));
+async function sitesUsingFpm(v) {
+  const def = (pickFpm() || {}).version;
+  return listSites().filter(s => s.runtime === 'fpm' && (s.version === v || (!s.version && def === v))).map(s => s.label);
+}
+// After our own install/remove the "package version changed" detector of securityTick must not fire.
+async function rememberPhpPackages() {
+  const sig = {}; for (const rt of fpmRuntimes()) sig[rt.version] = (await aptPolicy(`php${rt.version}-fpm`)).installed;
+  refreshAuto(); AUTO.phpPkg = sig; persistAuto();
+}
+
+async function phpmgrInstall(job, v) {
+  await jobRun(job, 'apt-get', ['update', '-qq'], 5 * 60e3).catch(e => jobLog(job, `(apt-get update gagal: ${e.message} — dilanjutkan dengan daftar paket yang ada)`));
+  const pol = await aptPolicy(`php${v}-fpm`);
+  if (!pol.candidate || pol.candidate === '(none)') throw new Error(`paket php${v}-fpm tidak tersedia di repo apt${suryConfigured() ? '' : ' — PPA Ondrej (Sury) belum terpasang; jalankan installer atau: add-apt-repository ppa:ondrej/php'}`);
+  jobLog(job, `Versi yang akan dipasang: ${pol.candidate}`);
+  const pkgs = [`php${v}-cli`, `php${v}-common`, `php${v}-fpm`];
+  for (const e of PHPMGR_EXT) if (await aptOk('apt-cache', ['show', `php${v}-${e}`])) pkgs.push(`php${v}-${e}`); else jobLog(job, `(php${v}-${e} bukan paket terpisah di repo ini, dilewati)`);
+  const cliBefore = defaultCliVersion();
+  await jobRun(job, 'apt-get', ['install', '-y', '-qq', '-o', 'Dpkg::Options::=--force-confold', ...pkgs]);
+  const cliAfter = defaultCliVersion();
+  if (cliBefore && cliAfter && cliAfter !== cliBefore) {   // a newer package would silently become the CLI default
+    jobLog(job, `PHP CLI bawaan dikembalikan ke ${cliBefore} (apt memindahkannya ke ${cliAfter}); ubah lewat tombol "Jadikan CLI bawaan" bila perlu`);
+    await jobRun(job, 'update-alternatives', ['--set', 'php', phpCliBin(cliBefore)]);
+  }
+  const rt = fpmRuntimes().find(r => r.version === v);
+  if (!rt) throw new Error(`php-fpm${v} tidak ditemukan setelah pemasangan`);
+  await jobRun(job, 'systemctl', ['enable', '--now', rt.service], 90000);
+  if (!(await fpmActive(rt))) throw new Error(`${rt.service} tidak aktif setelah dipasang (journalctl -u ${rt.service})`);
+  try { await syncFpmIni([v]); jobLog(job, `php.ini panel diterapkan ke PHP-FPM ${v}`); } catch (e) { jobLog(job, `(php.ini panel belum diterapkan: ${e.message})`); }
+  await rememberPhpPackages();
+  autotuneLog(`EVENT php manager: PHP ${v} dipasang (${pol.candidate})`);
+  setImmediate(() => autotuneTick(`PHP ${v} dipasang`).catch(() => {}));
+  jobLog(job, `Selesai: PHP ${v} terpasang. Pilih untuk situs lewat Virtual Hosts → ⇄ PHP.`);
+}
+async function phpmgrRemove(job, v) {
+  const used = await sitesUsingFpm(v);
+  if (used.length) throw new Error(`masih dipakai situs: ${used.join(', ')}`);
+  if (defaultCliVersion() === v) throw new Error('ini PHP CLI bawaan; pindahkan dulu ke versi lain');
+  if (fpmRuntimes().length <= 1) throw new Error('ini satu-satunya PHP-FPM yang terpasang');
+  const pkgs = (await execFileAsync('dpkg-query', ['-W', '-f=${Package}\n', `php${v}-*`], { timeout: 15000 }).then(r => r.stdout, () => '')).split('\n').filter(Boolean);
+  if (!pkgs.length) throw new Error(`tidak ada paket php${v}-* yang terpasang`);
+  await jobRun(job, 'apt-get', ['purge', '-y', '-qq', ...pkgs]);
+  await rememberPhpPackages();
+  autotuneLog(`EVENT php manager: PHP ${v} dihapus`);
+  setImmediate(() => autotuneTick(`PHP ${v} dihapus`).catch(() => {}));
+  jobLog(job, `Selesai: PHP ${v} dihapus.`);
+}
+async function phpmgrDefault(job, v) {
+  if (!fs.existsSync(phpCliBin(v))) throw new Error(`${phpCliBin(v)} tidak ada (php${v}-cli belum terpasang)`);
+  const before = defaultCliVersion();
+  await jobRun(job, 'update-alternatives', ['--set', 'php', phpCliBin(v)]);
+  const restarted = await restartQueueWorkers();
+  autotuneLog(`EVENT php manager: PHP CLI bawaan ${before || '?'} → ${v}; queue worker di-restart: ${restarted.join(',') || '-'}`);
+  jobLog(job, `PHP CLI bawaan sekarang ${v}${restarted.length ? `; queue worker di-restart: ${restarted.join(', ')}` : ''}.`);
+}
+function startPhpJob(op, v) {
+  if (PHPMGR_JOB && PHPMGR_JOB.status === 'running') return { error: `masih ada proses berjalan: ${PHPMGR_JOB.op} PHP ${PHPMGR_JOB.version}` };
+  const job = PHPMGR_JOB = { id: crypto.randomBytes(6).toString('hex'), op, version: v, status: 'running', startedAt: new Date().toISOString(), finishedAt: null, log: [], error: null };
+  const fn = op === 'install' ? phpmgrInstall : op === 'remove' ? phpmgrRemove : phpmgrDefault;
+  fn(job, v).then(() => { job.status = 'done'; }).catch(e => { job.status = 'failed'; job.error = String(e.message || e); jobLog(job, `GAGAL: ${job.error}`); autotuneLog(`EVENT php manager: ${op} PHP ${v} gagal: ${job.error}`); })
+    .finally(() => { job.finishedAt = new Date().toISOString(); });
+  return { job };
+}
+app.get('/api/phpmanager', auth, async (req, res) => {
+  try {
+    const sec = await phpSecurityStatus(), installed = fpmRuntimes(), cli = defaultCliVersion();
+    const versions = await Promise.all(PHPMGR_VERSIONS.map(async v => {
+      const rt = installed.find(r => r.version === v), pol = await aptPolicy(`php${v}-fpm`), row = sec.runtimes.find(r => r.key === `fpm:${v}`);
+      let phpVersion = null; if (rt) { try { phpVersion = ((await execFileAsync(rt.bin, ['-v'], { timeout: 8000 })).stdout.match(/^PHP (\S+)/) || [])[1] || null; } catch {} }
+      return { version: v, installed: !!rt, phpVersion, candidate: pol.candidate && pol.candidate !== '(none)' ? pol.candidate : null, active: rt ? await fpmActive(rt) : false,
+               cliInstalled: fs.existsSync(phpCliBin(v)), cliDefault: cli === v, preferred: v === PREFERRED_PHP, eol: !PHP_ADVISORY.fixed[v],
+               sites: rt ? await sitesUsingFpm(v) : [], state: row ? row.state : null, message: row ? row.message : null };
+    }));
+    const job = PHPMGR_JOB && { id: PHPMGR_JOB.id, op: PHPMGR_JOB.op, version: PHPMGR_JOB.version, status: PHPMGR_JOB.status, startedAt: PHPMGR_JOB.startedAt, finishedAt: PHPMGR_JOB.finishedAt, error: PHPMGR_JOB.error, log: PHPMGR_JOB.log.slice(-200) };
+    res.json({ ok: true, versions, cliDefault: cli, repo: suryConfigured(), fpmCount: installed.length, job });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+app.post('/api/phpmanager/:op', auth, (req, res) => {
+  if (!checkPanelPassword(req, res)) return;
+  const op = req.params.op, v = (req.body || {}).version;
+  if (!['install', 'remove', 'default'].includes(op)) return res.status(400).json({ ok: false, error: 'aksi tidak dikenal' });
+  if (!PHPMGR_VERSIONS.includes(v)) return res.status(400).json({ ok: false, error: 'versi PHP tidak dikenal' });
+  const installed = fpmRuntimes().some(r => r.version === v);
+  if (op === 'install' && installed) return res.status(400).json({ ok: false, error: `PHP ${v} sudah terpasang` });
+  if (op !== 'install' && !installed) return res.status(400).json({ ok: false, error: `PHP ${v} belum terpasang` });
+  const r = startPhpJob(op, v);
+  if (r.error) return res.status(409).json({ ok: false, error: r.error });
+  res.json({ ok: true, job: r.job.id });
+});
 
 // One button: move every php_server site (and the default site) to a PHP-FPM that is not vulnerable.
 async function switchAllToFpm() {
