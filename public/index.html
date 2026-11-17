@@ -1139,6 +1139,35 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
   </div>
 </div>
 
+<div class="mbg" id="m-docroot">
+  <div class="modal" style="width:500px">
+    <h3>Ubah Docroot <span id="dr-target" style="color:var(--accent);font-size:13px;font-weight:400"></span></h3>
+    <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.7">
+      Config lama dibackup, divalidasi dengan <b>frankenphp validate</b>, lalu di-reload (koneksi berjalan tidak diputus). Bila validasi gagal, config dikembalikan otomatis. Docroot harus berada di dalam <b>/var/www</b>.
+    </div>
+    <div id="dr-warn" style="display:none;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.35);color:var(--danger);border-radius:9px;padding:10px 12px;margin-bottom:14px;font-family:var(--mono);font-size:11px;line-height:1.6"></div>
+    <div class="fg">
+      <label class="inp-lbl">Docroot sekarang</label>
+      <input class="inp" id="dr-cur" disabled>
+    </div>
+    <div class="fg">
+      <label class="inp-lbl" for="dr-select">Docroot baru</label>
+      <select class="inp" id="dr-select" onchange="drPick()"></select>
+      <input class="inp" id="dr-custom" placeholder="/var/www/contoh.com/public" autocomplete="off" spellcheck="false" style="display:none;margin-top:8px">
+      <div class="fhint">Untuk aplikasi Laravel, pilih folder <b>public</b> yang berisi <code>index.php</code> (bertanda ✓).</div>
+    </div>
+    <div class="fg" style="margin-bottom:0">
+      <label class="inp-lbl" for="dr-pw">Password panel</label>
+      <input type="password" class="inp" id="dr-pw" autocomplete="current-password" onkeydown="if(event.key==='Enter')applyDocroot()">
+      <div id="dr-msg" style="font-family:var(--mono);font-size:11px;margin-top:8px;line-height:1.6"></div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="document.getElementById('m-docroot').classList.remove('open')">Cancel</button>
+      <button class="btn" onclick="applyDocroot()">Terapkan</button>
+    </div>
+  </div>
+</div>
+
 <div class="mbg" id="m-pw-confirm">
   <div class="modal" style="width:380px">
     <h3>Confirm Password</h3>
@@ -2175,6 +2204,42 @@ async function applyRuntime(){
   document.getElementById('m-runtime').classList.remove('open'); loadVhosts();
 }
 
+// ── Docroot ──
+let _drDomain=null;
+function drPick(){document.getElementById('dr-custom').style.display=document.getElementById('dr-select').value==='__custom'?'block':'none';}
+async function openDocrootModal(domain){
+  _drDomain=domain;
+  document.getElementById('dr-target').textContent='— '+domain;
+  document.getElementById('dr-pw').value='';document.getElementById('dr-msg').textContent='';
+  document.getElementById('dr-custom').value='';
+  const d=await api('GET','/api/vhosts/'+encodeURIComponent(domain)+'/docroot');
+  if(!d||!d.ok){alert((d&&d.error)||'gagal membaca docroot');return;}
+  document.getElementById('dr-cur').value=d.current;
+  const w=document.getElementById('dr-warn');
+  w.style.display=d.exposed?'block':'none';
+  if(d.exposed) w.textContent='🚨 Docroot sekarang sama dengan folder project: .env (password database), composer.json, dan source bisa diunduh publik. Pilih folder public di bawah.';
+  const sel=document.getElementById('dr-select');
+  sel.innerHTML=d.candidates.filter(c=>c.path!==d.current).map(c=>`<option value="${esc(c.path)}"${c.path===d.recommended?' selected':''}>${c.hasIndex?'✓':'✗'} ${esc(c.path)}${c.note?' ('+esc(c.note)+')':''}${c.hasIndex?'':' — tanpa index.php'}</option>`).join('')+'<option value="__custom">Lainnya… (ketik path)</option>';
+  drPick();
+  document.getElementById('m-docroot').classList.add('open');
+}
+async function applyDocroot(force){
+  const pw=document.getElementById('dr-pw').value, msg=document.getElementById('dr-msg');
+  const show=(t,ok)=>{msg.style.color=ok?'var(--accent)':'var(--danger)';msg.textContent=t;};
+  if(!pw) return show('// isi password panel');
+  const sv=document.getElementById('dr-select').value, docroot=sv==='__custom'?document.getElementById('dr-custom').value.trim():sv;
+  if(!docroot) return show('// isi docroot baru');
+  show('// memvalidasi & menerapkan...',true);
+  const r=await api('POST','/api/vhosts/'+encodeURIComponent(_drDomain)+'/docroot',{password:pw,docroot,force:!!force});
+  if(!r||!r.ok){
+    if(r&&r.noIndex&&confirm(r.error+'\n\nTetap terapkan?')) return applyDocroot(true);
+    return show('// '+((r&&r.error)||'gagal'));
+  }
+  if(r.unchanged) return show('// docroot sudah sesuai, tidak ada perubahan',true);
+  if(r.reloaded===false) return show('// config tersimpan tetapi reload gagal: '+(r.reloadError||'')+' — jalankan: systemctl restart frankenphp');
+  document.getElementById('m-docroot').classList.remove('open'); loadVhosts();
+}
+
 async function loadVhosts(){
   await loadRuntimes();
   const dr=_rt&&_rt.defaultSite;
@@ -2190,6 +2255,7 @@ async function loadVhosts(){
       <td style="font-size:11px;color:var(--muted);text-align:right">${v.size}</td>
       <td style="display:flex;gap:5px;justify-content:flex-end">
         ${v.phpEnabled?`<button class="btn btn-ghost" style="padding:4px 11px;font-size:11px" onclick="openRuntimeModal('${v.domain}')">⇄ PHP</button>`:''}
+        <button class="btn btn-ghost" style="padding:4px 11px;font-size:11px" onclick="openDocrootModal('${v.domain}')">⌂ Docroot</button>
         <button class="btn btn-ghost" style="padding:4px 11px;font-size:11px" onclick="openEnvEditor('${v.domain}')">⚙ ENV</button>
         <button class="btn btn-red" style="padding:4px 11px;font-size:11px" onclick="delVhost('${v.domain}')">Remove</button>
       </td>

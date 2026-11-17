@@ -1,8 +1,8 @@
 {
-  "version": "2.12.6",
+  "version": "2.13.0",
   "released": "2026-10-25",
   "notes": [
-    "Tampilan isian dirapikan: kolom konfigurasi Redis dan kolom password di kartu Laravel kini memakai gaya yang sama dengan form lain (label, hint, sudut membulat, fokus berwarna), tersusun dua kolom, dan tampil benar di tema terang maupun gelap",
-    "Semua dropdown (select) mendapat panah dan gaya seragam, termasuk di modal Add Virtual Host, Deploy, dan Mail"
+    "Tombol baru \"⌂ Docroot\" di Virtual Hosts untuk mengubah docroot situs tanpa SSH. Panel menyarankan folder yang berisi index.php (mis. folder public aplikasi Laravel) dan memperingatkan bila docroot sekarang sama dengan folder project (.env dan source bisa diunduh publik)",
+    "Aman: docroot harus berada di dalam /var/www (symlink diperiksa), situs PHP butuh index.php (kecuali dipaksa), config lama dibackup, divalidasi dengan frankenphp validate, dikembalikan otomatis bila gagal, lalu di-reload tanpa memutus koneksi. Butuh password panel"
   ]
 }
