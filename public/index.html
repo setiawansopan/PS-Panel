@@ -575,6 +575,18 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         <div id="pw-security" style="font-family:var(--mono);font-size:12px;line-height:1.8"><span style="color:var(--muted)">Loading...</span></div>
       </div>
 
+      <div class="card" style="margin-bottom:14px" id="pm-card">
+        <div class="ct"><span>PHP Manager</span><span class="ct-badge">pasang / hapus versi PHP</span></div>
+        <div id="pm-warn"></div>
+        <div class="frow" style="margin-bottom:14px">
+          <div class="fg"><label class="inp-lbl" for="pm-pw">Password panel</label><input class="inp" type="password" id="pm-pw" placeholder="••••••••" autocomplete="current-password"><div class="fhint">diperlukan untuk Pasang / Hapus / Jadikan CLI bawaan</div></div>
+        </div>
+        <div id="pm-list" style="font-family:var(--mono);font-size:11px"><span style="color:var(--muted)">Loading...</span></div>
+        <div id="pm-msg" style="font-family:var(--mono);font-size:11px;margin-top:8px"></div>
+        <div id="pm-joblbl" style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:12px;display:none"></div>
+        <pre id="pm-log" style="display:none;white-space:pre-wrap;font-family:var(--mono);font-size:10px;color:var(--muted);background:var(--ink);border-radius:6px;padding:8px;margin-top:6px;max-height:260px;overflow:auto"></pre>
+      </div>
+
       <div class="card" style="margin-bottom:14px">
         <div class="ct">1 · Status <span class="ct-badge" id="pw-specs">—</span></div>
         <div id="pw-status" style="font-family:var(--mono);font-size:12px;line-height:1.8"><span style="color:var(--muted)">Loading...</span></div>
@@ -1568,7 +1580,7 @@ async function loadPhpWorker(){
   const d=await api('GET','/api/phpworker');
   if(!d||!d.ok){document.getElementById('pw-status').innerHTML='<span style="color:var(--danger)">// gagal memuat: '+esc((d&&d.error)||'tidak ada respons')+'</span>';return;}
   renderPwAlerts(d);renderPwStatus(d);renderPwCapacity(d);renderPwHistory(d);
-  loadSecurity();loadFpUpgrade();
+  loadSecurity();loadFpUpgrade();loadPhpManager();
 }
 function renderPwAlerts(d){
   let h='';
@@ -1631,6 +1643,58 @@ function renderPwHistory(d){
     h+=`<div>${esc(fmtTs(e.ts))}</div><div>${esc(e.target)}</div><div>${esc(e.key)}</div><div>${esc(e.old)} → <b>${esc(e.new)}</b></div><div style="color:var(--dim)">${esc(e.reason)}</div>`;
   }
   document.getElementById('pw-history').innerHTML=h+'</div>';
+}
+// ── PHP Manager ──
+let _pmTimer=null;
+const pmMsg=(t,ok)=>{const m=document.getElementById('pm-msg');m.style.color=ok?'var(--accent)':'var(--danger)';m.textContent=t||'';};
+async function loadPhpManager(){
+  const el=document.getElementById('pm-list'); if(!el) return;
+  clearTimeout(_pmTimer);
+  const d=await api('GET','/api/phpmanager');
+  if(!d||!d.ok){el.innerHTML='<span style="color:var(--danger)">// gagal memuat: '+esc((d&&d.error)||'tidak ada respons')+'</span>';return;}
+  const busy=d.job&&d.job.status==='running';
+  document.getElementById('pm-warn').innerHTML=d.repo?'':'<div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);color:var(--warn);border-radius:9px;padding:9px 12px;margin-bottom:12px;font-family:var(--mono);font-size:11px;line-height:1.6">⚠ Repo PPA Ondrej (Sury) tidak terdeteksi, sehingga versi baru mungkin tidak tersedia. Jalankan installer atau: add-apt-repository ppa:ondrej/php</div>';
+  const pill=(t,c)=>`<span class="pill" style="font-size:9px;background:var(--ink4);color:${c||'var(--muted)'}">${t}</span>`;
+  const btn=(t,fn,cls)=>`<button class="btn ${cls||'btn-ghost'}" style="padding:4px 11px;font-size:11px"${busy?' disabled':''} onclick="${fn}">${t}</button>`;
+  el.innerHTML=d.versions.map(v=>{
+    const tags=[v.installed?pill('terpasang '+esc(v.phpVersion||''),'var(--accent)'):pill('belum terpasang'+(v.candidate?' · tersedia '+esc(v.candidate):'')),
+      v.cliDefault?pill('CLI bawaan','var(--accent2)'):'',v.preferred?pill('target','var(--accent)'):'',v.eol?pill('end-of-life','var(--warn)'):'',
+      v.installed&&!v.active?pill('tidak aktif','var(--danger)'):''].join(' ');
+    let info='';
+    if(v.installed) info+=v.sites.length?`dipakai: <b style="color:var(--text)">${v.sites.map(esc).join(', ')}</b>`:'tidak dipakai situs mana pun';
+    if(v.installed&&v.state) info+=` · <span style="color:${v.state==='safe'?'var(--accent)':v.state==='vulnerable'?'var(--danger)':'var(--warn)'}">${v.state==='safe'?'aman':v.state==='vulnerable'?'RENTAN':'tidak diketahui'}</span>`;
+    if(!v.installed&&v.eol) info='tidak mendapat perbaikan keamanan lagi (rentan PHP2Shell); pasang hanya untuk aplikasi lama yang membutuhkannya';
+    const acts=[];
+    if(!v.installed) acts.push(btn('Pasang',`pmAct('install','${v.version}')`,'btn'));
+    else{
+      if(v.cliInstalled&&!v.cliDefault) acts.push(btn('Jadikan CLI bawaan',`pmAct('default','${v.version}')`));
+      if(!v.sites.length&&!v.cliDefault&&d.fpmCount>1) acts.push(btn('Hapus',`pmAct('remove','${v.version}')`,'btn-red'));
+    }
+    return `<div style="background:var(--ink3);border-radius:9px;padding:12px 14px;margin-bottom:8px;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><div style="flex:1 1 280px;min-width:0"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:5px"><b style="font-size:13px;color:var(--text)">PHP ${esc(v.version)}</b>${tags}</div><div style="color:var(--muted);line-height:1.6">${info||'&nbsp;'}</div></div><div style="display:flex;gap:6px;flex-wrap:wrap">${acts.join('')}</div></div>`;
+  }).join('')+`<div class="fhint">PHP CLI bawaan dipakai oleh composer/artisan saat Deploy dan oleh queue worker. Versi PHP tiap situs diatur di Virtual Hosts → ⇄ PHP.</div>`;
+  const j=d.job, lbl=document.getElementById('pm-joblbl'), lg=document.getElementById('pm-log');
+  if(j){
+    lbl.style.display='block';lg.style.display='block';
+    const opn={install:'pasang',remove:'hapus',default:'CLI bawaan'}[j.op]||j.op;
+    lbl.innerHTML=`Proses ${esc(opn)} PHP ${esc(j.version)}: `+(j.status==='running'?'<span style="color:var(--warn)">berjalan…</span>':j.status==='done'?'<span style="color:var(--accent)">selesai</span>':'<span style="color:var(--danger)">gagal</span>');
+    lg.textContent=j.log.join('\n');lg.scrollTop=lg.scrollHeight;
+  }
+  if(busy) _pmTimer=setTimeout(loadPhpManager,2000);
+  else if(window._pmWas){window._pmWas=false;loadSecurity();}
+  if(busy) window._pmWas=true;
+}
+async function pmAct(op,v){
+  const pw=document.getElementById('pm-pw').value;
+  if(!pw) return pmMsg('// isi password panel');
+  const eol=!['8.5','8.4','8.3','8.2'].includes(v);
+  const txt={install:`Pasang PHP ${v}?`+(eol?`\n\nPHP ${v} sudah end-of-life: tidak mendapat perbaikan keamanan dan rentan PHP2Shell. Pasang hanya bila aplikasi lama membutuhkannya.`:'')+'\n\nPHP-FPM baru ditambahkan; situs yang berjalan tidak di-restart. Proses bisa beberapa menit.',
+    remove:`Hapus PHP ${v} beserta konfigurasinya? Tindakan ini tidak bisa dibatalkan.`,
+    default:`Jadikan PHP ${v} sebagai PHP CLI bawaan?\n\nDipakai oleh composer/artisan saat Deploy dan oleh queue worker. Queue worker yang sedang berjalan akan di-restart. Jangan lakukan saat jam ujian.`}[op];
+  if(!confirm(txt)) return;
+  pmMsg('// memulai…',true);
+  const r=await api('POST','/api/phpmanager/'+op,{password:pw,version:v});
+  if(!r||!r.ok) return pmMsg('// '+((r&&r.error)||'gagal'));
+  pmMsg('');loadPhpManager();
 }
 async function pwRestart(target){
   const pw=document.getElementById('pw-restart-pw').value, msg=document.getElementById('pw-restart-msg');

@@ -1,8 +1,9 @@
 {
-  "version": "2.13.0",
+  "version": "2.14.0",
   "released": "2026-10-25",
   "notes": [
-    "Tombol baru \"⌂ Docroot\" di Virtual Hosts untuk mengubah docroot situs tanpa SSH. Panel menyarankan folder yang berisi index.php (mis. folder public aplikasi Laravel) dan memperingatkan bila docroot sekarang sama dengan folder project (.env dan source bisa diunduh publik)",
-    "Aman: docroot harus berada di dalam /var/www (symlink diperiksa), situs PHP butuh index.php (kecuali dipaksa), config lama dibackup, divalidasi dengan frankenphp validate, dikembalikan otomatis bila gagal, lalu di-reload tanpa memutus koneksi. Butuh password panel"
+    "PHP Manager (seperti MultiPHP di cPanel) di halaman PHP Worker: pasang dan hapus versi PHP 8.5 sampai 7.4 dari repo Sury lewat panel, dengan log langsung. Satu proses pada satu waktu, tanpa me-restart situs yang berjalan",
+    "Jadikan CLI bawaan: memilih PHP yang dipakai composer/artisan saat Deploy dan oleh queue worker (hanya queue worker yang sedang berjalan yang di-restart). Memasang versi yang lebih tinggi tidak lagi mengubah PHP CLI bawaan secara diam-diam",
+    "Pengaman: versi yang masih dipakai situs, PHP CLI bawaan, atau satu-satunya PHP-FPM tidak bisa dihapus; versi end-of-life (tanpa perbaikan PHP2Shell) ditandai dan diminta konfirmasi sebelum dipasang. Semua aksi butuh password panel"
   ]
 }
