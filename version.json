@@ -1,9 +1,8 @@
 {
-  "version": "2.14.0",
+  "version": "2.14.1",
   "released": "2026-10-25",
   "notes": [
-    "PHP Manager (seperti MultiPHP di cPanel) di halaman PHP Worker: pasang dan hapus versi PHP 8.5 sampai 7.4 dari repo Sury lewat panel, dengan log langsung. Satu proses pada satu waktu, tanpa me-restart situs yang berjalan",
-    "Jadikan CLI bawaan: memilih PHP yang dipakai composer/artisan saat Deploy dan oleh queue worker (hanya queue worker yang sedang berjalan yang di-restart). Memasang versi yang lebih tinggi tidak lagi mengubah PHP CLI bawaan secara diam-diam",
-    "Pengaman: versi yang masih dipakai situs, PHP CLI bawaan, atau satu-satunya PHP-FPM tidak bisa dihapus; versi end-of-life (tanpa perbaikan PHP2Shell) ditandai dan diminta konfirmasi sebelum dipasang. Semua aksi butuh password panel"
+    "PHP Manager: proses pasang/hapus/ganti CLI bawaan kini menampilkan bar kemajuan dengan persentase, tahap yang sedang berjalan (mis. \"Memasang paket (11/22)\"), dan waktu berjalan. Tahap mengunduh yang tidak punya keluaran ditampilkan sebagai bar bergaris bergerak, jadi terlihat bahwa proses masih hidup; bar menjadi merah bila gagal",
+    "Versi paket yang tersedia ditampilkan ringkas (mis. 8.4.27-1) tanpa akhiran repo"
   ]
 }
