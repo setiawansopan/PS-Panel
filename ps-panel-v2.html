@@ -1683,8 +1683,10 @@ function renderPwAlerts(d){
   let h='';
   for(const a of (d.state.alerts||[]).slice(0,3)) h+=`<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.3);color:var(--danger);font-family:var(--mono);font-size:11px;padding:10px 14px;border-radius:9px;margin-bottom:10px">🚨 ${esc(fmtTs(a.ts))} — ${esc(a.msg)}</div>`;
   if(d.frankenphp.embeddedInUse&&d.frankenphp.warning) h+=`<div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:var(--warn);font-family:var(--mono);font-size:11px;padding:10px 14px;border-radius:9px;margin-bottom:10px">⚠ ${esc(d.frankenphp.warning)}</div>`;
+  if((d.state.alerts||[]).length) h+=`<div style="text-align:right;margin:-4px 0 12px"><button class="btn btn-ghost btn-sm" onclick="pwClearAlerts()">Bersihkan peringatan lama</button></div>`;
   document.getElementById('pw-alerts').innerHTML=h;
 }
+async function pwClearAlerts(){await api('POST','/api/phpworker/alerts/clear');loadPhpWorker();}
 function renderPwStatus(d){
   const sp=d.specs, f=d.frankenphp;
   document.getElementById('pw-specs').textContent=`${sp.cores} core · ${sp.ramMB} MB`;
