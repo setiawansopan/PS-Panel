@@ -113,6 +113,8 @@ Queue worker: unit `ps-queue-<domain>.service` (User=www-data, `artisan queue:wo
 
 ## Health checks and Telegram
 
+(The Telegram form lives on the Settings page, card `#dash-notify`; `loadNotifyForm()` runs at login.)
+
 `healthTick` runs inside the panel process every `PANEL_HEALTH_INTERVAL_MS` (60 s): `NRestarts` of frankenphp and every `php<ver>-fpm` over a 5-minute window (threshold from the notify file, default 3), kernel log lines matching `segfault|invalid opcode` (`journalctl -k`, falls back to `dmesg`), and `server reached pm.max_children` in each FPM unit's journal. The first tick only records a baseline so old events do not alert after a panel restart; the same alert key is rate-limited by `PANEL_ALERT_COOLDOWN_MS` (30 min). Alerts go through `notify()` (Alerts list + autotune log) which also calls `sendTelegram()`. Credentials live in `/root/.pspanel_notify` (mode 600, `PANEL_NOTIFY_FILE`); the API never returns the token. `GET /api/health` feeds the Dashboard card. Test overrides: `PANEL_TELEGRAM_API`, `PANEL_KERNEL_LOG_FILE`, `PANEL_FPM_LOG_FILE`, `PANEL_HEALTH_WINDOW_MS`.
 
 Small self-heals: every Caddyfile write is followed by `frankenphp fmt --overwrite`; the frankenphp unit gets a drop-in with `XDG_CONFIG_HOME=/var/lib/caddy/config` (owned by www-data; `XDG_DATA_HOME` is deliberately untouched); `package.json`'s version is synced with `version.json` at startup and after a self-update.
