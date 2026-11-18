@@ -1,10 +1,8 @@
 {
-  "version": "2.15.0",
-  "released": "2026-10-25",
+  "version": "2.16.0",
+  "released": "2026-11-18",
   "notes": [
-    "Deploy yang dimatikan karena memori habis (kode 137) kini dijelaskan: log dan Deploy History menampilkan penyebab (OOM), RAM dan swap saat itu, serta cara memperbaikinya. Build frontend (npm install dan npm run build) dijalankan sebagai korban pertama OOM killer, sehingga PostgreSQL, PHP-FPM, dan FrankenPHP tidak ikut dimatikan",
-    "Pengecekan awal deploy menambah langkah \"cek memori untuk build\" (peringatan kuning bila RAM + swap kosong di bawah perkiraan kebutuhan build). Opsi baru \"Lewati build frontend\" di Deploy dan Auto Deploy untuk aplikasi yang aset public/build-nya sudah di-commit",
-    "Kartu baru Memori & Swap di halaman PHP Worker: pemakaian RAM dan swap, buat/ubah/hapus swap file (/swapfile) dengan cek ruang disk dan cadangan /etc/fstab, serta pengaturan swappiness. Swap lain di server hanya ditampilkan",
-    "Kesehatan: kernel yang mematikan proses karena RAM habis (OOM) kini muncul di Dashboard dan dikirim sebagai alert Telegram, lengkap dengan nama prosesnya"
+    "Halaman PHP Worker kini dirapikan dengan tab: Status (keamanan, status, kapasitas), Versi PHP (PHP Manager), php.ini (pengaturan dan nilai efektif), Memori & Swap, Riwayat Auto-Tune, dan FrankenPHP (upgrade dan detail). Tab terakhir yang dibuka diingat",
+    "Halaman Deploy dibagi menjadi tab Persiapan (deploy key dan clone), Deploy & Riwayat, dan Auto Deploy. Halaman Mail dibagi menjadi tab SMTP, Uji Kirim, dan Catatan Provider"
   ]
 }

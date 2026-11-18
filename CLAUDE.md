@@ -66,6 +66,8 @@ The password hash and JWT secret are persisted in `/root/.pspanel_auth` (mode 60
 
 Single-page app with no framework or build step. Navigation hides/shows `<div class="page">` sections. Each page loads data from the API on entry via `go(name)`. The dashboard auto-refreshes metrics every 5 seconds and services every 10 seconds via `setInterval`.
 
+Long pages (PHP Worker `pw`, Deploy `dp`, Mail `ml`) are split into tabs: a `<div class="tabs" id="<g>-tabs">` of `.tab[data-tab]` buttons followed by sibling `.tabpane[data-tab]` blocks; `tabGo(g,t)` switches and remembers the tab in `localStorage` (`psp_tab_<g>`, try/catch), `tabRestore(g)` runs from `go()`. Hidden panes stay in the DOM, so every `loadX()`/render function and its element IDs work unchanged.
+
 CSS uses short utility class names (`mc` = metric card, `sr` = status row, `ir` = info row, `ni` = nav item, etc.) defined in the `<style>` block.
 
 ## PHP runtimes (FrankenPHP vs PHP-FPM)
