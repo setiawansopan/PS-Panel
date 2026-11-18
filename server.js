@@ -2974,7 +2974,7 @@ app.post('/api/notify/test', auth, async (req, res) => {
   res.json(await sendTelegram('Tes notifikasi PS Panel: pengiriman berhasil.'));
 });
 
-const HEALTH = { restarts: {}, seen: new Set(), baselined: false, lastAlert: {}, kernel: { at: 0, count24h: 0, samples: [] }, fpmMax: {}, running: false };
+const HEALTH = { restarts: {}, seen: new Set(), baselined: false, lastAlert: {}, kernel: { at: 0, count24h: 0, samples: [], oom24h: 0, oomSamples: [] }, fpmMax: {}, running: false };
 function healthAlert(key, msg) {
   if (Date.now() - (HEALTH.lastAlert[key] || 0) < ALERT_COOLDOWN_MS) return;
   HEALTH.lastAlert[key] = Date.now();
@@ -2984,11 +2984,14 @@ async function readLogLines(args, fileEnv) {
   if (fileEnv && process.env[fileEnv]) { try { return fs.readFileSync(process.env[fileEnv], 'utf8').split('\n'); } catch { return []; } }
   try { return (await execFileAsync('journalctl', args, { timeout: 15000, maxBuffer: 16 * 1024 * 1024 })).stdout.split('\n'); } catch { return []; }
 }
-async function kernelLines() {
+const OOM_RE = /Killed process \d+ \(([^)]+)\)/;   // one line per victim of the kernel's OOM killer
+async function kernelScan() {
   let lines = await readLogLines(['-k', '--since', '24 hours ago', '--no-pager', '-o', 'short-iso'], 'PANEL_KERNEL_LOG_FILE');
   if (!lines.length && !process.env.PANEL_KERNEL_LOG_FILE) { try { lines = (await execFileAsync('dmesg', ['-T'], { timeout: 8000, maxBuffer: 16 * 1024 * 1024 })).stdout.split('\n'); } catch {} }
-  return lines.filter(l => /segfault|invalid opcode/i.test(l));
+  return { segv: lines.filter(l => /segfault|invalid opcode/i.test(l)), oom: lines.filter(l => OOM_RE.test(l)) };
 }
+const kernelLines = async () => (await kernelScan()).segv;
+const kernelSummary = (k, at) => ({ at, count24h: k.segv.length, samples: k.segv.slice(-3), oom24h: k.oom.length, oomSamples: k.oom.slice(-3) });
 async function healthTick() {
   if (HEALTH.running) return; HEALTH.running = true;
   try {
@@ -3003,9 +3006,9 @@ async function healthTick() {
       if (delta >= cfg.restartThreshold) healthAlert('restart:' + u, `${u} restart otomatis ${delta}× dalam ${Math.round(HEALTH_WINDOW_MS / 60000)} menit terakhir (ambang ${cfg.restartThreshold}) — cek: journalctl -u ${u} -n 50`);
     }
     // 2. kernel log: segfault / invalid opcode
-    const kl = await kernelLines();
-    const fresh = kl.filter(l => !HEALTH.seen.has(l));
-    HEALTH.kernel = { at: now, count24h: kl.length, samples: kl.slice(-3) };
+    const ks = await kernelScan(), kl = ks.segv, oomL = ks.oom;
+    const fresh = kl.filter(l => !HEALTH.seen.has(l)), freshOom = oomL.filter(l => !HEALTH.seen.has(l));
+    HEALTH.kernel = kernelSummary(ks, now);
     // 3. PHP-FPM: pool exhausted
     const maxLines = [];
     for (const rt of fpmRuntimes()) {
@@ -3015,9 +3018,10 @@ async function healthTick() {
     const freshMax = maxLines.filter(x => !HEALTH.seen.has(x.l));
     if (HEALTH.baselined) {
       if (fresh.length) healthAlert('kernel', `kernel mencatat ${fresh.length} kejadian segfault/invalid opcode baru: ${fresh.slice(-2).map(l => l.replace(/^\S+\s+\S+\s+/, '').slice(0, 160)).join(' | ')}`);
+      if (freshOom.length) healthAlert('oom', `kernel mematikan ${freshOom.length} proses karena RAM habis (OOM): ${[...new Set(freshOom.map(l => (l.match(OOM_RE) || [])[1]))].join(', ')} — tambah RAM/swap (PHP Worker → Memori & Swap) dan hindari Deploy/build saat ramai`);
       if (freshMax.length) healthAlert('maxchildren', `PHP-FPM ${[...new Set(freshMax.map(x => x.rt.version))].join(', ')} mencatat "server reached pm.max_children" (${freshMax.length}×) — antrean request menumpuk; periksa halaman PHP Worker`);
     }
-    for (const l of [...kl, ...maxLines.map(x => x.l)]) HEALTH.seen.add(l);
+    for (const l of [...kl, ...oomL, ...maxLines.map(x => x.l)]) HEALTH.seen.add(l);
     if (HEALTH.seen.size > 5000) HEALTH.seen = new Set([...HEALTH.seen].slice(-2500));
     HEALTH.baselined = true;
   } catch (e) { console.warn('[health]', e.message); }
@@ -3026,7 +3030,7 @@ async function healthTick() {
 app.get('/api/health', auth, async (req, res) => {
   try {
     if (Date.now() - HEALTH.kernel.at > 2 * HEALTH_INTERVAL_MS) {   // tick not run yet (or stalled): do a read-only scan
-      const kl = await kernelLines(); HEALTH.kernel = { at: Date.now(), count24h: kl.length, samples: kl.slice(-3) };
+      HEALTH.kernel = kernelSummary(await kernelScan(), Date.now());
     }
     let fv = { version: null, php: null };
     try { const o = (await execFileAsync(FRANKENPHP_BIN, ['version'], { timeout: 8000 })).stdout; fv = { version: (o.match(/v?\d+\.\d+\.\d+/) || [])[0] || null, php: (o.match(/PHP (\d+\.\d+\.\d+)/) || [])[1] || null }; } catch {}
@@ -3034,9 +3038,112 @@ app.get('/api/health', auth, async (req, res) => {
     refreshAuto();
     const c = readNotifyCfg();
     res.json({ ok: true, frankenphp: { ...fv, active: await serviceActive('frankenphp'), nrestarts: await nRestarts('frankenphp') }, fpm,
-      kernel: { segfaults24h: HEALTH.kernel.count24h, samples: HEALTH.kernel.samples }, alerts: (AUTO.alerts || []).slice(0, 5),
+      kernel: { segfaults24h: HEALTH.kernel.count24h, samples: HEALTH.kernel.samples, oom24h: HEALTH.kernel.oom24h || 0, oomSamples: HEALTH.kernel.oomSamples || [] }, mem: memInfo(), alerts: (AUTO.alerts || []).slice(0, 5),
       telegram: !!(c.token && c.chatId), restartThreshold: c.restartThreshold });
   } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
+// ── Memory & swap ──
+// An out-of-memory kill during `npm run build` (exit 137) was the first deploy failure with no explanation.
+// This block: readers for RAM/swap, the build-memory estimate used by Deploy, and a small swap manager
+// for the panel's own swap file (SWAPFILE) — other swap devices/files are only shown, never touched.
+const MEMINFO_FILE = process.env.PANEL_MEMINFO_FILE || '/proc/meminfo';
+const PROC_SWAPS = process.env.PANEL_PROC_SWAPS || '/proc/swaps';
+const SWAPPINESS_FILE = process.env.PANEL_SWAPPINESS_FILE || '/proc/sys/vm/swappiness';
+const SWAPFILE = process.env.PANEL_SWAPFILE || '/swapfile';
+const FSTAB = process.env.PANEL_FSTAB || '/etc/fstab';
+const SYSCTL_SWAP = process.env.PANEL_SYSCTL_FILE || '/etc/sysctl.d/99-ps-panel-swap.conf';
+const BUILD_NEED_MB = parseInt(process.env.PANEL_BUILD_NEED_MB, 10) || 1600;   // rough need of a Vite build of a mid-size app
+function memInfo() {
+  const kb = {};
+  try { for (const l of fs.readFileSync(MEMINFO_FILE, 'utf8').split('\n')) { const m = l.match(/^(\w+):\s+(\d+) kB/); if (m) kb[m[1]] = +m[2]; } } catch {}
+  const mb = k => Math.round((kb[k] || 0) / 1024);
+  return { totalMB: mb('MemTotal'), availableMB: mb('MemAvailable') || mb('MemFree'), swapTotalMB: mb('SwapTotal'), swapFreeMB: mb('SwapFree') };
+}
+const oomHint = () => {
+  const m = memInfo();
+  return `Proses dimatikan Linux (kode 137) karena memori habis (OOM). Saat ini RAM tersedia ${m.availableMB} MB dari ${m.totalMB} MB; swap ${m.swapTotalMB ? `${m.swapFreeMB} MB kosong dari ${m.swapTotalMB} MB` : 'belum ada'}. ` +
+    `Perbaikan: tambah swap lewat halaman PHP Worker → Memori & Swap (disarankan 4 GB), atau bangun aset di komputer lain, commit folder public/build, lalu centang "Lewati build frontend". Hindari Deploy saat jam ujian/sibuk.`;
+};
+function buildMemoryCheck() {
+  const m = memInfo(), avail = m.availableMB + m.swapFreeMB;
+  return { ...m, available: avail, need: BUILD_NEED_MB, low: avail < BUILD_NEED_MB };
+}
+function activeSwaps() {
+  const out = [];
+  try { for (const l of fs.readFileSync(PROC_SWAPS, 'utf8').split('\n').slice(1)) { const c = l.trim().split(/\s+/); if (c.length >= 4) out.push({ path: c[0], type: c[1], sizeMB: Math.round(c[2] / 1024), usedMB: Math.round(c[3] / 1024) }); } } catch {}
+  return out;
+}
+const fstabHas = file => { try { return new RegExp(`^\\s*${file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+\\S+\\s+swap\\b`, 'm').test(fs.readFileSync(FSTAB, 'utf8')); } catch { return false; } };
+function fstabEdit(file, add) {
+  let txt = ''; try { txt = fs.readFileSync(FSTAB, 'utf8'); } catch {}
+  const has = fstabHas(file);
+  if (add === has) return false;
+  fs.writeFileSync(`${FSTAB}.bak.${Date.now()}`, txt);
+  const esc = file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  txt = add ? txt + (txt && !txt.endsWith('\n') ? '\n' : '') + `${file} none swap sw 0 0\n` : txt.split('\n').filter(l => !new RegExp(`^\\s*${esc}\\s+\\S+\\s+swap\\b`).test(l)).join('\n');
+  fs.writeFileSync(FSTAB, txt);
+  return true;
+}
+function swapStatus() {
+  const act = activeSwaps(), mine = act.find(a => a.path === SWAPFILE);
+  let exists = false, sizeMB = 0; try { const st = fs.statSync(SWAPFILE); exists = true; sizeMB = Math.round(st.size / 1048576); } catch {}
+  let diskFreeMB = null; try { const sf = fs.statfsSync(path.dirname(SWAPFILE)); diskFreeMB = Math.floor(sf.bavail * sf.bsize / 1048576); } catch {}
+  let swappiness = null; try { swappiness = parseInt(fs.readFileSync(SWAPPINESS_FILE, 'utf8'), 10); } catch {}
+  const mem = memInfo();
+  return { mem, swappiness, diskFreeMB, buildNeedMB: BUILD_NEED_MB, recommendedMB: mem.totalMB <= 8192 ? 4096 : 2048,
+    file: { path: SWAPFILE, exists, sizeMB, active: !!mine, usedMB: mine ? mine.usedMB : 0, inFstab: fstabHas(SWAPFILE) },
+    others: act.filter(a => a.path !== SWAPFILE) };
+}
+app.get('/api/swap', auth, (req, res) => res.json({ ok: true, ...swapStatus() }));
+async function setSwappiness(v) {
+  fs.writeFileSync(SYSCTL_SWAP, `# Managed by PS Panel (halaman PHP Worker → Memori & Swap)\nvm.swappiness = ${v}\n`);
+  try { await execFileAsync('sysctl', ['-w', `vm.swappiness=${v}`], { timeout: 10000 }); } catch (e) { try { fs.writeFileSync(SWAPPINESS_FILE, String(v)); } catch {} }
+}
+app.post('/api/swap/create', auth, async (req, res) => {
+  if (!checkPanelPassword(req, res)) return;
+  const size = parseInt((req.body || {}).sizeMB, 10), sw = (req.body || {}).swappiness;
+  if (!(size >= 256 && size <= 32768)) return res.status(400).json({ ok: false, error: 'ukuran swap harus 256–32768 MB' });
+  if (sw != null && !(Number.isInteger(+sw) && +sw >= 0 && +sw <= 100)) return res.status(400).json({ ok: false, error: 'swappiness harus 0–100' });
+  const st = swapStatus();
+  if (st.diskFreeMB != null && size > st.diskFreeMB - 1024) return res.status(400).json({ ok: false, error: `ruang disk kosong ${st.diskFreeMB} MB tidak cukup untuk swap ${size} MB (disisakan minimal 1024 MB)` });
+  const tmp = SWAPFILE + '.new', steps = [];
+  const sh = async (cmd, args, ms = 120000) => { steps.push(`${cmd} ${args.join(' ')}`); return execFileAsync(cmd, args, { timeout: ms }); };
+  try {
+    try { fs.rmSync(tmp, { force: true }); } catch {}
+    try { await sh('fallocate', ['-l', `${size}M`, tmp]); }
+    catch { await sh('dd', ['if=/dev/zero', `of=${tmp}`, 'bs=1M', `count=${size}`, 'status=none'], 15 * 60e3); }   // filesystems without fallocate support
+    fs.chmodSync(tmp, 0o600);
+    await sh('mkswap', [tmp]);
+    if (st.file.active) await sh('swapoff', [SWAPFILE]);   // fails (and aborts, nothing lost) when RAM cannot take the swapped-out pages back
+    fs.renameSync(tmp, SWAPFILE);
+    await sh('swapon', [SWAPFILE]);
+    fstabEdit(SWAPFILE, true);
+    if (sw != null) await setSwappiness(+sw);
+    autotuneLog(`EVENT swap: ${SWAPFILE} ${size} MB aktif${sw != null ? `, swappiness ${sw}` : ''}`);
+    res.json({ ok: true, ...swapStatus() });
+  } catch (e) {
+    try { fs.rmSync(tmp, { force: true }); } catch {}
+    res.status(500).json({ ok: false, error: String((e.stderr || e.message)).trim().split('\n').slice(-2).join(' | '), steps });
+  }
+});
+app.post('/api/swap/remove', auth, async (req, res) => {
+  if (!checkPanelPassword(req, res)) return;
+  const st = swapStatus();
+  if (!st.file.exists && !st.file.active) return res.status(400).json({ ok: false, error: `${SWAPFILE} tidak ada` });
+  try {
+    if (st.file.active) await execFileAsync('swapoff', [SWAPFILE], { timeout: 10 * 60e3 });
+    fs.rmSync(SWAPFILE, { force: true });
+    fstabEdit(SWAPFILE, false);
+    autotuneLog(`EVENT swap: ${SWAPFILE} dihapus`);
+    res.json({ ok: true, ...swapStatus() });
+  } catch (e) { res.status(500).json({ ok: false, error: String((e.stderr || e.message)).trim().split('\n').slice(-2).join(' | ') }); }
+});
+app.post('/api/swap/swappiness', auth, async (req, res) => {
+  if (!checkPanelPassword(req, res)) return;
+  const v = parseInt((req.body || {}).value, 10);
+  if (!(v >= 0 && v <= 100)) return res.status(400).json({ ok: false, error: 'swappiness harus 0–100' });
+  try { await setSwappiness(v); res.json({ ok: true, ...swapStatus() }); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // ── Webhooks (Auto Deploy) ──
@@ -3155,8 +3262,11 @@ async function runDeploySteps(hook) {
   async function run(cmd, args, opts = {}) {
     const label = `${cmd} ${args.join(' ')}`;
     log(`\n$ ${label}\n`);
+    // A frontend build is the biggest memory user of a deploy: make IT the OOM killer's first victim
+    // (oom_score_adj 1000, inherited by the node children) so PostgreSQL/PHP-FPM/FrankenPHP survive.
+    const [exe, exeArgs] = opts.oomVictim ? ['sh', ['-c', 'echo 1000 > /proc/self/oom_score_adj 2>/dev/null; exec "$0" "$@"', cmd, ...args]] : [cmd, args];
     try {
-      const { stdout, stderr } = await execFileAsync(cmd, args, {
+      const { stdout, stderr } = await execFileAsync(exe, exeArgs, {
         cwd: opts.cwd || appPath,
         timeout: opts.timeout || 300000,
         env: opts.env || process.env,
@@ -3172,8 +3282,10 @@ async function runDeploySteps(hook) {
       if (e.code === 'ENOENT') log(`\n[ERROR] Command "${cmd}" not found. Please ensure it's installed and in PATH.\n`);
       else if (e.code) log(`\n[ERROR] Exit code: ${e.code}\n`);
       if (e.message && !e.stderr) log(`[ERROR] ${e.message}\n`);
+      let hint = '';
+      if (e.code === 137 || e.signal === 'SIGKILL' || /(^|\n)Killed\s*(\n|$)/.test(errOutput)) { hint = `\n\n💡 ${oomHint()}`; log(`\n[PENYEBAB] ${oomHint()}\n`); }
       log('\n[FAILED]\n');
-      steps.push({ cmd: label, ok: false, output: errOutput || e.message || 'failed' });
+      steps.push({ cmd: label, ok: false, output: (errOutput || e.message || 'failed') + hint });
       return false;
     }
   }
@@ -3186,6 +3298,13 @@ async function runDeploySteps(hook) {
       log(`\n[CEK sebelum deploy]\n${pf.text}\n`);
       steps.push({ cmd: 'cek .env & storage (sebelum deploy)', ok: true, warn: pf.warnings.length > 0, output: pf.text });
     } catch (e) { log(`\n[WARN] cek .env/storage gagal: ${e.message}\n`); }
+    if (hasFrontendBuild(appPath) && !hook.skipBuild) {
+      const bm = buildMemoryCheck();
+      const text = `memori tersedia: RAM ${bm.availableMB} MB + swap kosong ${bm.swapFreeMB} MB = ${bm.available} MB (perkiraan kebutuhan build ±${bm.need} MB)` +
+        (bm.low ? `\n⚠ Memori kurang untuk build: proses bisa dimatikan Linux (kode 137). Tambah swap di halaman PHP Worker → Memori & Swap, atau centang "Lewati build frontend" bila public/build sudah di-commit.` : '');
+      log(`\n[CEK memori untuk build]\n${text}\n`);
+      steps.push({ cmd: 'cek memori untuk build', ok: true, warn: bm.low, output: text });
+    }
   }
 
   // Uncommitted changes on the server (a manual hotfix, or package-lock.json
@@ -3277,16 +3396,22 @@ async function runDeploySteps(hook) {
     // build time and Node's resolver doesn't fall back to IPv4 as readily as
     // curl does, hanging the build); force IPv4 resolution as a safety net.
     // npm can be much slower than other steps here, hence the longer timeout.
-    if (hasFrontendBuild(appPath)) {
+    if (hook.skipBuild && hasFrontendBuild(appPath)) {
+      // The assets are built elsewhere and committed (public/build): nothing is installed or built on the server.
+      const ok = fs.existsSync(path.join(appPath, 'public/build/manifest.json'));
+      const text = ok ? 'public/build/manifest.json ada (aset dari repository)' : '⚠ public/build/manifest.json tidak ada: halaman akan error "Vite manifest not found" sampai folder public/build di-commit ke repository.';
+      log(`\n[SETUP] build frontend dilewati (opsi "Lewati build frontend"). ${text}\n`);
+      steps.push({ cmd: 'build frontend dilewati (opsi)', ok: true, warn: !ok, output: text });
+    } else if (hasFrontendBuild(appPath)) {
       const buildEnv = { ...process.env, NODE_OPTIONS: '--dns-result-order=ipv4first' };
-      if (!await run('npm', ['install'], { env: buildEnv, timeout: 600000 }))
+      if (!await run('npm', ['install'], { env: buildEnv, timeout: 600000, oomVictim: true }))
         return { ok: false, output: outParts.join(''), steps };
       if (canStageViteBuild(appPath)) {
-        if (!await run('npm', ['run', 'build', '--', '--outDir', 'public/build-next'], { env: buildEnv, timeout: 600000 }))
+        if (!await run('npm', ['run', 'build', '--', '--outDir', 'public/build-next'], { env: buildEnv, timeout: 600000, oomVictim: true }))
           return { ok: false, output: outParts.join(''), steps };
         if (!await run('sh', ['-c', VITE_BUILD_SWAP_SH]))
           return { ok: false, output: outParts.join(''), steps };
-      } else if (!await run('npm', ['run', 'build'], { env: buildEnv, timeout: 600000 })) {
+      } else if (!await run('npm', ['run', 'build'], { env: buildEnv, timeout: 600000, oomVictim: true })) {
         return { ok: false, output: outParts.join(''), steps };
       }
       if (!fs.existsSync(path.join(appPath, 'public/build/manifest.json'))) {
@@ -3378,7 +3503,7 @@ async function deployAndRecord(hook, trigger) {
 }
 app.get('/api/webhooks', auth, (req, res) => res.json(loadWebhooks().map(h => ({...h, secret: undefined}))));
 app.post('/api/webhooks', auth, (req, res) => {
-  const { path: p, branch, laravel } = req.body;
+  const { path: p, branch, laravel, skipBuild } = req.body;
   if (!p || !path.isAbsolute(p)) return res.status(400).json({ error:'Absolute path required' });
   // Catch the most common setup mistake up front: pointing this at the app's
   // `public/` docroot (what the *vhost* should use) instead of the project
@@ -3395,7 +3520,7 @@ app.post('/api/webhooks', auth, (req, res) => {
   const hooks = loadWebhooks();
   const id     = crypto.randomBytes(8).toString('hex');
   const secret = crypto.randomBytes(20).toString('hex');
-  hooks.push({ id, path:p, branch:branch||'main', laravel:!!laravel, secret });
+  hooks.push({ id, path:p, branch:branch||'main', laravel:!!laravel, skipBuild:!!skipBuild, secret });
   saveWebhooks(hooks);
   res.json({ ok:true, id, secret });
 });
@@ -3545,7 +3670,7 @@ app.post('/api/clone', auth, (req, res) => {
 
 // ── Deploy ──
 app.post('/api/deploy', auth, async (req,res)=>{
-  let {path:p,branch,laravel}=req.body;
+  let {path:p,branch,laravel,skipBuild}=req.body;
   if(!p||!path.isAbsolute(p)) return res.status(400).json({error:'Absolute path required'});
   // The Deploy page's vhost dropdown sends the vhost docroot, which for a
   // Laravel app is `<project>/public` — but git/composer/npm/artisan must run
@@ -3554,7 +3679,7 @@ app.post('/api/deploy', auth, async (req,res)=>{
       && path.basename(p) === 'public' && fs.existsSync(path.join(p, '..', 'composer.json'))) {
     p = path.dirname(p);
   }
-  const result = await deployAndRecord({ path:p, branch, laravel }, 'manual');
+  const result = await deployAndRecord({ path:p, branch, laravel, skipBuild: !!skipBuild }, 'manual');
   res.json(result);
 });
 
