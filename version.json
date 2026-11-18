@@ -1,7 +1,7 @@
 {
-  "version": "2.16.1",
+  "version": "2.16.2",
   "released": "2026-11-18",
   "notes": [
-    "Pengaturan Notifikasi Telegram dipindahkan dari Dashboard ke halaman Settings agar Dashboard lebih ringkas"
+    "Halaman Services dirombak: kartu dengan aksen warna sesuai status, ikon berlatar, nama unit systemd, tombol berlabel (Start, Restart, Stop) yang hanya aktif bila relevan, ringkasan \"n dari n service berjalan\", dan konfirmasi sebelum Stop/Restart"
   ]
 }

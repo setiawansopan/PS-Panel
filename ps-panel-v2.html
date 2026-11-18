@@ -136,17 +136,27 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .stat-val.info{color:var(--info)}
 
 /* ── SERVICE CARD ── */
-.svc-card{background:var(--ink2);border:1px solid var(--line);border-radius:14px;padding:18px;transition:border-color .2s,transform .15s}
-.svc-card:hover{border-color:var(--line2);transform:translateY(-2px)}
-.svc-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
-.svc-em{font-size:26px;line-height:1}
-.svc-nm{font-size:14px;font-weight:700;margin-top:8px}
+.svc-sum{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.svc-sum b{color:var(--text)}
+.svc-sum .pill{font-size:11px}
+.svc-card{--c:var(--muted);position:relative;overflow:hidden;background:linear-gradient(160deg,color-mix(in srgb,var(--c) 7%,var(--ink2)),var(--ink2) 55%);border:1px solid var(--line);border-radius:14px;padding:18px 18px 16px;transition:border-color .2s,transform .15s,box-shadow .2s}
+.svc-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--c)}
+.svc-card.on{--c:var(--accent)}.svc-card.off{--c:var(--danger)}
+.svc-card:hover{border-color:color-mix(in srgb,var(--c) 40%,var(--line));transform:translateY(-2px);box-shadow:0 8px 24px -12px color-mix(in srgb,var(--c) 45%,transparent)}
+.svc-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.svc-id{display:flex;align-items:center;gap:12px;min-width:0}
+.svc-em{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;background:color-mix(in srgb,var(--c) 14%,var(--ink3));border:1px solid color-mix(in srgb,var(--c) 25%,var(--line));flex-shrink:0}
+.svc-nm{font-size:15px;font-weight:700}
 .svc-ky{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px}
-.svc-acts{display:flex;gap:6px;margin-top:12px}
-.bsv{flex:1;padding:7px 0;background:var(--ink3);border:1px solid var(--line);border-radius:8px;color:var(--muted);font-family:var(--font);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s}
-.bsv:hover{background:var(--ink4);color:var(--text);border-color:var(--line2)}
-.bsv.s:hover{color:var(--accent);border-color:rgba(110,231,183,.3)}
-.bsv.x:hover{color:var(--danger);border-color:rgba(248,113,113,.3)}
+.svc-meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px}
+.svc-chip{font-family:var(--mono);font-size:10px;color:var(--muted);background:var(--ink3);border:1px solid var(--line);border-radius:6px;padding:2px 8px}
+.svc-acts{display:flex;gap:8px;margin-top:14px}
+.bsv{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 0;background:var(--ink3);border:1px solid var(--line);border-radius:9px;color:var(--text);font-family:var(--font);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
+.bsv:hover:not(:disabled){background:var(--ink4);border-color:var(--line2)}
+.bsv.s:hover:not(:disabled){color:var(--accent);border-color:rgba(110,231,183,.4)}
+.bsv.x:hover:not(:disabled){color:var(--danger);border-color:rgba(248,113,113,.4)}
+.bsv:disabled{opacity:.4;cursor:not-allowed}
+.svc-note{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:14px}
 
 /* ── TABLE ── */
 .tbl-w{overflow:hidden}
@@ -744,6 +754,7 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
     <!-- ── SERVICES ── -->
     <div class="page" id="page-services">
       <div class="ph"><h1>Services</h1><p>// start · stop · restart</p></div>
+      <div class="svc-sum" id="svc-sum"></div>
       <div class="g2" id="svc-grid"><div style="color:var(--muted)">Loading...</div></div>
     </div>
 
@@ -2335,22 +2346,31 @@ async function loadFrankenphp(){
 async function loadServices(){
   const d=await api('GET','/api/services');
   if(!d)return;
-  document.getElementById('svc-grid').innerHTML=Object.entries(d).map(([k,s])=>{
-    const m=SVC_META[k]||{};
-    return `<div class="svc-card">
-      <div class="svc-top"><span style="font-size:26px">${m.em||'⚙️'}</span>
-        <span class="pill ${s.status==='active'?'p-on':s.status==='unknown'?'p-unk':'p-off'}"><span class="pd"></span>${s.status==='active'?'running':s.status==='unknown'?'n/a':'stopped'}</span>
+  const ents=Object.entries(d), svc=ents.filter(([,x])=>x.unit), run=svc.filter(([,x])=>x.status==='active').length;
+  const cards=ents.map(([k,x])=>{
+    const m=SVC_META[k]||{}, act=x.status==='active', unk=!x.unit;
+    const cls=unk?'':act?'on':'off';
+    return `<div class="svc-card ${cls}">
+      <div class="svc-top">
+        <div class="svc-id"><span class="svc-em">${m.em||'⚙️'}</span><div><div class="svc-nm">${esc(x.name)}</div><div class="svc-ky">${esc(m.key||'')}</div></div></div>
+        <span class="pill ${act?'p-on':unk?'p-unk':'p-off'}"><span class="pd"></span>${act?'running':unk?'n/a':'stopped'}</span>
       </div>
-      <div class="svc-nm">${s.name}</div><div class="svc-ky">${m.key||''}</div>
+      ${unk?'<div class="svc-note">Runtime, bukan service systemd — tidak ada tombol kontrol.</div>':`
+      <div class="svc-meta"><span class="svc-chip">${esc(x.unit)}.service</span></div>
       <div class="svc-acts">
-        <button class="bsv s" onclick="svcAct('${k}','start')">▶</button>
-        <button class="bsv" onclick="svcAct('${k}','restart')">↺</button>
-        <button class="bsv x" onclick="svcAct('${k}','stop')">■</button>
-      </div>
+        <button class="bsv s" ${act?'disabled':''} onclick="svcAct('${k}','start')">▶ Start</button>
+        <button class="bsv" ${act?'':'disabled'} onclick="svcAct('${k}','restart')">↺ Restart</button>
+        <button class="bsv x" ${act?'':'disabled'} onclick="svcAct('${k}','stop')">■ Stop</button>
+      </div>`}
     </div>`;
   }).join('');
+  document.getElementById('svc-grid').innerHTML=cards;
+  const sum=document.getElementById('svc-sum');
+  if(sum) sum.innerHTML=`<span class="pill ${run===svc.length?'p-on':'p-off'}"><span class="pd"></span>${run===svc.length?'semua normal':'perlu perhatian'}</span><span><b>${run}</b> dari <b>${svc.length}</b> service berjalan</span>`;
 }
-async function svcAct(name,action){await api('POST',`/api/services/${name}/${action}`);loadServices();loadDashSvc();}
+async function svcAct(name,action){
+  if(action!=='start'&&!confirm((action==='stop'?'Hentikan ':'Restart ')+((SVC_META[name]||{}).name||name)+'? Situs/aplikasi yang memakainya akan terputus sesaat. Hindari saat jam ujian.'))return;
+  await api('POST',`/api/services/${name}/${action}`);loadServices();loadDashSvc();}
 
 // ── Virtual Hosts ──
 // ── PHP runtime (FrankenPHP embedded vs PHP-FPM) ──
