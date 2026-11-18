@@ -84,6 +84,11 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .g2l{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-bottom:18px}
 
 /* ── CARDS ── */
+.tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:16px;overflow-x:auto}
+.tab{background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);font:600 13px var(--font);padding:9px 14px;cursor:pointer;white-space:nowrap;margin-bottom:-1px}
+.tab:hover{color:var(--text,inherit)}
+.tab.on{color:var(--accent,#4fd1c5);border-bottom-color:var(--accent,#4fd1c5)}
+.tabpane{display:none}.tabpane.on{display:block}
 .card{background:var(--ink2);border:1px solid var(--line);border-radius:14px;padding:18px}
 .card-sm{background:var(--ink2);border:1px solid var(--line);border-radius:14px;padding:14px}
 .ct{font-size:12px;font-weight:700;letter-spacing:-.1px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
@@ -574,12 +579,33 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       <div class="ph"><h1>PHP Worker</h1><p>// runtime PHP · kapasitas worker otomatis · php.ini</p></div>
 
       <div id="pw-alerts"></div>
+      <div class="tabs" id="pw-tabs">
+        <button class="tab on" data-tab="status" onclick="tabGo('pw','status')">Status</button>
+        <button class="tab" data-tab="php" onclick="tabGo('pw','php')">Versi PHP</button>
+        <button class="tab" data-tab="config" onclick="tabGo('pw','config')">php.ini</button>
+        <button class="tab" data-tab="mem" onclick="tabGo('pw','mem')">Memori &amp; Swap</button>
+        <button class="tab" data-tab="hist" onclick="tabGo('pw','hist')">Riwayat</button>
+        <button class="tab" data-tab="fp" onclick="tabGo('pw','fp')">FrankenPHP</button>
+      </div>
 
+      <div class="tabpane on" data-tab="status">
       <div class="card" style="margin-bottom:14px">
         <div class="ct">Keamanan PHP <span class="ct-badge">PHP2Shell · CVE-2026-109618/109619</span></div>
         <div id="pw-security" style="font-family:var(--mono);font-size:12px;line-height:1.8"><span style="color:var(--muted)">Loading...</span></div>
       </div>
 
+      <div class="card" style="margin-bottom:14px">
+        <div class="ct">1 · Status <span class="ct-badge" id="pw-specs">—</span></div>
+        <div id="pw-status" style="font-family:var(--mono);font-size:12px;line-height:1.8"><span style="color:var(--muted)">Loading...</span></div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <div class="ct">2 · Kapasitas Worker <span class="ct-badge">otomatis</span></div>
+        <div id="pw-capacity" style="font-family:var(--mono);font-size:12px;line-height:1.8"><span style="color:var(--muted)">Loading...</span></div>
+      </div>
+
+      </div>
+      <div class="tabpane" data-tab="php">
       <div class="card" style="margin-bottom:14px" id="pm-card">
         <div class="ct"><span>PHP Manager</span><span class="ct-badge">pasang / hapus versi PHP</span></div>
         <div id="pm-warn"></div>
@@ -596,37 +622,8 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         <pre id="pm-log" style="display:none;white-space:pre-wrap;font-family:var(--mono);font-size:10px;color:var(--muted);background:var(--ink);border-radius:6px;padding:8px;margin-top:6px;max-height:260px;overflow:auto"></pre>
       </div>
 
-      <div class="card" style="margin-bottom:14px" id="sw-card">
-        <div class="ct"><span>Memori &amp; Swap</span><span class="ct-badge">cegah proses dimatikan saat RAM habis</span></div>
-        <div id="sw-body" style="font-family:var(--mono);font-size:11px;line-height:1.8"><span style="color:var(--muted)">Loading...</span></div>
-        <div class="frow" style="margin-top:12px;align-items:flex-start">
-          <div class="fg"><label class="inp-lbl" for="sw-size">Ukuran swap file</label><select class="inp" id="sw-size"><option value="1024">1 GB</option><option value="2048">2 GB</option><option value="4096" selected>4 GB</option><option value="8192">8 GB</option></select></div>
-          <div class="fg"><label class="inp-lbl" for="sw-swp">Swappiness</label><input class="inp" type="number" min="0" max="100" id="sw-swp" value="10"><div class="fhint">10 = swap dipakai hanya bila kepepet</div></div>
-          <div class="fg"><label class="inp-lbl" for="sw-pw">Password panel</label><input class="inp" type="password" id="sw-pw" placeholder="••••••••" autocomplete="current-password"></div>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center">
-          <button class="btn" onclick="swAct('create')" id="sw-btn-create">Buat / ubah swap</button>
-          <button class="btn btn-ghost" onclick="swAct('swappiness')">Terapkan swappiness</button>
-          <button class="btn btn-red" onclick="swAct('remove')" id="sw-btn-remove" style="display:none">Hapus swap</button>
-          <span id="sw-msg" style="font-family:var(--mono);font-size:11px"></span>
-        </div>
       </div>
-
-      <div class="card" style="margin-bottom:14px">
-        <div class="ct">1 · Status <span class="ct-badge" id="pw-specs">—</span></div>
-        <div id="pw-status" style="font-family:var(--mono);font-size:12px;line-height:1.8"><span style="color:var(--muted)">Loading...</span></div>
-      </div>
-
-      <div class="card" style="margin-bottom:14px">
-        <div class="ct">2 · Kapasitas Worker <span class="ct-badge">otomatis</span></div>
-        <div id="pw-capacity" style="font-family:var(--mono);font-size:12px;line-height:1.8"><span style="color:var(--muted)">Loading...</span></div>
-      </div>
-
-      <div class="card" style="margin-bottom:14px">
-        <div class="ct">3 · Riwayat Auto-Tune <span class="ct-badge" id="pw-histcount"></span></div>
-        <div id="pw-history" style="font-family:var(--mono);font-size:11px;line-height:1.7;max-height:320px;overflow-y:auto"><span style="color:var(--muted)">Loading...</span></div>
-      </div>
-
+      <div class="tabpane" data-tab="config">
       <div class="card" style="margin-bottom:14px">
         <div class="ct">4 · php.ini <span class="ct-badge" id="st-php-path">php.ini</span></div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:12px;flex-wrap:wrap">
@@ -686,6 +683,33 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         <div id="st-eff-body" style="font-family:var(--mono);font-size:12px;line-height:1.8"></div>
       </div>
 
+      </div>
+      <div class="tabpane" data-tab="mem">
+      <div class="card" style="margin-bottom:14px" id="sw-card">
+        <div class="ct"><span>Memori &amp; Swap</span><span class="ct-badge">cegah proses dimatikan saat RAM habis</span></div>
+        <div id="sw-body" style="font-family:var(--mono);font-size:11px;line-height:1.8"><span style="color:var(--muted)">Loading...</span></div>
+        <div class="frow" style="margin-top:12px;align-items:flex-start">
+          <div class="fg"><label class="inp-lbl" for="sw-size">Ukuran swap file</label><select class="inp" id="sw-size"><option value="1024">1 GB</option><option value="2048">2 GB</option><option value="4096" selected>4 GB</option><option value="8192">8 GB</option></select></div>
+          <div class="fg"><label class="inp-lbl" for="sw-swp">Swappiness</label><input class="inp" type="number" min="0" max="100" id="sw-swp" value="10"><div class="fhint">10 = swap dipakai hanya bila kepepet</div></div>
+          <div class="fg"><label class="inp-lbl" for="sw-pw">Password panel</label><input class="inp" type="password" id="sw-pw" placeholder="••••••••" autocomplete="current-password"></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center">
+          <button class="btn" onclick="swAct('create')" id="sw-btn-create">Buat / ubah swap</button>
+          <button class="btn btn-ghost" onclick="swAct('swappiness')">Terapkan swappiness</button>
+          <button class="btn btn-red" onclick="swAct('remove')" id="sw-btn-remove" style="display:none">Hapus swap</button>
+          <span id="sw-msg" style="font-family:var(--mono);font-size:11px"></span>
+        </div>
+      </div>
+
+      </div>
+      <div class="tabpane" data-tab="hist">
+      <div class="card" style="margin-bottom:14px">
+        <div class="ct">3 · Riwayat Auto-Tune <span class="ct-badge" id="pw-histcount"></span></div>
+        <div id="pw-history" style="font-family:var(--mono);font-size:11px;line-height:1.7;max-height:320px;overflow-y:auto"><span style="color:var(--muted)">Loading...</span></div>
+      </div>
+
+      </div>
+      <div class="tabpane" data-tab="fp">
       <div class="card" style="margin-bottom:14px">
         <div class="ct">6 · Upgrade FrankenPHP <span class="ct-badge" id="fpu-ver">—</span></div>
         <div id="fpu-body" style="font-family:var(--mono);font-size:12px;line-height:1.8"><span style="color:var(--muted)">Loading...</span></div>
@@ -751,6 +775,8 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       <div class="card">
         <div class="ct">Recent Logs <span class="ct-badge" id="fpx-logcount"></span></div>
         <div id="fpx-logs" style="background:#060a10;border:1px solid var(--line);border-radius:10px;padding:14px 16px;font-family:var(--mono);font-size:10px;color:var(--accent);line-height:1.85;max-height:240px;overflow-y:auto;white-space:pre-wrap">—</div>
+      </div>
+
       </div>
     </div>
 
@@ -835,6 +861,13 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
     <div class="page" id="page-mail">
       <div class="ph"><h1>Mail / SMTP</h1><p>// outgoing email — reset password, OTP, notifikasi</p></div>
 
+      <div class="tabs" id="ml-tabs">
+        <button class="tab on" data-tab="smtp" onclick="tabGo('ml','smtp')">SMTP</button>
+        <button class="tab" data-tab="test" onclick="tabGo('ml','test')">Uji Kirim</button>
+        <button class="tab" data-tab="note" onclick="tabGo('ml','note')">Catatan Provider</button>
+      </div>
+
+      <div class="tabpane on" data-tab="smtp">
       <!-- SMTP config -->
       <div class="card" style="max-width:1040px;margin-bottom:18px">
         <div class="ct">SMTP Configuration</div>
@@ -893,6 +926,8 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         <button class="btn" id="mail-save-btn" onclick="saveMailConfig()">💾 &nbsp;Save to .env</button>
       </div>
 
+      </div>
+      <div class="tabpane" data-tab="test">
       <!-- Test email -->
       <div class="card" style="max-width:1040px">
         <div class="ct">Send Test Email</div>
@@ -908,6 +943,8 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         <div class="term" id="mail-test-out"></div>
       </div>
 
+      </div>
+      <div class="tabpane" data-tab="note">
       <!-- Provider notes -->
       <div class="card" style="max-width:1040px;margin-top:18px">
         <div class="ct">Catatan Provider</div>
@@ -919,12 +956,21 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
           • Setelah Save, jalankan <code style="color:var(--warn)">php artisan config:clear</code> (atau Clear Cache di ENV editor) agar config baru kepakai.
         </div>
       </div>
+
+      </div>
     </div>
 
     <!-- ── DEPLOY ── -->
     <div class="page" id="page-deploy">
       <div class="ph"><h1>Deploy</h1><p>// git pull to application directory</p></div>
 
+      <div class="tabs" id="dp-tabs">
+        <button class="tab on" data-tab="prep" onclick="tabGo('dp','prep')">Persiapan</button>
+        <button class="tab" data-tab="run" onclick="tabGo('dp','run')">Deploy &amp; Riwayat</button>
+        <button class="tab" data-tab="auto" onclick="tabGo('dp','auto')">Auto Deploy</button>
+      </div>
+
+      <div class="tabpane on" data-tab="prep">
       <!-- Step 1: Private Repository / SSH Deploy Key -->
       <div class="card" style="max-width:1040px;margin-bottom:18px">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
@@ -985,6 +1031,8 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         <div class="term" id="clone-out"></div>
       </div>
 
+      </div>
+      <div class="tabpane" data-tab="run">
       <!-- Step 3: Deploy -->
       <div class="card" style="max-width:1040px;margin-bottom:18px">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
@@ -1023,6 +1071,18 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         <div class="term" id="dep-out"></div>
       </div>
 
+      <!-- Deploy History -->
+      <div class="card" style="max-width:1040px;margin-top:18px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <h3 style="margin:0;font-size:16px;font-weight:700">Deploy History</h3>
+          <span class="ct-badge">Last 50</span>
+          <button class="btn btn-ghost" style="padding:5px 13px;font-size:11px;margin-left:auto" onclick="loadDeployHistory()">↻ Refresh</button>
+        </div>
+        <div id="deploy-history-list"><div style="color:var(--muted);font-size:12px;font-family:var(--mono);padding:12px;background:var(--ink3);border-radius:9px">No deploys recorded yet.</div></div>
+      </div>
+
+      </div>
+      <div class="tabpane" data-tab="auto">
       <!-- Step 4: Auto Deploy / Webhook -->
       <div class="card" style="max-width:1040px">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
@@ -1037,14 +1097,6 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         <div id="webhook-list"><div style="color:var(--muted);font-size:12px;font-family:var(--mono);padding:12px;background:var(--ink3);border-radius:9px">Belum ada webhook. Klik + Add untuk setup auto deploy.</div></div>
       </div>
 
-      <!-- Deploy History -->
-      <div class="card" style="max-width:1040px;margin-top:18px">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-          <h3 style="margin:0;font-size:16px;font-weight:700">Deploy History</h3>
-          <span class="ct-badge">Last 50</span>
-          <button class="btn btn-ghost" style="padding:5px 13px;font-size:11px;margin-left:auto" onclick="loadDeployHistory()">↻ Refresh</button>
-        </div>
-        <div id="deploy-history-list"><div style="color:var(--muted);font-size:12px;font-family:var(--mono);padding:12px;background:var(--ink3);border-radius:9px">No deploys recorded yet.</div></div>
       </div>
     </div>
 
@@ -1817,6 +1869,18 @@ async function changePassword(){
   else show('// '+((d&&d.error)||'gagal mengganti password'));
 }
 
+function tabGo(g,t){
+  const bar=document.getElementById(g+'-tabs'); if(!bar) return;
+  const box=bar.parentElement;
+  bar.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));
+  box.querySelectorAll(':scope > .tabpane').forEach(p=>p.classList.toggle('on',p.dataset.tab===t));
+  try{localStorage.setItem('psp_tab_'+g,t);}catch(e){}
+}
+function tabRestore(g){
+  let t=null; try{t=localStorage.getItem('psp_tab_'+g);}catch(e){}
+  const bar=document.getElementById(g+'-tabs');
+  if(t&&bar&&bar.querySelector('.tab[data-tab="'+t+'"]')) tabGo(g,t);
+}
 function go(name){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
   document.querySelectorAll('.ni').forEach(n=>n.classList.remove('on'));
@@ -1825,11 +1889,11 @@ function go(name){
   if(name==='services')  loadServices();
   if(name==='vhosts')    loadVhosts();
   if(name==='files')     loadFiles(_fmPath);
-  if(name==='mail')      loadMailVhosts();
+  if(name==='mail')      {tabRestore('ml');loadMailVhosts();}
   if(name==='redis')     loadRedis();
   if(name==='postgres')  {loadPostgres();loadPgAutotune();}
-  if(name==='frankenphp') {loadFrankenphp();loadPhpWorker();loadSettings();}
-  if(name==='deploy'){loadWebhookList();loadDeployVhosts();loadDeployHistory();}
+  if(name==='frankenphp') {tabRestore('pw');loadFrankenphp();loadPhpWorker();loadSettings();}
+  if(name==='deploy'){tabRestore('dp');loadWebhookList();loadDeployVhosts();loadDeployHistory();}
 
   if(name==='update')    checkUpdate();
   if(name==='settings')  loadAccount();
