@@ -1,8 +1,7 @@
 {
-  "version": "2.16.0",
+  "version": "2.16.1",
   "released": "2026-11-18",
   "notes": [
-    "Halaman PHP Worker kini dirapikan dengan tab: Status (keamanan, status, kapasitas), Versi PHP (PHP Manager), php.ini (pengaturan dan nilai efektif), Memori & Swap, Riwayat Auto-Tune, dan FrankenPHP (upgrade dan detail). Tab terakhir yang dibuka diingat",
-    "Halaman Deploy dibagi menjadi tab Persiapan (deploy key dan clone), Deploy & Riwayat, dan Auto Deploy. Halaman Mail dibagi menjadi tab SMTP, Uji Kirim, dan Catatan Provider"
+    "Pengaturan Notifikasi Telegram dipindahkan dari Dashboard ke halaman Settings agar Dashboard lebih ringkas"
   ]
 }

@@ -343,45 +343,6 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
         <div id="dh-body" style="font-family:var(--mono);font-size:11px;line-height:1.9"></div>
       </div>
 
-      <div class="card" id="dash-notify" style="margin-bottom:14px">
-        <div class="ct"><span>Notifikasi Telegram</span><span id="dh-tgstate" class="pill p-unk">memuat…</span></div>
-        <div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.7;margin-bottom:14px">Kirim peringatan ke Telegram saat service restart berulang, kernel mencatat segfault, PHP-FPM kehabisan worker, RAM tidak cukup, atau Linux mematikan proses karena memori habis (OOM).</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:0 16px">
-          <div class="fg" style="grid-column:1/-1">
-            <label class="inp-lbl" for="tg-token">Bot token</label>
-            <div style="position:relative">
-              <input class="inp" type="password" id="tg-token" placeholder="123456789:AAH…" autocomplete="off" spellcheck="false" style="padding-right:64px">
-              <button type="button" class="btn btn-ghost" id="tg-eye" onclick="tgToggle()" style="position:absolute;right:5px;top:50%;transform:translateY(-50%);padding:4px 10px;font-size:10px">Lihat</button>
-            </div>
-          </div>
-          <div class="fg">
-            <label class="inp-lbl" for="tg-chat">Chat ID</label>
-            <input class="inp" id="tg-chat" placeholder="-1001234567890" autocomplete="off" spellcheck="false">
-          </div>
-          <div class="fg">
-            <label class="inp-lbl" for="tg-thr">Ambang restart <span style="text-transform:none;letter-spacing:0;color:var(--dim)">(kali dalam 5 menit)</span></label>
-            <input class="inp" type="number" id="tg-thr" min="1" max="100" placeholder="3">
-          </div>
-          <div class="fg">
-            <label class="inp-lbl" for="tg-pw">Password panel <span style="text-transform:none;letter-spacing:0;color:var(--dim)">(untuk menyimpan)</span></label>
-            <input class="inp" type="password" id="tg-pw" autocomplete="current-password" placeholder="••••••••">
-          </div>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <button class="btn" onclick="saveNotify()">Simpan</button>
-          <button class="btn btn-ghost" onclick="testNotify()">Kirim pesan tes</button>
-          <span id="tg-msg" style="font-family:var(--mono);font-size:11px"></span>
-        </div>
-        <details style="margin-top:14px">
-          <summary style="cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--dim)">Cara mendapatkan bot token dan chat ID</summary>
-          <ol style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.9;margin:8px 0 0 18px">
-            <li>Di Telegram, chat <b>@BotFather</b> → <code>/newbot</code> → salin <b>token</b> yang diberikan.</li>
-            <li>Kirim pesan apa saja ke bot Anda (atau tambahkan bot ke grup).</li>
-            <li>Buka <code>https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code> di browser, cari <code>"chat":{"id":…}</code>. Itulah <b>chat ID</b> (grup biasanya diawali minus).</li>
-            <li>Isi di atas, simpan, lalu klik <b>Kirim pesan tes</b>.</li>
-          </ol>
-        </details>
-      </div>
       <div class="g4">
         <div class="mc" style="--c:var(--accent2)">
           <div class="mc-lbl">CPU</div>
@@ -1163,6 +1124,46 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
             </div>
           </div>
         </div>
+      </div>
+
+      <div class="card" id="dash-notify" style="max-width:1040px;margin-top:14px">
+        <div class="ct"><span>Notifikasi Telegram</span><span id="dh-tgstate" class="pill p-unk">memuat…</span></div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.7;margin-bottom:14px">Kirim peringatan ke Telegram saat service restart berulang, kernel mencatat segfault, PHP-FPM kehabisan worker, RAM tidak cukup, atau Linux mematikan proses karena memori habis (OOM).</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:0 16px">
+          <div class="fg" style="grid-column:1/-1">
+            <label class="inp-lbl" for="tg-token">Bot token</label>
+            <div style="position:relative">
+              <input class="inp" type="password" id="tg-token" placeholder="123456789:AAH…" autocomplete="off" spellcheck="false" style="padding-right:64px">
+              <button type="button" class="btn btn-ghost" id="tg-eye" onclick="tgToggle()" style="position:absolute;right:5px;top:50%;transform:translateY(-50%);padding:4px 10px;font-size:10px">Lihat</button>
+            </div>
+          </div>
+          <div class="fg">
+            <label class="inp-lbl" for="tg-chat">Chat ID</label>
+            <input class="inp" id="tg-chat" placeholder="-1001234567890" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="fg">
+            <label class="inp-lbl" for="tg-thr">Ambang restart <span style="text-transform:none;letter-spacing:0;color:var(--dim)">(kali dalam 5 menit)</span></label>
+            <input class="inp" type="number" id="tg-thr" min="1" max="100" placeholder="3">
+          </div>
+          <div class="fg">
+            <label class="inp-lbl" for="tg-pw">Password panel <span style="text-transform:none;letter-spacing:0;color:var(--dim)">(untuk menyimpan)</span></label>
+            <input class="inp" type="password" id="tg-pw" autocomplete="current-password" placeholder="••••••••">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn" onclick="saveNotify()">Simpan</button>
+          <button class="btn btn-ghost" onclick="testNotify()">Kirim pesan tes</button>
+          <span id="tg-msg" style="font-family:var(--mono);font-size:11px"></span>
+        </div>
+        <details style="margin-top:14px">
+          <summary style="cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--dim)">Cara mendapatkan bot token dan chat ID</summary>
+          <ol style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.9;margin:8px 0 0 18px">
+            <li>Di Telegram, chat <b>@BotFather</b> → <code>/newbot</code> → salin <b>token</b> yang diberikan.</li>
+            <li>Kirim pesan apa saja ke bot Anda (atau tambahkan bot ke grup).</li>
+            <li>Buka <code>https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code> di browser, cari <code>"chat":{"id":…}</code>. Itulah <b>chat ID</b> (grup biasanya diawali minus).</li>
+            <li>Isi di atas, simpan, lalu klik <b>Kirim pesan tes</b>.</li>
+          </ol>
+        </details>
       </div>
     </div>
 
