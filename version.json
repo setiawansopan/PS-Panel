@@ -1,7 +1,7 @@
 {
-  "version": "2.16.1",
+  "version": "2.16.3",
   "released": "2026-11-18",
   "notes": [
-    "Pengaturan Notifikasi Telegram dipindahkan dari Dashboard ke halaman Settings agar Dashboard lebih ringkas"
+    "Titik hijau pada status running berkedip pelan sebagai penanda service sedang berjalan (otomatis nonaktif bila pengguna memilih mengurangi animasi)"
   ]
 }
