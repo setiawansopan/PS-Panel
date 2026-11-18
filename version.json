@@ -1,8 +1,10 @@
 {
-  "version": "2.14.1",
+  "version": "2.15.0",
   "released": "2026-10-25",
   "notes": [
-    "PHP Manager: proses pasang/hapus/ganti CLI bawaan kini menampilkan bar kemajuan dengan persentase, tahap yang sedang berjalan (mis. \"Memasang paket (11/22)\"), dan waktu berjalan. Tahap mengunduh yang tidak punya keluaran ditampilkan sebagai bar bergaris bergerak, jadi terlihat bahwa proses masih hidup; bar menjadi merah bila gagal",
-    "Versi paket yang tersedia ditampilkan ringkas (mis. 8.4.27-1) tanpa akhiran repo"
+    "Deploy yang dimatikan karena memori habis (kode 137) kini dijelaskan: log dan Deploy History menampilkan penyebab (OOM), RAM dan swap saat itu, serta cara memperbaikinya. Build frontend (npm install dan npm run build) dijalankan sebagai korban pertama OOM killer, sehingga PostgreSQL, PHP-FPM, dan FrankenPHP tidak ikut dimatikan",
+    "Pengecekan awal deploy menambah langkah \"cek memori untuk build\" (peringatan kuning bila RAM + swap kosong di bawah perkiraan kebutuhan build). Opsi baru \"Lewati build frontend\" di Deploy dan Auto Deploy untuk aplikasi yang aset public/build-nya sudah di-commit",
+    "Kartu baru Memori & Swap di halaman PHP Worker: pemakaian RAM dan swap, buat/ubah/hapus swap file (/swapfile) dengan cek ruang disk dan cadangan /etc/fstab, serta pengaturan swappiness. Swap lain di server hanya ditampilkan",
+    "Kesehatan: kernel yang mematikan proses karena RAM habis (OOM) kini muncul di Dashboard dan dikirim sebagai alert Telegram, lengkap dengan nama prosesnya"
   ]
 }

@@ -340,7 +340,7 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
 
       <div class="card" id="dash-notify" style="margin-bottom:14px">
         <div class="ct"><span>Notifikasi Telegram</span><span id="dh-tgstate" class="pill p-unk">memuat…</span></div>
-        <div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.7;margin-bottom:14px">Kirim peringatan ke Telegram saat service restart berulang, kernel mencatat segfault, PHP-FPM kehabisan worker, atau RAM tidak cukup.</div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.7;margin-bottom:14px">Kirim peringatan ke Telegram saat service restart berulang, kernel mencatat segfault, PHP-FPM kehabisan worker, RAM tidak cukup, atau Linux mematikan proses karena memori habis (OOM).</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:0 16px">
           <div class="fg" style="grid-column:1/-1">
             <label class="inp-lbl" for="tg-token">Bot token</label>
@@ -594,6 +594,22 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
           <div class="pbar"><div class="pfill" id="pm-fill"></div></div>
         </div>
         <pre id="pm-log" style="display:none;white-space:pre-wrap;font-family:var(--mono);font-size:10px;color:var(--muted);background:var(--ink);border-radius:6px;padding:8px;margin-top:6px;max-height:260px;overflow:auto"></pre>
+      </div>
+
+      <div class="card" style="margin-bottom:14px" id="sw-card">
+        <div class="ct"><span>Memori &amp; Swap</span><span class="ct-badge">cegah proses dimatikan saat RAM habis</span></div>
+        <div id="sw-body" style="font-family:var(--mono);font-size:11px;line-height:1.8"><span style="color:var(--muted)">Loading...</span></div>
+        <div class="frow" style="margin-top:12px;align-items:flex-start">
+          <div class="fg"><label class="inp-lbl" for="sw-size">Ukuran swap file</label><select class="inp" id="sw-size"><option value="1024">1 GB</option><option value="2048">2 GB</option><option value="4096" selected>4 GB</option><option value="8192">8 GB</option></select></div>
+          <div class="fg"><label class="inp-lbl" for="sw-swp">Swappiness</label><input class="inp" type="number" min="0" max="100" id="sw-swp" value="10"><div class="fhint">10 = swap dipakai hanya bila kepepet</div></div>
+          <div class="fg"><label class="inp-lbl" for="sw-pw">Password panel</label><input class="inp" type="password" id="sw-pw" placeholder="••••••••" autocomplete="current-password"></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center">
+          <button class="btn" onclick="swAct('create')" id="sw-btn-create">Buat / ubah swap</button>
+          <button class="btn btn-ghost" onclick="swAct('swappiness')">Terapkan swappiness</button>
+          <button class="btn btn-red" onclick="swAct('remove')" id="sw-btn-remove" style="display:none">Hapus swap</button>
+          <span id="sw-msg" style="font-family:var(--mono);font-size:11px"></span>
+        </div>
       </div>
 
       <div class="card" style="margin-bottom:14px">
@@ -999,6 +1015,8 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
               php artisan route:cache<br>
               php artisan view:cache
             </div>
+            <label class="check-lbl" style="margin-top:12px"><input type="checkbox" id="dep-skipbuild"> Lewati build frontend (npm install &amp; build)</label>
+            <div class="fhint">Centang bila aset sudah di-build di komputer lain dan folder <code>public/build</code> sudah di-commit. Berguna di server dengan RAM kecil, karena build Vite memakai memori besar.</div>
           </div>
         </div>
         <button class="btn" id="dep-btn" onclick="deploy()">▲ &nbsp;Run Deploy</button>
@@ -1256,6 +1274,7 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
     </div>
     <div class="fg"><label class="inp-lbl">Branch</label><input class="inp" id="wh-branch" value="main"></div>
     <label class="check-lbl" style="margin-bottom:4px"><input type="checkbox" id="wh-laravel"> Laravel App (composer + artisan)</label>
+    <label class="check-lbl" style="margin-bottom:4px"><input type="checkbox" id="wh-skipbuild"> Lewati build frontend (aset sudah di-commit)</label>
     <div class="mf">
       <button class="btn btn-ghost" onclick="document.getElementById('m-webhook').classList.remove('open')">Cancel</button>
       <button class="btn" onclick="addWebhook()">Create Webhook</button>
@@ -1470,6 +1489,8 @@ async function loadDashHealth(){
   let h=`<div>FrankenPHP ${esc(d.frankenphp.version||'?')}${d.frankenphp.php?' (PHP tertanam '+esc(d.frankenphp.php)+')':''} · ${ok(d.frankenphp.active,d.frankenphp.active?'aktif':'MATI')} · ${rs(d.frankenphp.nrestarts)}</div>`;
   h+=d.fpm.length?d.fpm.map(f=>`<div>PHP-FPM ${esc(f.version)} · ${ok(f.active,f.active?'aktif':'MATI')} · ${rs(f.nrestarts)}${f.pool&&f.pool.ok?` · worker ${f.pool.active}/${f.pool.total} aktif · antrean ${f.pool.listenQueue} · <span style="${f.pool.maxChildrenReached?'color:var(--warn)':'color:var(--muted)'}">max_children tercapai ${f.pool.maxChildrenReached}×</span>`:''}</div>`).join(''):'<div style="color:var(--muted)">PHP-FPM tidak terpasang</div>';
   h+=`<div>Kernel (24 jam): <span style="color:${d.kernel.segfaults24h?'var(--danger)':'var(--accent)'}">${d.kernel.segfaults24h} segfault/invalid opcode</span></div>`;
+  h+=`<div>Memori: RAM tersedia ${d.mem?d.mem.availableMB:'?'} MB${d.mem&&d.mem.swapTotalMB?' · swap kosong '+d.mem.swapFreeMB+' MB':' · <span style="color:var(--warn)">tanpa swap</span>'} · <span style="color:${d.kernel.oom24h?'var(--danger)':'var(--accent)'}">${d.kernel.oom24h||0} proses dimatikan OOM (24 jam)</span></div>`;
+  if(d.kernel.oomSamples&&d.kernel.oomSamples.length) h+=`<div style="color:var(--muted);font-size:10px;word-break:break-all">${d.kernel.oomSamples.map(esc).join('<br>')}</div>`;
   if(d.kernel.samples.length) h+=`<div style="color:var(--muted);font-size:10px;word-break:break-all">${d.kernel.samples.map(esc).join('<br>')}</div>`;
   document.getElementById('dh-body').innerHTML=h;
 }
@@ -1589,7 +1610,7 @@ async function loadPhpWorker(){
   const d=await api('GET','/api/phpworker');
   if(!d||!d.ok){document.getElementById('pw-status').innerHTML='<span style="color:var(--danger)">// gagal memuat: '+esc((d&&d.error)||'tidak ada respons')+'</span>';return;}
   renderPwAlerts(d);renderPwStatus(d);renderPwCapacity(d);renderPwHistory(d);
-  loadSecurity();loadFpUpgrade();loadPhpManager();
+  loadSecurity();loadFpUpgrade();loadPhpManager();loadSwap();
 }
 function renderPwAlerts(d){
   let h='';
@@ -1653,6 +1674,38 @@ function renderPwHistory(d){
   }
   document.getElementById('pw-history').innerHTML=h+'</div>';
 }
+// ── Memori & Swap ──
+const swMsg=(t,ok)=>{const m=document.getElementById('sw-msg');m.style.color=ok?'var(--accent)':'var(--danger)';m.textContent=t||'';};
+async function loadSwap(){
+  const el=document.getElementById('sw-body'); if(!el) return;
+  const d=await api('GET','/api/swap');
+  if(!d||!d.ok){el.innerHTML='<span style="color:var(--danger)">// gagal memuat</span>';return;}
+  const m=d.mem, used=m.totalMB?Math.round((m.totalMB-m.availableMB)/m.totalMB*100):0, sU=m.swapTotalMB?Math.round((m.swapTotalMB-m.swapFreeMB)/m.swapTotalMB*100):0;
+  const bar=(pct,c)=>`<div class="pbar" style="max-width:360px;margin:3px 0 6px"><div class="pfill" style="width:${pct}%;background:${c}"></div></div>`;
+  const avail=m.availableMB+m.swapFreeMB, low=avail<d.buildNeedMB;
+  let h=`<div>RAM: <b style="color:var(--text)">${m.totalMB-m.availableMB}</b> dipakai dari ${m.totalMB} MB (${used}%) · tersedia ${m.availableMB} MB</div>${bar(used,used>85?'var(--danger)':used>65?'var(--warn)':'var(--accent)')}`;
+  h+=m.swapTotalMB?`<div>Swap: <b style="color:var(--text)">${m.swapTotalMB-m.swapFreeMB}</b> dipakai dari ${m.swapTotalMB} MB (${sU}%)</div>${bar(sU,'var(--accent2)')}`:`<div style="color:var(--warn)">⚠ Server belum punya swap. Build aplikasi (npm run build) dan lonjakan beban bisa membuat proses dimatikan Linux (OOM).</div>`;
+  h+=`<div style="color:var(--muted)">Memori tersedia untuk build: ${avail} MB (RAM + swap kosong); perkiraan kebutuhan build aplikasi menengah ±${d.buildNeedMB} MB ${low?'<span style="color:var(--danger)">— KURANG</span>':'<span style="color:var(--accent)">— cukup</span>'}</div>`;
+  h+=`<div style="color:var(--muted)">File swap panel: ${esc(d.file.path)} · ${d.file.exists?d.file.sizeMB+' MB':'belum ada'}${d.file.active?' · aktif':d.file.exists?' · <span style="color:var(--warn)">tidak aktif</span>':''}${d.file.inFstab?' · permanen (fstab)':''} · swappiness ${d.swappiness==null?'?':d.swappiness} · disk kosong ${d.diskFreeMB==null?'?':d.diskFreeMB+' MB'}</div>`;
+  if(d.others.length) h+=`<div style="color:var(--muted)">Swap lain (tidak dikelola panel): ${d.others.map(o=>esc(o.path)+' '+o.sizeMB+' MB').join(', ')}</div>`;
+  el.innerHTML=h;
+  document.getElementById('sw-btn-remove').style.display=(d.file.exists||d.file.active)?'inline-flex':'none';
+  document.getElementById('sw-btn-create').textContent=d.file.exists?'Ubah ukuran swap':'Buat swap';
+  const sel=document.getElementById('sw-size'); if(!sel.dataset.set){sel.value=String(d.recommendedMB);sel.dataset.set='1';}
+}
+async function swAct(op){
+  const pw=document.getElementById('sw-pw').value; if(!pw) return swMsg('// isi password panel');
+  const body={password:pw};
+  if(op==='create'){body.sizeMB=parseInt(document.getElementById('sw-size').value,10);body.swappiness=parseInt(document.getElementById('sw-swp').value,10);
+    if(!confirm(`Buat/ubah swap menjadi ${body.sizeMB} MB di /swapfile? File lama (bila ada) diganti, dan /etc/fstab dibackup lalu diperbarui.`)) return;}
+  if(op==='swappiness'){body.value=parseInt(document.getElementById('sw-swp').value,10);}
+  if(op==='remove'&&!confirm('Hapus swap file? Pastikan RAM cukup: bila memori sedang terpakai swap, penghapusan akan ditolak.')) return;
+  swMsg('// memproses… (swap besar bisa makan satu menit)',true);
+  const r=await api('POST','/api/swap/'+op,body);
+  if(!r||!r.ok) return swMsg('// '+((r&&r.error)||'gagal'));
+  swMsg('✓ selesai',true); loadSwap();
+}
+
 // ── PHP Manager ──
 let _pmTimer=null;
 const pmMsg=(t,ok)=>{const m=document.getElementById('pm-msg');m.style.color=ok?'var(--accent)':'var(--danger)';m.textContent=t||'';};
@@ -2829,7 +2882,7 @@ async function openWebhookModal(){
 }
 async function addWebhook(){
   const p=document.getElementById('wh-vhost').value.trim();if(!p){alert('Pilih virtual host terlebih dahulu');return;}
-  const r=await api('POST','/api/webhooks',{path:p,branch:document.getElementById('wh-branch').value||'main',laravel:document.getElementById('wh-laravel').checked});
+  const r=await api('POST','/api/webhooks',{path:p,branch:document.getElementById('wh-branch').value||'main',laravel:document.getElementById('wh-laravel').checked,skipBuild:document.getElementById('wh-skipbuild').checked});
   if(!r?.ok){alert(r?.error||'Failed');return;}
   document.getElementById('m-webhook').classList.remove('open');
   document.getElementById('wi-url').textContent=location.origin+'/api/webhook/'+r.id;
@@ -2929,7 +2982,7 @@ async function deploy(){
   out.style.display='block';
   out.style.color='var(--accent)';
   out.textContent='Running deploy'+(isLaravel?' (Laravel mode)':'')+' ...\n';
-  const r=await api('POST','/api/deploy',{path:p,branch,laravel:isLaravel});
+  const r=await api('POST','/api/deploy',{path:p,branch,laravel:isLaravel,skipBuild:isLaravel&&document.getElementById('dep-skipbuild').checked});
   btn.innerHTML='▲ &nbsp;Run Deploy';btn.disabled=false;
   out.textContent=r?(r.output||('[error] '+(r.error||'Unknown error'))):'[error] No response';
   out.style.color=r?.ok?'var(--accent)':'var(--danger)';
