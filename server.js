@@ -1466,8 +1466,9 @@ function logChange(target, key, oldV, newV, reason) {
   autotuneLog(`CHANGE target=${target} key=${key} old=${oldV ?? '-'} new=${newV ?? '-'} reason="${String(reason).replace(/"/g, "'")}"`);
 }
 // Raises an alert (history + state). Telegram delivery is hooked in here by the notification settings.
-function notify(msg) {
-  AUTO.alerts = [{ ts: new Date().toISOString(), msg }, ...AUTO.alerts].slice(0, 20);
+const isLowRamAlert = a => a.key === 'low-ram' || /^RAM kurang untuk PHP-FPM/.test(a.msg || '');
+function notify(msg, key) {
+  AUTO.alerts = [{ ts: new Date().toISOString(), msg, ...(key ? { key } : {}) }, ...AUTO.alerts].slice(0, 20);
   persistAuto();
   autotuneLog(`ALERT ${msg}`);
   try { if (typeof sendTelegram === 'function') sendTelegram('PS Panel: ' + msg); } catch {}
@@ -1914,8 +1915,11 @@ async function autotuneTick(reason, opts = {}) {
     const plan = computePlan(ctx);
     const lowRam = plan.warnings.filter(w => w.type === 'low-ram'), lrSig = JSON.stringify(lowRam.map(w => [w.version, w.needMB]));
     if (lowRam.length) {
-      if (!AUTO.lowRam || AUTO.lowRam.sig !== lrSig || Date.now() - AUTO.lowRam.ts > 24 * 3600e3) { notify(lowRam[0].message); AUTO.lowRam = { sig: lrSig, ts: Date.now() }; }
-    } else if (AUTO.lowRam) AUTO.lowRam = null;
+      if (!AUTO.lowRam || AUTO.lowRam.sig !== lrSig || Date.now() - AUTO.lowRam.ts > 24 * 3600e3) { notify(lowRam[0].message, 'low-ram'); AUTO.lowRam = { sig: lrSig, ts: Date.now() }; }
+    } else if (AUTO.lowRam) {
+      // The cause is gone (RAM was added or sites moved): the old "RAM kurang" alerts no longer apply.
+      AUTO.lowRam = null; AUTO.alerts = AUTO.alerts.filter(a => !isLowRamAlert(a)); persistAuto();
+    } else if (AUTO.alerts.some(isLowRamAlert)) { AUTO.alerts = AUTO.alerts.filter(a => !isLowRamAlert(a)); persistAuto(); }
     for (const v of Object.keys(ctx.measured)) AUTO.avgRssMB[v] = ctx.avgRss[v];   // the boot run (FPM not up yet) reuses these
     if (periodic) for (const v of Object.keys(ctx.measured)) why = `berkala: memori terukur per proses PHP-FPM ${v} = ${ctx.avgRss[v]} MB (estimasi dipakai ${Math.max(50, ctx.avgRss[v])} MB)`;
     const res = await applyPlan(ctx, plan, why, { ...opts, boot: reason === 'boot', periodic });
@@ -2032,6 +2036,9 @@ app.get('/api/phpworker', auth, async (req, res) => {
 });
 
 // PostgreSQL memory settings written by auto-tune (shown on the PostgreSQL page).
+app.post('/api/phpworker/alerts/clear', auth, (req, res) => {
+  AUTO.alerts = []; persistAuto(); res.json({ ok: true });
+});
 app.get('/api/autotune', auth, async (req, res) => {
   const ctx = await buildContext(), plan = computePlan(ctx);
   const current = {};

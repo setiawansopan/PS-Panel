@@ -1,7 +1,8 @@
 {
-  "version": "2.16.3",
+  "version": "2.16.4",
   "released": "2026-11-18",
   "notes": [
-    "Titik hijau pada status running berkedip pelan sebagai penanda service sedang berjalan (otomatis nonaktif bila pengguna memilih mengurangi animasi)"
+    "Peringatan \"RAM kurang untuk PHP-FPM\" yang sudah tidak berlaku (RAM ditambah atau situs dipindah) kini dihapus otomatis dari halaman PHP Worker pada pengecekan berikutnya, tidak lagi menumpuk sebagai riwayat merah",
+    "Tombol \"Bersihkan peringatan lama\" di halaman PHP Worker untuk menghapus daftar peringatan secara manual"
   ]
 }
