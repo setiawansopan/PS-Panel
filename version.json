@@ -1,8 +1,9 @@
 {
-  "version": "2.16.4",
-  "released": "2026-11-18",
+  "version": "2.17.0",
+  "released": "2026-11-19",
   "notes": [
-    "Peringatan \"RAM kurang untuk PHP-FPM\" yang sudah tidak berlaku (RAM ditambah atau situs dipindah) kini dihapus otomatis dari halaman PHP Worker pada pengecekan berikutnya, tidak lagi menumpuk sebagai riwayat merah",
-    "Tombol \"Bersihkan peringatan lama\" di halaman PHP Worker untuk menghapus daftar peringatan secara manual"
+    "Menu baru Uji Beban: menguji kemampuan server itu sendiri (dari 127.0.0.1, tanpa jaringan) melayani klien bersamaan. Pilih situs dan path, lalu beban naik bertahap (5, 10, 25 … sampai maksimum yang Anda tentukan, hingga 2000 klien)",
+    "Tiap tahap mencatat req/s sukses, latensi p50/p95/p99, persentase gagal, CPU, dan RAM terendah, lengkap dengan grafik dan kesimpulan \"aman sampai ± N klien bersamaan\" beserta perkiraan kasar jumlah pengguna aktif",
+    "Pengaman: butuh password panel, hanya GET ke situs milik panel, berhenti otomatis bila RAM hampir habis atau error/lambat melewati batas, satu tes pada satu waktu, tombol Hentikan, dan riwayat 10 tes terakhir"
   ]
 }
