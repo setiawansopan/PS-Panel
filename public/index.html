@@ -2454,7 +2454,10 @@ async function loadLoadtest(){
 const ltReason=(v,j)=>{
   const fb=v.firstBad, lim=_ltData?_ltData.limits:{};
   switch(v.reason){
-    case 'max': return v.safeClients>=j.config.maxClients?`Tes sampai batas klien yang Anda tentukan (${j.config.maxClients}) dan server masih aman. Naikkan "Klien bersamaan maks." untuk mencari batas sebenarnya.`:'Tes selesai sampai batas klien yang ditentukan.';
+    case 'max':
+      if(v.safeClients>=j.config.maxClients) return `Tes sampai batas klien yang Anda tentukan (${j.config.maxClients}) dan server masih aman. Naikkan "Klien bersamaan maks." untuk mencari batas sebenarnya.`;
+      if(fb) return `Mulai melewati batas aman di ${fb.clients} klien (p95 ${fb.p95} ms${fb.failedPct?`, gagal ${fb.failedPct}%`:''}). Server belum benar-benar jenuh (error masih di bawah ${lim.stopErrPct||10}%), tetapi respons sudah lambat bagi pengguna.`;
+      return 'Tes selesai sampai batas klien yang ditentukan.';
     case 'error': return `Dihentikan otomatis di ${fb?fb.clients:'?'} klien: ${fb?fb.failedPct:'?'}% permintaan gagal (batas henti ${lim.stopErrPct||10}%).`;
     case 'slow': return `Dihentikan otomatis di ${fb?fb.clients:'?'} klien: respons terlalu lambat (p95 ${fb?fb.p95:'?'} ms, batas henti ${lim.stopP95Ms||5000} ms).`;
     case 'ram': return 'Dihentikan otomatis oleh pengaman: RAM tersedia hampir habis. Tambah RAM atau swap (PHP Worker → Memori & Swap) sebelum menguji lebih tinggi.';
@@ -2492,9 +2495,14 @@ function renderLtJob(j){
   if(!run&&j.verdict){
     const v=j.verdict, cls=v.safeClients?(v.reason==='max'?'':'mid'):'bad';
     const last=j.steps[j.steps.length-1];
+    const BN={cpu:'<b>CPU</b> jadi penghambat (hampir 100% terpakai). Kurangi kerja per permintaan (cache config/route/view Laravel, <code>APP_DEBUG=false</code>, session &amp; cache di Redis, periksa query lambat) atau tambah core CPU.',
+      ram:'<b>RAM</b> jadi penghambat (tersedia hampir habis). Tambah RAM atau swap (PHP Worker → Memori &amp; Swap) dan kurangi worker/proses lain.',
+      conn:'Banyak <b>timeout/koneksi gagal</b> sebelum CPU penuh: periksa jumlah worker PHP-FPM (PHP Worker), batas koneksi PostgreSQL, dan log error web server.',
+      wait:'CPU belum penuh tetapi respons melambat: server <b>menunggu</b> sesuatu — biasanya database/query lambat, panggilan ke layanan luar, atau worker PHP-FPM kurang. Cek PostgreSQL dan jumlah worker.'};
+    const insight=(v.plateauClients?`Throughput tidak naik lagi sejak ±${v.plateauClients} klien (puncak ${v.peakRps} req/s) — di atas itu tambahan klien hanya memperpanjang antrean. `:'')+(v.bottleneck?BN[v.bottleneck]:'');
     h+=`<div class="lt-verdict ${cls}"><h3>${v.safeClients?`Aman sampai ±${v.safeClients} klien bersamaan`:'Belum ada tingkat beban yang aman'}</h3><p>`+
       (v.safeClients?`Pada tingkat itu: <b>${v.safeRps} req/s</b> sukses dengan p95 <b>${v.safeP95} ms</b>. Puncak throughput: <b>${v.peakRps} req/s</b> (di ${v.peakClients} klien).<br>Perkiraan kasar pengguna aktif: <b>≈ ${v.userEstimate.toLocaleString('id-ID')}</b> bila tiap pengguna membuka halaman ini tiap ±${v.thinkSec} detik. Aplikasi sungguhan (login, database, upload) lebih berat, jadi anggap ini batas atas.<br>`:`Sudah di tahap pertama error/lambat melebihi batas aman (error &lt; 1%, p95 ≤ 2 detik).<br>`)+
-      esc(ltReason(v,j))+(v.mostly4xx?'<br>Mayoritas respons adalah 4xx — periksa path yang diuji.':'')+
+      esc(ltReason(v,j))+(insight?'<br>'+insight:'')+(v.mostly4xx?'<br>Mayoritas respons adalah 4xx — periksa path yang diuji.':'')+
       (last&&last.errs&&Object.keys(last.errs).length?'<br>Error koneksi terakhir: '+esc(Object.entries(last.errs).map(([k,x])=>k+' ×'+x).join(', ')):'')+`</p></div>`;
   }
   box.innerHTML=h;
