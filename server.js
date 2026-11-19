@@ -4219,17 +4219,34 @@ function ltLevels(max) {
   return l;
 }
 // The highest level that — together with every lower level — stayed inside the safe limits.
-function ltVerdict(steps, reason) {
+function ltVerdict(steps, reason, ramMB) {
+  const isGood = s => s.requests > 0 && s.failedPct < LT_SAFE_ERR_PCT && s.p95 <= LT_SAFE_P95_MS;
   let safe = null;
-  for (const s of steps) { if (s.requests > 0 && s.failedPct < LT_SAFE_ERR_PCT && s.p95 <= LT_SAFE_P95_MS) safe = s; else break; }
+  for (const s of steps) { if (isGood(s)) safe = s; else break; }
   const peak = steps.reduce((b, s) => (!b || s.rps > b.rps ? s : b), null);
-  const bad = steps.find(s => s !== safe && !(s.requests > 0 && s.failedPct < LT_SAFE_ERR_PCT && s.p95 <= LT_SAFE_P95_MS)) || null;
+  const bad = steps.find(s => s !== safe && !isGood(s)) || null;
   const lastWith4xx = steps.length && steps[steps.length - 1].s4 > steps[steps.length - 1].ok;
+  // Where did throughput stop growing? (first level within 10 % of the peak, only meaningful with ≥ 3 steps and
+  // when higher levels followed it), and what was the server busy with there: CPU, RAM, or just waiting.
+  let plateauClients = null, bottleneck = null;
+  if (peak && steps.length >= 3) {
+    const pl = steps.find(s => s.rps >= peak.rps * 0.9);
+    if (pl && pl !== steps[steps.length - 1]) plateauClients = pl.clients;
+  }
+  const tail = steps.slice(plateauClients ? steps.findIndex(s => s.clients === plateauClients) : -2).filter(s => s.requests > 0);
+  if (tail.length) {
+    const cpus = tail.map(s => s.cpuPct).filter(x => x != null), cpu = cpus.length ? cpus.reduce((a, b) => a + b, 0) / cpus.length : null;
+    const minRam = Math.min(...tail.map(s => s.minAvailMB == null ? Infinity : s.minAvailMB));
+    if (reason === 'ram' || (ramMB && Number.isFinite(minRam) && minRam < ramMB * 0.08)) bottleneck = 'ram';
+    else if (cpu != null && cpu >= 90) bottleneck = 'cpu';
+    else if (tail.some(s => s.timeouts + s.connErrors > s.requests * 0.02)) bottleneck = 'conn';
+    else if (bad || plateauClients) bottleneck = cpu != null && cpu < 75 ? 'wait' : 'cpu';
+  }
   return { reason, safeClients: safe ? safe.clients : 0, safeRps: safe ? safe.rps : 0, safeP95: safe ? safe.p95 : null,
     peakRps: peak ? peak.rps : 0, peakClients: peak ? peak.clients : 0,
     userEstimate: safe ? Math.round(safe.rps * LT_THINK_SEC) : 0, thinkSec: LT_THINK_SEC,
     firstBad: bad ? { clients: bad.clients, failedPct: bad.failedPct, p95: bad.p95, timeouts: bad.timeouts, s5: bad.s5, connErrors: bad.connErrors } : null,
-    mostly4xx: !!lastWith4xx };
+    plateauClients, bottleneck, mostly4xx: !!lastWith4xx };
 }
 function ltHistory() { try { const h = JSON.parse(fs.readFileSync(LOADTEST_FILE, 'utf8')); return Array.isArray(h) ? h : []; } catch { return []; } }
 function ltSave(job) {
@@ -4296,7 +4313,7 @@ app.post('/api/loadtest/start', auth, (req, res) => {
     if (job.status !== 'running') return;
     clearTimeout(hard);
     job.status = status; job.reason = reason; job.error = error || null; job.finishedAt = new Date().toISOString();
-    job.verdict = ltVerdict(job.steps, reason);
+    job.verdict = ltVerdict(job.steps, reason, job.system && job.system.ramMB);
     ltSave(job);
     if (LT_PROC === child) LT_PROC = null;
   };

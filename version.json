@@ -1,9 +1,8 @@
 {
-  "version": "2.17.0",
+  "version": "2.17.1",
   "released": "2026-11-19",
   "notes": [
-    "Menu baru Uji Beban: menguji kemampuan server itu sendiri (dari 127.0.0.1, tanpa jaringan) melayani klien bersamaan. Pilih situs dan path, lalu beban naik bertahap (5, 10, 25 … sampai maksimum yang Anda tentukan, hingga 2000 klien)",
-    "Tiap tahap mencatat req/s sukses, latensi p50/p95/p99, persentase gagal, CPU, dan RAM terendah, lengkap dengan grafik dan kesimpulan \"aman sampai ± N klien bersamaan\" beserta perkiraan kasar jumlah pengguna aktif",
-    "Pengaman: butuh password panel, hanya GET ke situs milik panel, berhenti otomatis bila RAM hampir habis atau error/lambat melewati batas, satu tes pada satu waktu, tombol Hentikan, dan riwayat 10 tes terakhir"
+    "Uji Beban: kesimpulan kini lebih jelas. Bila beban melewati batas aman tetapi belum ada error, dijelaskan sebagai \"mulai melewati batas aman di N klien\", bukan lagi \"selesai sampai batas yang ditentukan\"",
+    "Uji Beban: ditambah petunjuk otomatis, yaitu di klien keberapa throughput berhenti naik dan penghambat utamanya (CPU, RAM, timeout/koneksi, atau server menunggu database/worker) beserta saran perbaikannya"
   ]
 }
