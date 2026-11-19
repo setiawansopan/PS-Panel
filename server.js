@@ -4119,6 +4119,217 @@ wss.on('connection', (ws, req)=>{
   ws.on('close',()=>clearInterval(iv));
 });
 
+// ── Uji Beban (load test) ──
+// Measures what THIS server can do, not the network: a child process (so the panel's own event loop is
+// never blocked and Stop = kill) sends GET requests to 127.0.0.1 with the site's Host header, in steps of
+// growing concurrency (closed loop: every client sends its next request when the previous one is answered).
+// Per step: requests/s, latency p50/p95/p99, failures, CPU and the lowest free RAM. The run stops by itself
+// when failures or latency pass the limits, or when free RAM falls below a floor (so the test cannot take
+// the server down), and the verdict is the highest level that stayed inside the "safe" limits.
+// Test overrides: PANEL_LOADTEST_FILE, PANEL_LOADTEST_TARGET (e.g. http://127.0.0.1:9999), PANEL_LOADTEST_PAUSE_MS.
+const LOADTEST_FILE = process.env.PANEL_LOADTEST_FILE || '/root/.pspanel_loadtest.json';
+const LT_SAFE_ERR_PCT = 1, LT_SAFE_P95_MS = 2000, LT_STOP_ERR_PCT = 10, LT_STOP_P95_MS = 5000, LT_TIMEOUT_MS = 10000;
+const LT_LEVELS = [5, 10, 25, 50, 100, 200, 300, 400, 600, 800, 1000, 1500, 2000];
+const LT_THINK_SEC = 5;     // a real user waits about this long between pages (used for the user estimate only)
+let LT_JOB = null, LT_PROC = null;
+
+function ltWorkerMain() {
+  const http = require('http'), https = require('https'), fs = require('fs');
+  const cfg = JSON.parse(process.env.PS_LT_CFG);
+  const mod = cfg.tls ? https : http;
+  const agent = new mod.Agent({ keepAlive: true, maxSockets: Infinity });
+  const out = o => process.stdout.write(JSON.stringify(o) + '\n');
+  let stopping = false;
+  process.on('SIGTERM', () => { stopping = true; });
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const memAvail = () => { try { const m = fs.readFileSync(cfg.meminfo, 'utf8').match(/MemAvailable:\s+(\d+) kB/); return m ? Math.round(m[1] / 1024) : null; } catch { return null; } };
+  const cpu = () => { try { const a = fs.readFileSync('/proc/stat', 'utf8').split('\n')[0].trim().split(/\s+/).slice(1).map(Number); return { idle: a[3] + (a[4] || 0), tot: a.reduce((x, y) => x + y, 0) }; } catch { return null; } };
+  const load1 = () => { try { return parseFloat(fs.readFileSync('/proc/loadavg', 'utf8')); } catch { return null; } };
+  const pick = (arr, p) => arr.length ? arr[Math.min(arr.length - 1, Math.floor(arr.length * p))] : 0;
+  const r1 = x => Math.round(x * 10) / 10;
+  function request() {
+    return new Promise(resolve => {
+      const t0 = process.hrtime.bigint();
+      let done = false;
+      const fin = (kind, status, msg) => { if (done) return; done = true; resolve({ kind, status, msg, ms: Number(process.hrtime.bigint() - t0) / 1e6 }); };
+      const req = mod.request({ host: cfg.host, port: cfg.port, path: cfg.path, method: 'GET', agent, servername: cfg.servername || undefined,
+        rejectUnauthorized: false, timeout: cfg.timeoutMs,
+        headers: { Host: cfg.hostHeader, 'User-Agent': 'ps-panel-loadtest', 'Accept-Encoding': 'identity' } }, res => {
+        res.on('data', () => {});
+        res.on('end', () => fin('resp', res.statusCode));
+        res.on('error', e => fin('err', 0, e.code || e.message));
+        res.on('aborted', () => fin('err', 0, 'aborted'));
+      });
+      req.on('timeout', () => { fin('timeout', 0); req.destroy(); });
+      req.on('error', e => fin('err', 0, e.code || e.message));
+      req.end();
+    });
+  }
+  async function runStep(n) {
+    const lat = []; let ok = 0, s4 = 0, s5 = 0, to = 0, ce = 0; const errs = {};
+    const cpu0 = cpu(), t0 = Date.now(), end = t0 + cfg.stepSec * 1000;
+    let minAvail = memAvail(), aborted = null;
+    const mon = setInterval(() => {
+      const m = memAvail();
+      if (m != null) { if (minAvail == null || m < minAvail) minAvail = m; if (m < cfg.memFloorMB) aborted = 'ram'; }
+    }, 300);
+    const client = async i => {
+      await sleep(Math.min(1500, i * 1500 / n));          // spread the connection burst
+      while (Date.now() < end && !stopping && !aborted) {
+        const r = await request();
+        if (r.kind === 'resp') { lat.push(r.ms); if (r.status < 400) ok++; else if (r.status < 500) s4++; else s5++; }
+        else if (r.kind === 'timeout') to++;
+        else { ce++; errs[r.msg] = (errs[r.msg] || 0) + 1; }
+      }
+    };
+    await Promise.all(Array.from({ length: n }, (_, i) => client(i)));
+    clearInterval(mon);
+    const el = Math.max(0.1, (Date.now() - t0) / 1000), cpu1 = cpu();
+    lat.sort((a, b) => a - b);
+    const total = ok + s4 + s5 + to + ce, failed = s4 + s5 + to + ce;
+    return { type: 'step', clients: n, requests: total, ok, failed, s4, s5, timeouts: to, connErrors: ce, errs,
+      rps: r1(ok / el), failedPct: total ? Math.round(failed * 10000 / total) / 100 : 100,
+      p50: r1(pick(lat, 0.5)), p95: r1(pick(lat, 0.95)), p99: r1(pick(lat, 0.99)), max: lat.length ? r1(lat[lat.length - 1]) : 0,
+      avg: lat.length ? r1(lat.reduce((a, b) => a + b, 0) / lat.length) : 0,
+      cpuPct: cpu0 && cpu1 && cpu1.tot > cpu0.tot ? Math.round(100 * (1 - (cpu1.idle - cpu0.idle) / (cpu1.tot - cpu0.tot))) : null,
+      minAvailMB: minAvail, load1: load1(), seconds: r1(el), aborted };
+  }
+  (async () => {
+    out({ type: 'start' });
+    const p = await request();
+    out({ type: 'probe', kind: p.kind, status: p.status, ms: r1(p.ms), msg: p.msg || null });
+    if (p.kind !== 'resp' || p.status >= 400) { out({ type: 'done', reason: 'probe' }); process.exit(0); }
+    for (let i = 0; i < cfg.levels.length && !stopping; i++) {
+      out({ type: 'stepstart', index: i, clients: cfg.levels[i] });
+      const r = await runStep(cfg.levels[i]); r.index = i; out(r);
+      if (r.aborted) { out({ type: 'done', reason: 'ram' }); process.exit(0); }
+      if (r.failedPct >= cfg.stopErrPct) { out({ type: 'done', reason: 'error' }); process.exit(0); }
+      if (r.p95 >= cfg.stopP95Ms) { out({ type: 'done', reason: 'slow' }); process.exit(0); }
+      if (i < cfg.levels.length - 1 && !stopping) await sleep(cfg.pauseMs);
+    }
+    out({ type: 'done', reason: stopping ? 'stopped' : 'max' });
+    process.exit(0);
+  })().catch(e => { out({ type: 'done', reason: 'crash', msg: String(e && e.message || e) }); process.exit(1); });
+}
+const LT_WORKER_SRC = '(' + ltWorkerMain.toString() + ')()';
+
+function ltLevels(max) {
+  const l = LT_LEVELS.filter(x => x <= max);
+  if (!l.length || l[l.length - 1] !== max) l.push(max);
+  return l;
+}
+// The highest level that — together with every lower level — stayed inside the safe limits.
+function ltVerdict(steps, reason) {
+  let safe = null;
+  for (const s of steps) { if (s.requests > 0 && s.failedPct < LT_SAFE_ERR_PCT && s.p95 <= LT_SAFE_P95_MS) safe = s; else break; }
+  const peak = steps.reduce((b, s) => (!b || s.rps > b.rps ? s : b), null);
+  const bad = steps.find(s => s !== safe && !(s.requests > 0 && s.failedPct < LT_SAFE_ERR_PCT && s.p95 <= LT_SAFE_P95_MS)) || null;
+  const lastWith4xx = steps.length && steps[steps.length - 1].s4 > steps[steps.length - 1].ok;
+  return { reason, safeClients: safe ? safe.clients : 0, safeRps: safe ? safe.rps : 0, safeP95: safe ? safe.p95 : null,
+    peakRps: peak ? peak.rps : 0, peakClients: peak ? peak.clients : 0,
+    userEstimate: safe ? Math.round(safe.rps * LT_THINK_SEC) : 0, thinkSec: LT_THINK_SEC,
+    firstBad: bad ? { clients: bad.clients, failedPct: bad.failedPct, p95: bad.p95, timeouts: bad.timeouts, s5: bad.s5, connErrors: bad.connErrors } : null,
+    mostly4xx: !!lastWith4xx };
+}
+function ltHistory() { try { const h = JSON.parse(fs.readFileSync(LOADTEST_FILE, 'utf8')); return Array.isArray(h) ? h : []; } catch { return []; } }
+function ltSave(job) {
+  try {
+    const h = [{ ...job, log: undefined }, ...ltHistory().filter(x => x.id !== job.id)].slice(0, 10);
+    const tmp = LOADTEST_FILE + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(h), { mode: 0o600 }); fs.renameSync(tmp, LOADTEST_FILE);
+  } catch (e) { console.warn('[loadtest] history not saved:', e.message); }
+}
+function ltTarget(domain) {
+  const ov = process.env.PANEL_LOADTEST_TARGET;
+  if (ov) { const u = new URL(ov); return { host: u.hostname, port: +u.port || (u.protocol === 'https:' ? 443 : 80), tls: u.protocol === 'https:', servername: null, hostHeader: domain === '__default__' ? 'localhost' : domain, label: domain }; }
+  if (domain === '__default__') return { host: '127.0.0.1', port: 80, tls: false, servername: null, hostHeader: 'localhost', label: 'situs default' };
+  if (!/^[A-Za-z0-9._-]+$/.test(domain)) return null;
+  const f = path.join(VHOSTS_DIR, domain + '.conf');
+  if (!fs.existsSync(f)) return null;
+  const tls = !fs.readFileSync(f, 'utf8').match(/^http:\/\//m);
+  return { host: '127.0.0.1', port: tls ? 443 : 80, tls, servername: tls ? domain : null, hostHeader: domain, label: domain };
+}
+
+app.get('/api/loadtest', auth, (req, res) => {
+  const sites = [{ domain: '__default__', label: 'Situs default (http://:80)', ssl: false }];
+  try {
+    for (const f of (fs.existsSync(VHOSTS_DIR) ? fs.readdirSync(VHOSTS_DIR) : []).filter(f => f.endsWith('.conf')))
+      sites.push({ domain: f.replace(/\.conf$/, ''), label: f.replace(/\.conf$/, ''), ssl: !fs.readFileSync(path.join(VHOSTS_DIR, f), 'utf8').match(/^http:\/\//m) });
+  } catch {}
+  const m = memInfo();
+  res.json({ job: LT_JOB, history: ltHistory().map(h => ({ id: h.id, startedAt: h.startedAt, target: h.target, status: h.status, config: h.config, verdict: h.verdict })),
+    sites, system: { cores: require('os').cpus().length, ramMB: m.totalMB, availMB: m.availableMB, swapMB: m.swapTotalMB },
+    limits: { safeErrPct: LT_SAFE_ERR_PCT, safeP95Ms: LT_SAFE_P95_MS, stopErrPct: LT_STOP_ERR_PCT, stopP95Ms: LT_STOP_P95_MS, maxClients: 2000, thinkSec: LT_THINK_SEC } });
+});
+app.get('/api/loadtest/:id', auth, (req, res) => {
+  const j = (LT_JOB && LT_JOB.id === req.params.id) ? LT_JOB : ltHistory().find(h => h.id === req.params.id);
+  if (!j) return res.status(404).json({ error: 'Not found' });
+  res.json(j);
+});
+app.post('/api/loadtest/start', auth, (req, res) => {
+  if (!checkPanelPassword(req, res)) return;
+  if (LT_JOB && LT_JOB.status === 'running') return res.status(409).json({ error: 'Uji beban lain sedang berjalan' });
+  if (typeof PHPMGR_JOB !== 'undefined' && PHPMGR_JOB && PHPMGR_JOB.status === 'running') return res.status(409).json({ error: 'PHP Manager sedang memasang/menghapus PHP — tunggu selesai' });
+  const b = req.body || {};
+  const domain = String(b.domain || '__default__');
+  const tgt = ltTarget(domain);
+  if (!tgt) return res.status(400).json({ error: 'Situs tidak ditemukan' });
+  const p = String(b.path || '/');
+  if (!/^\/[\x21-\x7e]*$/.test(p) || p.length > 200) return res.status(400).json({ error: 'Path harus diawali / tanpa spasi (maks 200 karakter)' });
+  const maxClients = Math.round(+b.maxClients), stepSec = Math.round(+b.stepSec);
+  if (!(maxClients >= 5 && maxClients <= 2000)) return res.status(400).json({ error: 'Klien bersamaan maksimum harus 5–2000' });
+  if (!(stepSec >= 5 && stepSec <= 60)) return res.status(400).json({ error: 'Durasi tiap tahap harus 5–60 detik' });
+  const mem = memInfo(), floor = Math.max(150, Math.round(mem.totalMB * 0.05));
+  if (mem.availableMB && mem.availableMB < floor + 100) return res.status(400).json({ error: `RAM tersedia hanya ${mem.availableMB} MB — terlalu sedikit untuk uji beban yang aman (minimal ${floor + 100} MB).` });
+  const levels = ltLevels(maxClients);
+  const pauseMs = process.env.PANEL_LOADTEST_PAUSE_MS ? +process.env.PANEL_LOADTEST_PAUSE_MS : 3000;
+  const job = LT_JOB = { id: crypto.randomBytes(6).toString('hex'), status: 'running', startedAt: new Date().toISOString(), finishedAt: null,
+    target: { domain, label: tgt.label, path: p, tls: tgt.tls }, config: { maxClients, stepSec, levels, memFloorMB: floor },
+    system: { cores: require('os').cpus().length, ramMB: mem.totalMB, availMB: mem.availableMB },
+    probe: null, steps: [], currentIndex: -1, reason: null, verdict: null, error: null, log: [] };
+  const cfg = { ...tgt, path: p, levels, stepSec, timeoutMs: LT_TIMEOUT_MS, pauseMs, stopErrPct: LT_STOP_ERR_PCT, stopP95Ms: LT_STOP_P95_MS, memFloorMB: floor, meminfo: MEMINFO_FILE };
+  const child = LT_PROC = spawn('sh', ['-c', 'ulimit -n 30000 2>/dev/null || ulimit -n "$(ulimit -Hn)" 2>/dev/null; exec "$0" -e "$1"', process.execPath, LT_WORKER_SRC],
+    { env: { ...process.env, PS_LT_CFG: JSON.stringify(cfg) }, stdio: ['ignore', 'pipe', 'pipe'] });
+  // Hard ceiling so a stuck run can never go on forever.
+  const hard = setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, (levels.length * (stepSec + LT_TIMEOUT_MS / 1000 + pauseMs / 1000) + 30) * 1000);
+  let buf = '', gotDone = false, stderr = '';
+  const finish = (status, reason, error) => {
+    if (job.status !== 'running') return;
+    clearTimeout(hard);
+    job.status = status; job.reason = reason; job.error = error || null; job.finishedAt = new Date().toISOString();
+    job.verdict = ltVerdict(job.steps, reason);
+    ltSave(job);
+    if (LT_PROC === child) LT_PROC = null;
+  };
+  child.stdout.on('data', d => {
+    buf += d; let i;
+    while ((i = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, i); buf = buf.slice(i + 1);
+      let m; try { m = JSON.parse(line); } catch { continue; }
+      if (m.type === 'probe') job.probe = { kind: m.kind, status: m.status, ms: m.ms, msg: m.msg };
+      else if (m.type === 'stepstart') job.currentIndex = m.index;
+      else if (m.type === 'step') { job.steps.push(m); job.currentIndex = m.index + 1; }
+      else if (m.type === 'done') { gotDone = true; job.reason = m.reason; if (m.msg) job.error = m.msg; }
+    }
+  });
+  child.stderr.on('data', d => { stderr = (stderr + d).slice(-500); });
+  child.on('close', () => {
+    if (job.status !== 'running') return;
+    if (!gotDone && job.stopRequested) return finish('stopped', 'stopped');
+    if (gotDone) finish(job.reason === 'probe' || job.reason === 'crash' ? 'failed' : (job.reason === 'stopped' ? 'stopped' : 'done'), job.reason, job.error);
+    else finish('failed', 'crash', stderr.trim() || 'Proses penguji berhenti tiba-tiba');
+  });
+  child.on('error', e => finish('failed', 'crash', e.message));
+  res.json({ ok: true, id: job.id });
+});
+app.post('/api/loadtest/stop', auth, (req, res) => {
+  if (!LT_JOB || LT_JOB.status !== 'running' || !LT_PROC) return res.status(409).json({ error: 'Tidak ada uji beban yang berjalan' });
+  const p = LT_PROC, job = LT_JOB;
+  try { p.kill('SIGTERM'); } catch {}
+  setTimeout(() => { try { p.kill('SIGKILL'); } catch {} }, 4000);
+  job.stopRequested = true;
+  res.json({ ok: true });
+});
+
 // CLI: node server.js --autotune [--dry-run [--cores=N --ram=MB]]  (boot unit entry point)
 const AUTOTUNE_CLI = process.argv.includes('--autotune');
 if (AUTOTUNE_CLI) {
