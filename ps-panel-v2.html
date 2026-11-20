@@ -368,10 +368,6 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
       <div class="ph"><h1>Dashboard</h1><p>// real-time server overview</p></div>
 
       <div id="dash-sec"></div>
-      <div class="card" id="dash-health" style="margin-bottom:14px;display:none">
-        <div class="ct">Kesehatan web server</div>
-        <div id="dh-body" style="font-family:var(--mono);font-size:11px;line-height:1.9"></div>
-      </div>
 
       <div class="g4">
         <div class="mc" style="--c:var(--accent2)">
@@ -427,6 +423,11 @@ body.light #login-screen::after{background:radial-gradient(ellipse 60% 50% at 50
           <thead><tr><th>Process</th><th>PID</th><th>CPU %</th><th>MEM %</th></tr></thead>
           <tbody id="d-procs"><tr><td colspan="4" style="color:var(--muted)">Loading...</td></tr></tbody>
         </table>
+      </div>
+
+      <div class="card" id="dash-health" style="margin-top:14px;display:none">
+        <div class="ct">Kesehatan web server</div>
+        <div id="dh-body" style="font-family:var(--mono);font-size:11px;line-height:1.9"></div>
       </div>
     </div>
 
